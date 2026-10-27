@@ -44,7 +44,7 @@ All notable changes to TowerCab 3D will be documented in this file.
 - vNAS no longer disconnects when it receives aircraft data it cannot read that contains non-English characters.
 - An overcast now reaches the horizon and meets the distant haze in one grey, and broken layers beneath it no longer show bright horizon streaks.
 - vNAS no longer writes your sign-in tokens or sign-in code into the log file or into connection error messages.
-- vNAS: aircraft no longer linger in Nearby Aircraft after your CRC session ends, and each update arrives once instead of several times.
+- vNAS: aircraft no longer linger in Nearby Aircraft after your CRC session ends, each update arrives once, and the connection status stays right through bursts of updates.
 
 ### Removed
 - The experimental VR mode and its VR button in the controls bar.

@@ -197,6 +197,28 @@ fn session_change_events(new_state: SessionState, dropped: bool) -> Vec<SessionC
     events
 }
 
+/// A host cache of what the joined session offers remote browsers.
+#[cfg_attr(not(feature = "vnas"), allow(dead_code))] // the vNAS forwarder's caches, tested in both builds
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum SessionCache {
+    /// The subscribed facilities
+    Subscribed,
+    /// The session's airports, the remote browsers' allowed subscribes
+    SessionFacilities,
+}
+
+/// The caches a session change empties; `dropped` says the change cleared the
+/// subscriptions. A dropping change ends the joined session, so its airports go with its
+/// subscriptions.
+#[cfg_attr(not(feature = "vnas"), allow(dead_code))] // the vNAS forwarder's rule, tested in both builds
+fn caches_cleared_by(dropped: bool) -> &'static [SessionCache] {
+    if dropped {
+        &[SessionCache::Subscribed, SessionCache::SessionFacilities]
+    } else {
+        &[]
+    }
+}
+
 /// What the host knows of the joined session: the token naming it for subscribes (`T`),
 /// its kind and its airports, and a generation that moves on every session change.
 ///
@@ -263,6 +285,34 @@ impl<T: Copy + Eq> SessionCell<T> {
         true
     }
 
+    /// Whether `token` names the joined session this cell holds.
+    fn holds(&self, token: T) -> bool {
+        self.token == Some(token)
+    }
+
+    /// Keep `airports` as the joined session's, only while `token` names the joined
+    /// session: airports read from a session that has since changed are not kept. Returns
+    /// whether they were stored.
+    fn store_airports_of(&mut self, token: T, airports: Vec<String>) -> bool {
+        if !self.holds(token) {
+            return false;
+        }
+        self.airports = airports;
+        true
+    }
+
+    /// Keep `airports` as the joined session's, only while the generation is still
+    /// `generation` and `token` names the joined session: the service's current session
+    /// can be newer than the one the host has applied. Returns whether they were stored.
+    fn store_airports_of_session(
+        &mut self,
+        generation: u64,
+        token: T,
+        airports: Vec<String>,
+    ) -> bool {
+        self.holds(token) && self.store_airports(generation, airports)
+    }
+
     /// Forget the token, the kind and the airports.
     fn forget(&mut self) {
         self.token = None;
@@ -305,6 +355,291 @@ fn apply_session_change_with_cell<T: Copy + Eq>(
         session.end();
     }
     dropped
+}
+
+/// The status reported to the frontend, plus the facilities whose hub subscribe is in
+/// flight, the joined session (`T` is its token) and the connect epoch. One lock guards
+/// them all, so checking and claiming a facility is one step, and so is checking the
+/// connect epoch and writing under it.
+#[cfg(any(feature = "vnas", test))]
+#[cfg_attr(not(feature = "vnas"), allow(dead_code))] // the claim counter is read only by the vNAS build
+#[derive(Debug)]
+struct StatusCell<T> {
+    status: VnasStatus,
+    /// Facility id → the token of the claim that owns its in-flight subscribe.
+    pending_subscribes: std::collections::HashMap<String, u64>,
+    /// The last claim token handed out; each claim takes the next one.
+    last_claim_token: u64,
+    /// The joined session's token for `subscribe_towercab` (never leaves the host), its
+    /// kind (reported as the status's `session_kind`) and its airports.
+    session: SessionCell<T>,
+    /// Bumped by every connect's start (`begin_connect`) and every disconnect's reset; a
+    /// writer holding an older value (a connect a newer one or a disconnect overtook, or
+    /// its event forwarder) writes nothing.
+    connect_epoch: u64,
+}
+
+#[cfg(any(feature = "vnas", test))]
+impl<T> Default for StatusCell<T> {
+    fn default() -> Self {
+        Self {
+            status: VnasStatus::default(),
+            pending_subscribes: std::collections::HashMap::new(),
+            last_claim_token: 0,
+            session: SessionCell::default(),
+            connect_epoch: 0,
+        }
+    }
+}
+
+#[cfg(any(feature = "vnas", test))]
+impl<T: Copy + Eq> StatusCell<T> {
+    /// Forget the joined session; anything read of it before this is not stored.
+    fn forget_joined_session(&mut self) {
+        self.session.end();
+    }
+
+    /// Apply a session state the service reported (`apply_session_change_with_cell`);
+    /// when the session changed, also drop every subscribe in flight. Returns whether
+    /// the session changed.
+    fn apply_session_state(&mut self, new_state: SessionState) -> bool {
+        let dropped =
+            apply_session_change_with_cell(&mut self.status, &mut self.session, new_state);
+        if dropped {
+            self.pending_subscribes.clear();
+        }
+        dropped
+    }
+
+    /// Start a connect: refused (`None`) while a session is connecting or active,
+    /// otherwise writes `Connecting` (`apply_connect_state`), bumps the connect epoch and
+    /// returns it. Every later write of that connect and of its event forwarder goes
+    /// through `if_epoch` with it, so a connect or a forwarder a newer connect or a
+    /// disconnect overtook writes nothing.
+    fn begin_connect(&mut self) -> Option<u64> {
+        let active = matches!(
+            self.status.state,
+            SessionState::Connecting
+                | SessionState::JoiningSession
+                | SessionState::WaitingForSession
+                | SessionState::Subscribing
+                | SessionState::Connected
+        );
+        if active {
+            return None;
+        }
+        apply_connect_state(&mut self.status, SessionState::Connecting, None);
+        self.connect_epoch += 1;
+        Some(self.connect_epoch)
+    }
+
+    /// Run `f` on the cell unless the connect epoch moved since `epoch` was read; returns
+    /// what `f` returned, or `None` when it did not run.
+    fn if_epoch<R>(&mut self, epoch: u64, f: impl FnOnce(&mut Self) -> R) -> Option<R> {
+        (self.connect_epoch == epoch).then(|| f(self))
+    }
+
+    /// Reset the status after a disconnect: state `Disconnected`, no subscriptions or
+    /// subscribes in flight, no error, no joined session. Bumps the connect epoch, so a
+    /// connect's or a forwarder's write lands before this reset or not at all.
+    fn reset_for_disconnect(&mut self) {
+        self.connect_epoch += 1;
+        self.status.state = SessionState::Disconnected;
+        self.status.subscribed_facilities.clear();
+        self.status.error = None;
+        self.pending_subscribes.clear();
+        self.forget_joined_session();
+    }
+
+    /// Apply a re-sync (`resync_action`) and return what it wrote, for the caller to
+    /// cache and emit.
+    fn apply_resync(&mut self, resync: Resync<T>) -> ResyncWrites {
+        let mut writes = ResyncWrites::default();
+        match resync.change {
+            ResyncChange::Keep => {}
+            ResyncChange::Advance(new_state) => {
+                let dropped = self.apply_session_state(new_state);
+                writes.record(new_state, dropped);
+            }
+            ResyncChange::Rejoin { state, session } => {
+                apply_session_change(&mut self.status, state);
+                self.status.subscribed_facilities.clear();
+                self.pending_subscribes.clear();
+                self.session.end();
+                if let Some((token, kind)) = session {
+                    let generation = self.session.generation();
+                    self.session.store_joined(generation, token, kind);
+                    writes.joined_generation = Some(generation);
+                }
+                writes.record(state, true);
+            }
+        }
+        if let Some(reason) = resync.forced_end {
+            writes.forced_error = self.restore_forced_end(reason);
+        }
+        writes
+    }
+
+    /// Record a forcible end with `reason` and show it as the status error, unless it is
+    /// already the error shown. Returns the reason when it was newly shown.
+    fn restore_forced_end(&mut self, reason: String) -> Option<String> {
+        if self.status.error.as_deref() == Some(reason.as_str()) {
+            return None;
+        }
+        self.status.last_session_end = Some(SessionEndInfo {
+            reason: reason.clone(),
+            forcible: true,
+        });
+        apply_forced_end_error(&mut self.status, Some(reason.clone())).then_some(reason)
+    }
+}
+
+/// What a re-sync wrote: the state with the events announcing it, whether the session
+/// changed, the generation a newly stored session was stored under, and a forcible end's
+/// reason newly shown as the error.
+#[cfg(any(feature = "vnas", test))]
+#[derive(Debug, Default)]
+struct ResyncWrites {
+    new_state: Option<SessionState>,
+    events: Vec<SessionChangeEvent>,
+    dropped: bool,
+    joined_generation: Option<u64>,
+    forced_error: Option<String>,
+}
+
+#[cfg(any(feature = "vnas", test))]
+impl ResyncWrites {
+    fn record(&mut self, new_state: SessionState, dropped: bool) {
+        self.new_state = Some(new_state);
+        self.events = session_change_events(new_state, dropped);
+        self.dropped = dropped;
+    }
+}
+
+/// How a connect (`VnasService::connect`) ended, as far as the status goes.
+#[cfg_attr(not(feature = "vnas"), allow(dead_code))] // the vNAS connect's rule, tested in both builds
+#[derive(Debug, Clone, PartialEq, Eq)]
+enum ConnectOutcome {
+    /// The connect joined or is waiting for a session
+    Connected,
+    /// A teardown cancelled the connect
+    Cancelled,
+    /// The connect failed, with the error to show
+    Failed(String),
+}
+
+/// What a connect's result writes into the status, if anything: the event forwarder
+/// owns every state a connect that succeeded went through, and a cancelled connect's
+/// teardown reports its own `Disconnected`, so only a failure writes (`Disconnected`
+/// with its error).
+#[cfg_attr(not(feature = "vnas"), allow(dead_code))] // the vNAS connect's rule, tested in both builds
+fn connect_result_write(outcome: ConnectOutcome) -> Option<(SessionState, Option<String>)> {
+    match outcome {
+        ConnectOutcome::Connected | ConnectOutcome::Cancelled => None,
+        ConnectOutcome::Failed(error) => Some((SessionState::Disconnected, Some(error))),
+    }
+}
+
+/// Pass every event from `events` to `handle` until the channel closes.
+///
+/// A receiver that falls more than the channel's capacity behind loses the oldest events.
+/// The forwarder then applies every event it still holds, runs `resync` once, inline on
+/// this task, so it reads the service's state after everything it applied and before
+/// anything newer, and carries on.
+#[cfg(any(feature = "vnas", test))]
+async fn forward_events<E, F, R, Fut>(
+    mut events: tokio::sync::broadcast::Receiver<E>,
+    mut handle: F,
+    mut resync: R,
+) where
+    E: Clone,
+    F: FnMut(E),
+    R: FnMut() -> Fut,
+    Fut: std::future::Future<Output = ()>,
+{
+    use tokio::sync::broadcast::error::{RecvError, TryRecvError};
+    loop {
+        match events.recv().await {
+            Ok(event) => handle(event),
+            Err(RecvError::Lagged(n)) => {
+                tracing::warn!("[vNAS] event forwarder lagged, skipped {n} events; re-syncing");
+                loop {
+                    match events.try_recv() {
+                        Ok(event) => handle(event),
+                        Err(TryRecvError::Lagged(n)) => {
+                            tracing::warn!(
+                                "[vNAS] event forwarder lagged again, skipped {n} events"
+                            );
+                        }
+                        Err(TryRecvError::Empty | TryRecvError::Closed) => break,
+                    }
+                }
+                resync().await;
+            }
+            Err(RecvError::Closed) => return,
+        }
+    }
+}
+
+/// What a re-sync after lost events changes in the host's session state.
+#[cfg_attr(not(feature = "vnas"), allow(dead_code))] // the vNAS forwarder's rule, tested in both builds
+#[derive(Debug, Clone, PartialEq, Eq)]
+enum ResyncChange<T> {
+    /// The host is up to date with the service's session
+    Keep,
+    /// Same session, further on: write the state
+    Advance(SessionState),
+    /// The session the host holds is gone: a dropping change to `state` (subscriptions,
+    /// subscribes in flight and the joined session cleared), then `session`'s token and
+    /// kind stored when the service has joined one
+    Rejoin {
+        state: SessionState,
+        session: Option<(T, SessionKind)>,
+    },
+}
+
+/// A re-sync after lost events: the session change, and the reason of a forcible end the
+/// service still holds, to show unless the host already shows it.
+#[cfg_attr(not(feature = "vnas"), allow(dead_code))] // the vNAS forwarder's rule, tested in both builds
+#[derive(Debug, Clone, PartialEq, Eq)]
+struct Resync<T> {
+    change: ResyncChange<T>,
+    forced_end: Option<String>,
+}
+
+/// Bring the host up to date with the service after the forwarder lost events.
+///
+/// The token decides: a service session other than the host's, or none, is a dropping
+/// change to the service's state, then the service's session is stored. The same session
+/// never moves backwards: only `Connected` the host has not reached yet is written. The
+/// service's forcible end reason (kept until its next connect) comes along to be shown.
+#[cfg_attr(not(feature = "vnas"), allow(dead_code))] // the vNAS forwarder's rule, tested in both builds
+fn resync_action<T: Copy + Eq>(
+    host_state: SessionState,
+    host_token: Option<T>,
+    service_state: SessionState,
+    service_session: Option<(T, SessionKind)>,
+    forced_reason: Option<String>,
+) -> Resync<T> {
+    let change = match service_session {
+        Some((token, _)) if host_token == Some(token) => {
+            let ahead =
+                service_state == SessionState::Connected && host_state != SessionState::Connected;
+            if ahead {
+                ResyncChange::Advance(SessionState::Connected)
+            } else {
+                ResyncChange::Keep
+            }
+        }
+        session => ResyncChange::Rejoin {
+            state: service_state,
+            session,
+        },
+    };
+    Resync {
+        change,
+        forced_end: forced_reason,
+    }
 }
 
 /// Write a state a connect publishes into `status`, with `error` when given. Starting a
@@ -485,8 +820,6 @@ mod real_impl {
     use super::*;
     use crate::settings::{read_vnas_tokens, write_vnas_tokens};
     use parking_lot::Mutex;
-    use std::collections::HashMap;
-    use std::sync::atomic::{AtomicU64, Ordering};
     use std::sync::Arc;
     use std::sync::Mutex as StdMutex;
     use std::time::{SystemTime, UNIX_EPOCH};
@@ -624,38 +957,7 @@ mod real_impl {
         }
     }
 
-    /// The status reported to the frontend, plus the facilities whose hub subscribe is in
-    /// flight. One lock guards both, so checking and claiming a facility is one step.
-    #[derive(Default)]
-    struct StatusCell {
-        status: VnasStatus,
-        /// Facility id → the token of the claim that owns its in-flight subscribe.
-        pending_subscribes: HashMap<String, u64>,
-        /// The last claim token handed out; each claim takes the next one.
-        last_claim_token: u64,
-        /// The joined session's token for `subscribe_towercab` (never leaves the host), its
-        /// kind (reported as the status's `session_kind`) and its airports.
-        session: SessionCell<SessionToken>,
-    }
-
-    impl StatusCell {
-        /// Forget the joined session; anything read of it before this is not stored.
-        fn forget_joined_session(&mut self) {
-            self.session.end();
-        }
-
-        /// Apply a session state the service reported (`apply_session_change_with_cell`);
-        /// when the session changed, also drop every subscribe in flight. Returns whether
-        /// the session changed.
-        fn apply_session_state(&mut self, new_state: SessionState) -> bool {
-            let dropped =
-                apply_session_change_with_cell(&mut self.status, &mut self.session, new_state);
-            if dropped {
-                self.pending_subscribes.clear();
-            }
-            dropped
-        }
-
+    impl StatusCell<SessionToken> {
         /// Apply a join the service reported: `Subscribing` (`apply_session_change`), every
         /// subscribe in flight dropped, then the joined session's token and kind stored
         /// under the generation the join moved to (`SessionCell::join`). Returns whether the
@@ -702,7 +1004,7 @@ mod real_impl {
 
     /// vNAS state managed by Tauri (real implementation)
     pub struct VnasState {
-        status: RwLock<StatusCell>,
+        status: RwLock<StatusCell<SessionToken>>,
         /// The vNAS service instance (uses tokio RwLock for async access). Callers clone
         /// the `Arc` out with `current_service` and hold no guard across a call on it.
         service: TokioRwLock<Option<Arc<VnasService>>>,
@@ -714,16 +1016,12 @@ mod real_impl {
         app_handle: RwLock<Option<AppHandle>>,
         /// Last processed OAuth callback URL (for deduplication)
         last_oauth_callback: RwLock<Option<String>>,
-        /// Bumped by every disconnect's reset; a connect that read an older value writes
-        /// no status.
-        connect_epoch: AtomicU64,
     }
 
     impl VnasState {
         pub fn new() -> Self {
             let (event_tx, _) = broadcast::channel(1024);
             Self {
-                connect_epoch: AtomicU64::new(0),
                 status: RwLock::new(StatusCell::default()),
                 service: TokioRwLock::new(None),
                 event_forwarder: Mutex::new(None),
@@ -747,35 +1045,37 @@ mod real_impl {
             f(&mut self.status.write().status);
         }
 
-        /// The connect epoch; a connect reads it on entry and passes it to
-        /// `update_status_if_epoch`.
+        /// The connect epoch: the one the newest connect started under, or the last
+        /// disconnect's reset moved to.
         fn connect_epoch(&self) -> u64 {
-            self.connect_epoch.load(Ordering::SeqCst)
+            self.status.read().connect_epoch
         }
 
-        /// Apply `f` to the status unless a disconnect's reset has bumped the connect
-        /// epoch since `epoch` was read. The compare and `f` run under one status write
-        /// lock, the lock the reset bumps the epoch under. Returns whether `f` ran.
+        /// Apply `f` to the status unless a newer connect or a disconnect's reset has
+        /// bumped the connect epoch since `epoch` was read. The compare and `f` run under
+        /// one status write lock, the lock every bump happens under. Returns whether `f`
+        /// ran.
         fn update_status_if_epoch(&self, epoch: u64, f: impl FnOnce(&mut VnasStatus)) -> bool {
-            let mut cell = self.status.write();
-            if self.connect_epoch.load(Ordering::SeqCst) != epoch {
-                return false;
-            }
-            f(&mut cell.status);
-            true
+            self.status
+                .write()
+                .if_epoch(epoch, |cell| f(&mut cell.status))
+                .is_some()
         }
 
-        /// Reset the status after a disconnect: state `Disconnected`, no subscriptions or
-        /// subscribes in flight, no error. Bumps the connect epoch under the same lock, so
-        /// a connect's status write lands before this reset or not at all.
+        /// Run `f` on the status cell under one write lock, unless the connect epoch moved
+        /// since `epoch` was read; returns what `f` returned, or `None` when it did not run.
+        fn with_cell_if_epoch<R>(
+            &self,
+            epoch: u64,
+            f: impl FnOnce(&mut StatusCell<SessionToken>) -> R,
+        ) -> Option<R> {
+            self.status.write().if_epoch(epoch, f)
+        }
+
+        /// Reset the status after a disconnect (`StatusCell::reset_for_disconnect`), so a
+        /// connect's or a forwarder's status write lands before this reset or not at all.
         fn reset_for_disconnect(&self) {
-            let mut cell = self.status.write();
-            self.connect_epoch.fetch_add(1, Ordering::SeqCst);
-            cell.status.state = SessionState::Disconnected;
-            cell.status.subscribed_facilities.clear();
-            cell.status.error = None;
-            cell.pending_subscribes.clear();
-            cell.forget_joined_session();
+            self.status.write().reset_for_disconnect();
         }
 
         /// Forget everything about the previous service's sessions: its token, its kind
@@ -820,10 +1120,33 @@ mod real_impl {
 
         /// Keep the joined session's airports and cache them as the session facilities
         /// (what remote clients see in the airport selector), unless the session changed
-        /// since `generation` was read. Returns whether it stored them.
-        fn store_airports(&self, generation: u64, airports: Vec<String>) -> bool {
+        /// since `generation` was read or `token` (the session the airports were read
+        /// from) is not the joined session the host holds. The checks, the store and the
+        /// cache write run under one status write lock. Returns whether it stored them.
+        fn store_airports(
+            &self,
+            generation: u64,
+            token: SessionToken,
+            airports: Vec<String>,
+        ) -> bool {
             let mut cell = self.status.write();
-            if !cell.session.store_airports(generation, airports) {
+            if !cell
+                .session
+                .store_airports_of_session(generation, token, airports)
+            {
+                return false;
+            }
+            cache_session_facilities(cell.session.airports());
+            true
+        }
+
+        /// Keep the airports of the session `token` names and cache them as the session
+        /// facilities, only while it is the joined session the host holds. The check, the
+        /// store and the cache write run under one status write lock. Returns whether it
+        /// stored them.
+        fn store_session_airports(&self, token: SessionToken, airports: Vec<String>) -> bool {
+            let mut cell = self.status.write();
+            if !cell.session.store_airports_of(token, airports) {
                 return false;
             }
             cache_session_facilities(cell.session.airports());
@@ -955,41 +1278,52 @@ mod real_impl {
         }
     }
 
-    /// Pass every event from `events` to `handle` until the channel closes.
-    ///
-    /// A receiver that falls more than the channel's capacity behind loses the oldest
-    /// events; the forwarder logs how many and carries on rather than stopping.
-    async fn forward_events<F: FnMut(VnasEvent)>(
-        mut events: broadcast::Receiver<VnasEvent>,
-        mut handle: F,
-    ) {
-        loop {
-            match events.recv().await {
-                Ok(event) => handle(event),
-                Err(broadcast::error::RecvError::Lagged(n)) => {
-                    tracing::warn!("[vNAS] event forwarder lagged, skipped {n} events");
-                }
-                Err(broadcast::error::RecvError::Closed) => return,
-            }
+    /// Bring the status up to date with `service` after the forwarder lost events: read
+    /// its state, its joined session and its forcible end reason, then apply the re-sync
+    /// (`resync_action`) through the forwarder's connect epoch `epoch`, refresh the caches
+    /// and emit what it wrote. Runs inline on the forwarder's task, after the events it
+    /// still held.
+    async fn resync_with_service(app: AppHandle, service: Arc<VnasService>, epoch: u64) {
+        let service_state = SessionState::from(service.state().await);
+        let joined = service
+            .joined_session()
+            .await
+            .map(|joined| (joined.session, SessionKind::from(joined.kind)));
+        let forced_reason = service.forced_end_reason().await;
+        let state = app.state::<VnasState>();
+        let writes = state.with_cell_if_epoch(epoch, |cell| {
+            let resync = resync_action(
+                cell.status.state,
+                cell.session.token(),
+                service_state,
+                joined,
+                forced_reason,
+            );
+            cell.apply_resync(resync)
+        });
+        let Some(writes) = writes else {
+            tracing::debug!("[vNAS] A newer connect or a disconnect owns the status; no re-sync");
+            return;
+        };
+        if let Some(new_state) = writes.new_state {
+            tracing::info!("[vNAS] Re-synced the session state: {new_state:?}");
+            cache_state(new_state);
         }
-    }
-
-    /// Write a session state reported by the service into the managed status
-    /// (`apply_session_change`).
-    ///
-    /// When the session changed (the subscriptions were cleared), also drops every
-    /// subscribe in flight and the stored session token, kind and airports. Returns
-    /// whether it did.
-    fn apply_session_state(state: &VnasState, new_state: SessionState) -> bool {
-        state.status.write().apply_session_state(new_state)
-    }
-
-    /// Apply a join the service reported: `Subscribing`, a session change, then the joined
-    /// session's token and kind, all under one status write lock, so they are stored under
-    /// the generation the change moved to and a claim never meets the change without them.
-    /// Returns whether the subscriptions were cleared and that generation.
-    fn apply_session_joined(state: &VnasState, joined: JoinedSession) -> (bool, u64) {
-        state.status.write().apply_join(joined)
+        clear_session_caches(writes.dropped);
+        for event in writes.events {
+            emit_session_change(&app, event);
+        }
+        if let Some(generation) = writes.joined_generation {
+            tokio::spawn(remember_session(
+                Arc::clone(&service),
+                app.clone(),
+                generation,
+            ));
+        }
+        if let Some(reason) = writes.forced_error {
+            tracing::info!("[vNAS] Removed from the session: {reason}");
+            let _ = app.emit("vnas-error", &reason);
+        }
     }
 
     /// A session change the service reported: a bare state, or a join carrying the joined
@@ -1338,22 +1672,6 @@ mod real_impl {
     /// This establishes the SignalR WebSocket connection.
     #[tauri::command]
     pub async fn vnas_connect(app: AppHandle, state: State<'_, VnasState>) -> Result<(), String> {
-        // A disconnect from here on makes every status write below a no-op.
-        let epoch = state.connect_epoch();
-
-        // Guard against double-connect (can happen with React Strict Mode)
-        let current_state = state.status().state;
-        match current_state {
-            SessionState::Connecting
-            | SessionState::JoiningSession
-            | SessionState::WaitingForSession
-            | SessionState::Subscribing
-            | SessionState::Connected => {
-                return Ok(());
-            }
-            _ => {}
-        }
-
         // Check if authenticated
         let service = state
             .current_service()
@@ -1364,7 +1682,15 @@ mod real_impl {
             return Err("Not authenticated - complete OAuth first".into());
         }
 
-        if !publish_connect_state(&app, &state, epoch, SessionState::Connecting, None) {
+        // Guard against double-connect (can happen with React Strict Mode). A newer
+        // connect or a disconnect from here on makes every status write below a no-op.
+        let Some(epoch) = begin_connect(&app, &state) else {
+            return Ok(());
+        };
+        if !is_current_service(&state, &service).await {
+            // A disconnect took the service out before `Connecting` was written over its
+            // reset: put the reset's state back.
+            publish_connect_state(&app, &state, epoch, SessionState::Disconnected, None);
             abandon_detached_connect(&state, &service, None).await;
             return Ok(());
         }
@@ -1377,10 +1703,28 @@ mod real_impl {
         let event_tx = state.event_tx.clone();
         let app_for_events = app.clone();
         let service_for_events = Arc::clone(&service);
+        let app_for_resync = app.clone();
+        let service_for_resync = Arc::clone(&service);
         let events = service.events();
-        let forwarder = tokio::spawn(forward_events(events, move |event| {
-            forward_event(&app_for_events, &service_for_events, &event_tx, event);
-        }));
+        let forwarder = tokio::spawn(forward_events(
+            events,
+            move |event| {
+                forward_event(
+                    &app_for_events,
+                    &service_for_events,
+                    &event_tx,
+                    epoch,
+                    event,
+                );
+            },
+            move || {
+                resync_with_service(
+                    app_for_resync.clone(),
+                    Arc::clone(&service_for_resync),
+                    epoch,
+                )
+            },
+        ));
         let forwarder_abort = forwarder.abort_handle();
         state.replace_event_forwarder(forwarder);
 
@@ -1392,11 +1736,28 @@ mod real_impl {
         Ok(())
     }
 
+    /// Start a connect (`StatusCell::begin_connect`) and, when it started, refresh the
+    /// cached state and emit `Connecting` under the same status write lock. Returns the
+    /// connect's epoch, or `None` while a session is connecting or active.
+    fn begin_connect(app: &AppHandle, state: &VnasState) -> Option<u64> {
+        let mut cell = state.status.write();
+        let epoch = cell.begin_connect()?;
+        cache_state(SessionState::Connecting);
+        let _ = app.emit("vnas-state-changed", SessionState::Connecting);
+        drop(cell);
+        Some(epoch)
+    }
+
     /// Apply one service event to the managed status and pass it on to the frontend.
+    ///
+    /// Status writes go through the connect epoch `epoch` of the connect that started this
+    /// forwarder: once a newer connect or a disconnect moved it, they write and emit
+    /// nothing.
     fn forward_event(
         app: &AppHandle,
         service: &Arc<VnasService>,
         event_tx: &broadcast::Sender<VnasAircraft>,
+        epoch: u64,
         event: VnasEvent,
     ) {
         match event {
@@ -1414,21 +1775,35 @@ mod real_impl {
                 let _ = app.emit("vnas-aircraft-disconnected", &callsign);
             }
             VnasEvent::SessionStateChanged(new_state) => {
-                forward_session_state(app, service, ReportedSessionChange::State(new_state.into()));
+                if new_state == VnasSessionState::Subscribing {
+                    tracing::warn!(
+                        "vNAS: SessionStateChanged(Subscribing) without SessionJoined; the join token is unknown"
+                    );
+                }
+                let change = ReportedSessionChange::State(new_state.into());
+                forward_session_state(app, service, epoch, change);
             }
             VnasEvent::SessionJoined(joined) => {
-                forward_session_state(app, service, ReportedSessionChange::Joined(joined));
+                let change = ReportedSessionChange::Joined(joined);
+                forward_session_state(app, service, epoch, change);
             }
             VnasEvent::SessionEnded { reason, forcible } => {
                 tracing::info!(forcible, "[vNAS] Session ended: {reason}");
-                app.state::<VnasState>().update_status(|status| {
-                    status.last_session_end = Some(SessionEndInfo { reason, forcible });
-                });
+                app.state::<VnasState>()
+                    .update_status_if_epoch(epoch, |status| {
+                        status.last_session_end = Some(SessionEndInfo { reason, forcible });
+                    });
             }
             VnasEvent::Error(error) => {
                 tracing::info!("[vNAS] Error: {}", error);
-                app.state::<VnasState>().set_error(Some(error.to_string()));
-                let _ = app.emit("vnas-error", error.to_string());
+                let shown = app
+                    .state::<VnasState>()
+                    .update_status_if_epoch(epoch, |status| {
+                        status.error = Some(error.to_string());
+                    });
+                if shown {
+                    let _ = app.emit("vnas-error", error.to_string());
+                }
             }
         }
     }
@@ -1437,27 +1812,37 @@ mod real_impl {
     ///
     /// A join stores the joined session's token and kind with the state and looks its
     /// airports up in the background, under the generation the join moved to; on
-    /// `Disconnected` after a forcible end it shows the end's reason.
+    /// `Disconnected` after a forcible end it shows the end's reason. Writes, refreshes and
+    /// emits nothing once the connect epoch moved past `epoch`.
+    ///
+    /// A join is applied as `Subscribing`, a session change, then the joined session's
+    /// token and kind, all under one status write lock, so they are stored under the
+    /// generation the change moved to and a claim never meets the change without them.
     fn forward_session_state(
         app: &AppHandle,
         service: &Arc<VnasService>,
+        epoch: u64,
         change: ReportedSessionChange,
     ) {
         let state = app.state::<VnasState>();
-        let (new_state, dropped, joined_generation) = match change {
+        let applied = state.with_cell_if_epoch(epoch, |cell| match change {
             ReportedSessionChange::State(new_state) => {
-                (new_state, apply_session_state(&state, new_state), None)
+                (new_state, cell.apply_session_state(new_state), None)
             }
             ReportedSessionChange::Joined(joined) => {
-                let (dropped, generation) = apply_session_joined(&state, joined);
+                let (dropped, generation) = cell.apply_join(joined);
                 (SessionState::Subscribing, dropped, Some(generation))
             }
+        });
+        let Some((new_state, dropped, joined_generation)) = applied else {
+            tracing::debug!(
+                "[vNAS] A newer connect or a disconnect owns the status; state ignored"
+            );
+            return;
         };
         cache_state(new_state);
         tracing::info!("[vNAS] Session state changed: {:?}", new_state);
-        if dropped {
-            cache_subscribed_facilities(&[]);
-        }
+        clear_session_caches(dropped);
         for event in session_change_events(new_state, dropped) {
             emit_session_change(app, event);
         }
@@ -1475,9 +1860,23 @@ mod real_impl {
                 ));
             }
             (SessionState::Disconnected, None) if forced_end => {
-                tokio::spawn(show_forced_end_reason(Arc::clone(service), app.clone()));
+                tokio::spawn(show_forced_end_reason(
+                    Arc::clone(service),
+                    app.clone(),
+                    epoch,
+                ));
             }
             _ => {}
+        }
+    }
+
+    /// Empty the host caches a session change empties (`caches_cleared_by`).
+    fn clear_session_caches(dropped: bool) {
+        for cache in caches_cleared_by(dropped) {
+            match cache {
+                SessionCache::Subscribed => cache_subscribed_facilities(&[]),
+                SessionCache::SessionFacilities => cache_session_facilities(&[]),
+            }
         }
     }
 
@@ -1494,7 +1893,8 @@ mod real_impl {
     }
 
     /// Look the joined session's airports up and keep them, unless the session changed
-    /// again since `generation` was read. Its token and kind came with the join.
+    /// again since `generation` was read or the service's current session (whose airports
+    /// it returns) is not the one the host holds. Its token and kind came with the join.
     async fn remember_session(service: Arc<VnasService>, app: AppHandle, generation: u64) {
         let Some(session) = service.session_airports().await else {
             tracing::debug!("[vNAS] Session ended before its airports were read");
@@ -1502,22 +1902,24 @@ mod real_impl {
         };
         if !app
             .state::<VnasState>()
-            .store_airports(generation, session.airports)
+            .store_airports(generation, session.session, session.airports)
         {
             tracing::debug!("[vNAS] Session changed while its airports were read");
         }
     }
 
     /// Show the reason of the forcible end that disconnected the service as the status
-    /// error, unless a connect has started since.
-    async fn show_forced_end_reason(service: Arc<VnasService>, app: AppHandle) {
+    /// error, unless a connect has started since (the connect epoch moved past `epoch`,
+    /// or it cleared the forcible session end).
+    async fn show_forced_end_reason(service: Arc<VnasService>, app: AppHandle, epoch: u64) {
         let Some(reason) = service.forced_end_reason().await else {
             return;
         };
         let mut shown = false;
-        app.state::<VnasState>().update_status(|status| {
-            shown = apply_forced_end_error(status, Some(reason.clone()));
-        });
+        app.state::<VnasState>()
+            .update_status_if_epoch(epoch, |status| {
+                shown = apply_forced_end_error(status, Some(reason.clone()));
+            });
         if shown {
             tracing::info!("[vNAS] Removed from the session: {reason}");
             let _ = app.emit("vnas-error", &reason);
@@ -1525,8 +1927,8 @@ mod real_impl {
     }
 
     /// Write a connect's `new_state` (and `error`, when given) into the status, refresh
-    /// the cached state and emit it, unless a disconnect has bumped the connect epoch
-    /// since `epoch` was read. Returns whether it published.
+    /// the cached state and emit it, unless a newer connect or a disconnect has bumped the
+    /// connect epoch since `epoch` was read. Returns whether it published.
     ///
     /// The cache write and the emit also run under the status write lock, so a
     /// disconnect's reset, cache write and `Disconnected` emit always land after them.
@@ -1544,14 +1946,26 @@ mod real_impl {
         })
     }
 
-    /// Publish what `service.connect()` returned. A connect that succeeded publishes
-    /// nothing: the event forwarder has published every state it went through.
+    /// How `service.connect()` ended, as far as the status goes.
+    fn connect_outcome(connected: &Result<(), VnasError>) -> ConnectOutcome {
+        match connected {
+            Ok(()) => ConnectOutcome::Connected,
+            Err(VnasError::ConnectCancelled) => ConnectOutcome::Cancelled,
+            Err(e) => ConnectOutcome::Failed(e.to_string()),
+        }
+    }
+
+    /// Publish what `service.connect()` returned (`connect_result_write`): only a failure
+    /// writes, through the connect's epoch. The event forwarder, started before the
+    /// connect, has published every state a connect that succeeded went through
+    /// (publishing it again would announce one join twice), and a cancelled connect's
+    /// teardown reports its own `Disconnected` through the forwarder.
     ///
-    /// Returns `Ok(false)`, having written nothing, when a disconnect overtook the connect
-    /// (took the service out or bumped the connect epoch): the disconnect owns the status
-    /// and the frontend, and an error would show "Connection failed" after the user's own
-    /// disconnect. A connect a server-side teardown cancelled leaves the state
-    /// `Disconnected` with no error.
+    /// Returns `Ok(false)`, having written nothing, when a disconnect took the service out:
+    /// the disconnect owns the status and the frontend, and an error would show
+    /// "Connection failed" after the user's own disconnect. A failure a newer connect
+    /// overtook writes nothing and is not returned either, so it never shows over the
+    /// newer connect's status.
     async fn publish_connect_result(
         app: &AppHandle,
         state: &VnasState,
@@ -1562,28 +1976,19 @@ mod real_impl {
         if !is_current_service(state, service).await {
             return Ok(false);
         }
+        let written = match connect_result_write(connect_outcome(&connected)) {
+            Some((new_state, error)) => publish_connect_state(app, state, epoch, new_state, error),
+            None => false,
+        };
         match connected {
-            Ok(()) => {
-                tracing::info!("vNAS connected to SignalR hub");
-                // The event forwarder, started before the connect, has already published the
-                // state it reached (Subscribing for a session found and joined,
-                // WaitingForSession while there is none); publishing it again would announce
-                // one join twice.
-                Ok(state.connect_epoch() == epoch)
-            }
+            Ok(()) => tracing::info!("vNAS connected to SignalR hub"),
             Err(VnasError::ConnectCancelled) => {
                 tracing::info!("[vNAS] Connect cancelled by a server-side teardown");
-                let disconnected = SessionState::Disconnected;
-                Ok(publish_connect_state(app, state, epoch, disconnected, None))
             }
-            Err(e) => {
-                let disconnected = SessionState::Disconnected;
-                if !publish_connect_state(app, state, epoch, disconnected, Some(e.to_string())) {
-                    return Ok(false);
-                }
-                Err(format!("Connection failed: {}", e))
-            }
+            Err(e) if written => return Err(format!("Connection failed: {}", e)),
+            Err(e) => tracing::info!("[vNAS] Connect failed after a newer connect began: {e}"),
         }
+        Ok(true)
     }
 
     /// Whether `service` is still the service in `state`, i.e. no disconnect took it out.
@@ -1881,14 +2286,16 @@ mod real_impl {
             .await
             .ok_or_else(|| "vNAS service not initialized".to_string())?;
 
-        // Only the airports are kept: the join stored the token and kind, and the crate's
-        // current session may already be newer than the one the host has applied.
-        let generation = state.session_generation();
+        // Only the airports are kept, and only while they belong to the session the host
+        // holds: the join stored the token and kind, and the crate's current session may
+        // already be newer than the one the host has applied.
         let Some(session) = service.session_airports().await else {
             cache_session_facilities(&[]);
             return Ok(Vec::new());
         };
-        state.store_airports(generation, session.airports.clone());
+        if !state.store_session_airports(session.session, session.airports.clone()) {
+            tracing::debug!("[vNAS] Airports of a session the host does not hold; not cached");
+        }
         Ok(session.airports)
     }
 
@@ -2052,7 +2459,10 @@ mod real_impl {
             assert!(state.finish_subscribe("OAK", oak, true));
             let sfo = claim(&state, "SFO");
 
-            assert!(apply_session_state(&state, SessionState::Disconnected));
+            assert!(state
+                .status
+                .write()
+                .apply_session_state(SessionState::Disconnected));
 
             assert_eq!(state.status().state, SessionState::Disconnected);
             assert!(subscribed(&state).is_empty());
@@ -2068,7 +2478,10 @@ mod real_impl {
                 let oak = claim(&state, "OAK");
                 let generation = state.session_generation();
 
-                assert!(apply_session_state(&state, new_state), "{new_state:?}");
+                assert!(
+                    state.status.write().apply_session_state(new_state),
+                    "{new_state:?}"
+                );
 
                 assert!(!state.finish_subscribe("OAK", oak, true));
                 assert!(subscribed(&state).is_empty());
@@ -2120,7 +2533,10 @@ mod real_impl {
             let token = claim(&state, "OAK");
             assert!(state.finish_subscribe("OAK", token, true));
 
-            assert!(!apply_session_state(&state, SessionState::Connected));
+            assert!(!state
+                .status
+                .write()
+                .apply_session_state(SessionState::Connected));
 
             assert_eq!(state.status().state, SessionState::Connected);
             assert_eq!(subscribed(&state), vec!["OAK".to_string()]);
@@ -2182,11 +2598,15 @@ mod real_impl {
                     .expect("send");
             }
             let (seen_tx, mut seen) = tokio::sync::mpsc::unbounded_channel();
-            let forwarder = tokio::spawn(forward_events(events, move |event| {
-                if let VnasEvent::AircraftDisconnected(callsign) = event {
-                    let _ = seen_tx.send(callsign);
-                }
-            }));
+            let forwarder = tokio::spawn(forward_events(
+                events,
+                move |event| {
+                    if let VnasEvent::AircraftDisconnected(callsign) = event {
+                        let _ = seen_tx.send(callsign);
+                    }
+                },
+                || async {},
+            ));
 
             let limit = std::time::Duration::from_secs(2);
             for expected in ["LAG3", "LAG4"] {
@@ -2803,6 +3223,362 @@ mod tests {
         assert!(cell.airports().is_empty());
         assert!(cell.store_airports(cell.generation(), vec!["KSFO".to_string()]));
         assert_eq!(cell.airports(), ["KSFO".to_string()]);
+    }
+
+    #[test]
+    fn begin_connect_refuses_a_second_connect() {
+        let mut cell = StatusCell::<u64>::default();
+        let first = cell.begin_connect().expect("the first connect starts");
+        assert_eq!(cell.status.state, SessionState::Connecting);
+
+        assert_eq!(cell.begin_connect(), None);
+
+        assert_eq!(cell.connect_epoch, first);
+        assert_eq!(cell.status.state, SessionState::Connecting);
+    }
+
+    #[test]
+    fn old_epoch_write_is_refused_after_a_newer_connect() {
+        let mut cell = StatusCell::<u64>::default();
+        let old = cell.begin_connect().expect("the first connect starts");
+        let failed = |c: &mut StatusCell<u64>| {
+            apply_connect_state(
+                &mut c.status,
+                SessionState::Disconnected,
+                Some("boom".to_string()),
+            );
+        };
+        assert!(cell.if_epoch(old, failed).is_some());
+        let new = cell
+            .begin_connect()
+            .expect("a connect after the failure starts");
+
+        // The first connect's forwarder, still draining, reports a join.
+        let joined = cell.if_epoch(old, |c| c.apply_session_state(SessionState::Subscribing));
+
+        assert_eq!(joined, None);
+        assert_eq!(cell.status.state, SessionState::Connecting);
+        let joined = cell.if_epoch(new, |c| c.apply_session_state(SessionState::Subscribing));
+        assert_eq!(joined, Some(true));
+        assert_eq!(cell.status.state, SessionState::Subscribing);
+    }
+
+    #[test]
+    fn old_epoch_write_is_refused_after_disconnect() {
+        let mut cell = StatusCell::<u64>::default();
+        let epoch = cell.begin_connect().expect("the connect starts");
+
+        cell.reset_for_disconnect();
+
+        let joined = cell.if_epoch(epoch, |c| c.apply_session_state(SessionState::Subscribing));
+        assert_eq!(joined, None);
+        assert_eq!(cell.status.state, SessionState::Disconnected);
+    }
+
+    /// Write what a connect's result writes (`connect_result_write`) into `status`.
+    fn write_connect_result(status: &mut VnasStatus, outcome: ConnectOutcome) {
+        if let Some((new_state, error)) = connect_result_write(outcome) {
+            apply_connect_state(status, new_state, error);
+        }
+    }
+
+    #[test]
+    fn connect_result_never_writes_over_connected() {
+        // The forwarder applied the join and the subscribe before the connect returned.
+        let mut status = subscribed_status(&[]);
+        status.state = SessionState::Connecting;
+        apply_session_change(&mut status, SessionState::Subscribing);
+        apply_session_change(&mut status, SessionState::Connected);
+        write_connect_result(&mut status, ConnectOutcome::Connected);
+        assert_eq!(status.state, SessionState::Connected);
+
+        // The connect returned between the join and the subscribe.
+        let mut status = subscribed_status(&[]);
+        status.state = SessionState::Connecting;
+        apply_session_change(&mut status, SessionState::Subscribing);
+        write_connect_result(&mut status, ConnectOutcome::Connected);
+        apply_session_change(&mut status, SessionState::Connected);
+        assert_eq!(status.state, SessionState::Connected);
+    }
+
+    #[test]
+    fn connect_result_writes_only_a_failure() {
+        assert_eq!(connect_result_write(ConnectOutcome::Cancelled), None);
+        assert_eq!(
+            connect_result_write(ConnectOutcome::Failed("boom".to_string())),
+            Some((SessionState::Disconnected, Some("boom".to_string())))
+        );
+    }
+
+    #[tokio::test]
+    async fn lag_applies_retained_events_then_resyncs_once_then_continues() {
+        let (tx, events) = tokio::sync::broadcast::channel::<u32>(2);
+        for event in 0..5 {
+            tx.send(event).expect("send");
+        }
+        let log = std::sync::Arc::new(parking_lot::Mutex::new(Vec::<String>::new()));
+        let handled = std::sync::Arc::clone(&log);
+        let resynced = std::sync::Arc::clone(&log);
+        // The re-sync sends one more event and drops the last sender, so the forwarder
+        // returns once it has applied that event.
+        let mut late = Some(tx);
+        let forwarder = forward_events(
+            events,
+            move |event| handled.lock().push(format!("event {event}")),
+            move || {
+                let log = std::sync::Arc::clone(&resynced);
+                let sender = late.take();
+                async move {
+                    log.lock().push("resync".to_string());
+                    if let Some(sender) = sender {
+                        sender
+                            .send(5)
+                            .expect("the forwarder should still be receiving");
+                    }
+                }
+            },
+        );
+
+        tokio::time::timeout(std::time::Duration::from_secs(10), forwarder)
+            .await
+            .expect("the forwarder hung instead of returning once the sender was dropped");
+
+        assert_eq!(
+            *log.lock(),
+            ["event 3", "event 4", "resync", "event 5"].map(String::from)
+        );
+    }
+
+    #[test]
+    fn resync_rejoins_when_the_crate_joined_another_session() {
+        let resync = resync_action(
+            SessionState::Connected,
+            Some(7_u64),
+            SessionState::Subscribing,
+            Some((8, SessionKind::Room)),
+            None,
+        );
+        let rejoin = ResyncChange::Rejoin {
+            state: SessionState::Subscribing,
+            session: Some((8, SessionKind::Room)),
+        };
+        assert_eq!(resync.change, rejoin);
+        assert_eq!(resync.forced_end, None);
+    }
+
+    #[test]
+    fn resync_drops_the_session_the_crate_no_longer_has() {
+        let resync = resync_action(
+            SessionState::Connected,
+            Some(7_u64),
+            SessionState::WaitingForSession,
+            None,
+            None,
+        );
+        let rejoin = ResyncChange::Rejoin {
+            state: SessionState::WaitingForSession,
+            session: None,
+        };
+        assert_eq!(resync.change, rejoin);
+    }
+
+    #[test]
+    fn resync_never_moves_the_same_session_backwards() {
+        let joined = Some((7_u64, SessionKind::Crc));
+        let behind = resync_action(
+            SessionState::Connected,
+            Some(7),
+            SessionState::Subscribing,
+            joined,
+            None,
+        );
+        assert_eq!(behind.change, ResyncChange::Keep);
+
+        let ahead = resync_action(
+            SessionState::Subscribing,
+            Some(7),
+            SessionState::Connected,
+            joined,
+            None,
+        );
+        assert_eq!(ahead.change, ResyncChange::Advance(SessionState::Connected));
+    }
+
+    #[test]
+    fn resync_restores_a_missed_kick_reason() {
+        let reason = "Removed from the room".to_string();
+        let resync = resync_action(
+            SessionState::Connected,
+            Some(7_u64),
+            SessionState::Disconnected,
+            None,
+            Some(reason.clone()),
+        );
+        let rejoin = ResyncChange::Rejoin {
+            state: SessionState::Disconnected,
+            session: None,
+        };
+        assert_eq!(resync.change, rejoin);
+        assert_eq!(resync.forced_end, Some(reason));
+    }
+
+    #[test]
+    fn airports_of_an_older_session_are_not_cached() {
+        let mut cell = SessionCell::<u64>::default();
+        cell.join(7, SessionKind::Crc);
+        cell.join(8, SessionKind::Room);
+
+        assert!(!cell.store_airports_of(7, vec!["KOAK".to_string()]));
+        assert!(cell.airports().is_empty());
+        assert!(cell.store_airports_of(8, vec!["OAK".to_string()]));
+        assert_eq!(cell.airports(), ["OAK".to_string()]);
+
+        cell.end();
+        assert!(!cell.store_airports_of(8, vec!["OAK".to_string()]));
+        assert!(cell.airports().is_empty());
+    }
+
+    #[test]
+    fn airports_of_another_session_under_the_same_generation_are_not_cached() {
+        let mut cell = SessionCell::<u64>::default();
+        let generation = cell.join(7, SessionKind::Crc);
+
+        // The service has joined session 8 already; the host has not applied it yet.
+        assert!(!cell.store_airports_of_session(generation, 8, vec!["KSFO".to_string()]));
+
+        assert!(cell.airports().is_empty());
+        assert!(cell.store_airports_of_session(generation, 7, vec!["KOAK".to_string()]));
+        assert_eq!(cell.airports(), ["KOAK".to_string()]);
+    }
+
+    /// A status cell in `state` holding session 7, with `facilities` subscribed and a
+    /// subscribe for KSFO in flight; also returns the generation session 7 was joined under.
+    fn cell_in_session(state: SessionState, facilities: &[&str]) -> (StatusCell<u64>, u64) {
+        let mut cell = StatusCell::<u64> {
+            status: VnasStatus {
+                state,
+                ..subscribed_status(facilities)
+            },
+            ..StatusCell::default()
+        };
+        let generation = cell.session.join(7, SessionKind::Crc);
+        cell.pending_subscribes.insert("KSFO".to_string(), 1);
+        (cell, generation)
+    }
+
+    #[test]
+    fn resync_to_a_new_session_clears_the_old_one_and_stores_the_new_one() {
+        let (mut cell, old_generation) = cell_in_session(SessionState::Connected, &["KOAK"]);
+        let resync = resync_action(
+            cell.status.state,
+            cell.session.token(),
+            SessionState::Subscribing,
+            Some((8, SessionKind::Room)),
+            None,
+        );
+
+        let writes = cell.apply_resync(resync);
+
+        assert!(cell.status.subscribed_facilities.is_empty());
+        assert!(cell.pending_subscribes.is_empty());
+        assert_eq!(cell.status.state, SessionState::Subscribing);
+        assert_eq!(cell.session.token(), Some(8));
+        assert_eq!(cell.session.kind(), Some(SessionKind::Room));
+        let generation = writes
+            .joined_generation
+            .expect("the new session's generation");
+        let airports = vec!["OAK".to_string()];
+        assert!(!cell
+            .session
+            .store_airports_of_session(old_generation, 8, airports.clone()));
+        assert!(cell
+            .session
+            .store_airports_of_session(generation, 8, airports));
+        assert_eq!(writes.new_state, Some(SessionState::Subscribing));
+        assert!(writes.dropped);
+        assert_eq!(
+            writes.events,
+            vec![
+                SessionChangeEvent::State(SessionState::Subscribing),
+                SessionChangeEvent::SubscriptionsCleared,
+            ]
+        );
+        assert_eq!(writes.forced_error, None);
+    }
+
+    #[test]
+    fn resync_within_the_same_session_never_moves_backwards() {
+        let joined = Some((7_u64, SessionKind::Crc));
+        let (mut cell, _) = cell_in_session(SessionState::Connected, &["KOAK"]);
+        let behind = resync_action(
+            cell.status.state,
+            cell.session.token(),
+            SessionState::Subscribing,
+            joined,
+            None,
+        );
+
+        let writes = cell.apply_resync(behind);
+
+        assert_eq!(cell.status.state, SessionState::Connected);
+        assert_eq!(cell.status.subscribed_facilities, ["KOAK".to_string()]);
+        assert_eq!(writes.new_state, None);
+        assert!(writes.events.is_empty());
+
+        let (mut cell, _) = cell_in_session(SessionState::Subscribing, &["KOAK"]);
+        let ahead = resync_action(
+            cell.status.state,
+            cell.session.token(),
+            SessionState::Connected,
+            joined,
+            None,
+        );
+
+        let writes = cell.apply_resync(ahead);
+
+        assert_eq!(cell.status.state, SessionState::Connected);
+        assert_eq!(cell.status.subscribed_facilities, ["KOAK".to_string()]);
+        assert_eq!(cell.session.token(), Some(7));
+        assert!(!writes.dropped);
+        assert_eq!(
+            writes.events,
+            vec![SessionChangeEvent::State(SessionState::Connected)]
+        );
+    }
+
+    #[test]
+    fn resync_shows_a_forced_end_reason_once() {
+        let reason = "Removed from the room".to_string();
+        let (mut cell, _) = cell_in_session(SessionState::Connected, &["KOAK"]);
+        let kicked = |cell: &StatusCell<u64>| {
+            resync_action(
+                cell.status.state,
+                cell.session.token(),
+                SessionState::Disconnected,
+                None,
+                Some(reason.clone()),
+            )
+        };
+
+        let first = cell.apply_resync(kicked(&cell));
+
+        assert_eq!(first.forced_error, Some(reason.clone()));
+        assert_eq!(cell.status.error, Some(reason.clone()));
+        assert_eq!(cell.status.last_session_end, session_end(&reason, true));
+
+        let second = cell.apply_resync(kicked(&cell));
+
+        assert_eq!(second.forced_error, None);
+        assert_eq!(cell.status.error, Some(reason.clone()));
+    }
+
+    #[test]
+    fn dropping_change_clears_session_facilities() {
+        assert_eq!(
+            caches_cleared_by(true),
+            [SessionCache::Subscribed, SessionCache::SessionFacilities]
+        );
+        assert!(caches_cleared_by(false).is_empty());
     }
 
     #[test]
