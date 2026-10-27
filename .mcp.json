@@ -10,7 +10,8 @@
     },
     "tauri-app": {
       "command": "npx",
-      "args": ["-y", "@playwright/mcp@0.0.83", "--cdp-endpoint", "http://localhost:9222"]
+      "args": ["-y", "@playwright/mcp@0.0.83", "--cdp-endpoint", "http://localhost:9222"],
+      "timeout": 600000
     }
   }
 }
