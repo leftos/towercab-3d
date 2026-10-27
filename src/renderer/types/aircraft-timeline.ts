@@ -44,6 +44,16 @@ export interface AircraftObservation {
   onGround: boolean | null
 
   /**
+   * Height above the ground under it, in metres, raw as the source reports it (vNAS: the simulator's AGL of the
+   * aircraft's reference point, so an aircraft at rest reads its resting height, which varies by type and simulator).
+   * Absent for VATSIM and RealTraffic; replay carries what was recorded. Slow vNAS samples from -3 to 16 ft teach the
+   * aircraft's own resting height and its type's; ground contact, the parked test and the flare use the height over the
+   * aircraft's own, else its type's (`heightOverRest`). While it has neither, lane B decides contact and the
+   * parked test and the flare take the raw height.
+   */
+  heightAboveGround?: number
+
+  /**
    * Pitch angle in degrees.
    * For broadcast source: pre-interpolated pitch from main app.
    * For other sources: null (calculated from vertical rate).
@@ -194,6 +204,14 @@ export interface AircraftTimeline {
   lastReceivedAt: number
 }
 
+/** Heights above ground (metres) of the run of samples contact is entered on while an aircraft has no resting height */
+export interface SettleRun {
+  lowest: number
+  /** The second-lowest sample's height; the provisional resting height is taken from it */
+  secondLowest: number
+  highest: number
+}
+
 /**
  * Result of timeline interpolation/extrapolation.
  * Contains the computed position and debug info.
@@ -217,10 +235,26 @@ export interface TimelineInterpolationResult {
 
   // Extended ADS-B data (passed through from observations when available)
   /**
-   * On-ground flag from ADS-B transponder.
-   * true = on ground, false = airborne, null = unknown.
+   * On-ground flag for drawing, from the source's ground flag (ADS-B ground bit, vNAS 50/80 ft flag).
+   * true = on ground, false = airborne, null = unknown. Null when the flag comes from a vNAS observation
+   * and the result has no height above ground: the vNAS flag is for labels only.
    */
   onGround: boolean | null
+
+  /**
+   * Height above ground in metres at the displayed instant: lerped between two samples that carry it, the last
+   * sample's while extrapolating or held. Null for sources without it, and once the samples carrying it are older
+   * than `VNAS_PREFERENCE_THRESHOLD_MS`.
+   */
+  heightAboveGround: number | null
+
+  /**
+   * The run of height samples contact is entered on while the aircraft has no resting height: the shortest run of the
+   * drawn list's samples ending at the bracket's `after` sample (its `before` sample while extrapolating or held) that
+   * holds at least DROP_CONTACT_SETTLE_MIN_SAMPLES samples spanning at least DROP_CONTACT_SETTLE_SPAN_MS. Undefined
+   * when the samples do not span it or a sample in it carries no height.
+   */
+  settleRun: SettleRun | undefined
 
   /**
    * Pitch angle in degrees (interpolated from observations if available).

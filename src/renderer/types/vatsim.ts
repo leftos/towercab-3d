@@ -209,6 +209,11 @@ export interface InterpolatedAircraftState extends AircraftState {
   interpolatedLatitude: number
   interpolatedLongitude: number
   interpolatedAltitude: number // Interpolated altitude in METERS ellipsoidal (WGS84)
+  /**
+   * Altitude in METERS ellipsoidal before the resting-height correction; what datablocks and the aircraft list show.
+   * `interpolatedAltitude` is the drawn height.
+   */
+  reportedAltitude: number
   interpolatedHeading: number
   interpolatedGroundspeed: number
   // Emulated orientation (derived from physics)
@@ -217,13 +222,45 @@ export interface InterpolatedAircraftState extends AircraftState {
   verticalRate: number // Vertical rate in METERS/MINUTE
   turnRate: number // degrees/sec
   /**
-   * On-ground flag from authoritative source data (vNAS AGL < 50ft, ADS-B ground bit).
-   * - true = source confirms aircraft is on ground
-   * - false = source confirms aircraft is airborne
-   * - null = unknown, must infer from groundspeed/altitude
-   * More reliable than altitude-based detection when available.
+   * On-ground flag from the source (vNAS: below 50 ft, left above 80 ft, kept for labels; ADS-B ground bit).
+   * - true = source reports the aircraft on the ground
+   * - false = source reports it airborne
+   * - null = no flag (VATSIM)
+   * Ground contact for drawing and the gear is `inContact`, not this flag.
    */
   isOnGround: boolean | null
+  /**
+   * Height above ground in metres reported by the source at the displayed instant (vNAS, raw: a reference point's
+   * height), or null for sources without it (VATSIM, RealTraffic); replay carries what was recorded.
+   */
+  heightAboveGround: number | null
+  /**
+   * Ground contact decided per frame. From `heightAboveGround` when the source reports it: entered within 3 ft of
+   * the aircraft's resting height (its own, else its type's) and left above 5 ft over it once that is learned; until
+   * then, entered at or below 16 ft after a descent once a run of samples (3 or more over 2.5 s) moves no more than
+   * 3 ft, then decided the same way over a provisional resting height taken from the run, dropped above 25 ft.
+   * Otherwise from the drawn result of the landing and departure height blends (drawn more than halfway onto the
+   * terrain).
+   * Null only before the aircraft's first drawn frame.
+   */
+  inContact: boolean | null
+  /**
+   * How far the drawn height is blended onto the terrain this frame, 0..1 (0 = at the reported height, 1 = on the
+   * terrain). The spoilers, reversers and wheels read it for sources without a height above ground (`surfaceFrameFor`).
+   */
+  groundBlendWeight: number
+  /**
+   * True when this frame's `groundBlendWeight` came from the landing blend (the descending branch: descending below
+   * 50 m without a height above ground); false for the departure blend, the ground cases, and sources with a height
+   * above ground. The surfaces read it to tell a landing drawn down onto the terrain from a rollout or taxi reported a
+   * few metres above it.
+   */
+  groundBlendDescending: boolean
+  /**
+   * Whether this frame's data comes from a replay (buffer or imported) rather than live, from the same data-source
+   * read that set `timestamp`, so the two always agree.
+   */
+  isReplay: boolean
   /**
    * Ground acceleration in knots per second.
    * Positive = accelerating, negative = decelerating.
@@ -280,4 +317,10 @@ export interface InterpolatedAircraftState extends AircraftState {
    * (e.g., RealTraffic-only aircraft before timeline integration).
    */
   displayDelay: number
+  /**
+   * The instant the drawn state shows, in milliseconds in the observations' `observedAt` domain (the timeline's
+   * display time). The flight-phase windows, dwell times and sticky exits run on it, so a label follows the
+   * displayed aircraft, in replay as live, rather than the wall clock.
+   */
+  displayTime: number
 }

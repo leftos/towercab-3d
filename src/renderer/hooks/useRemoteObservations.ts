@@ -23,6 +23,7 @@
  */
 
 import { useCallback, useEffect, useRef } from 'react'
+import type { RemoteObservationData } from '@/types'
 import { SOURCE_DISPLAY_DELAYS } from '../constants/aircraft-timeline'
 import { useAircraftTimelineStore } from '../stores/aircraftTimelineStore'
 import { useRemoteStatusStore } from '../stores/remoteStatusStore'
@@ -30,27 +31,49 @@ import { useVnasStore } from '../stores/vnasStore'
 import type { AircraftMetadata, AircraftObservation } from '../types/aircraft-timeline'
 import { getApiBaseUrl, isRemoteMode } from '../utils/remoteMode'
 
-// Types for WebSocket messages (match Rust types in server.rs)
-interface ObservationData {
-  callsign: string
-  latitude: number
-  longitude: number
-  altitude: number
-  heading: number
-  groundspeed: number
-  groundTrack: number
-  verticalRate: number
-  onGround: boolean
-  pitch: number | null
-  roll: number | null
-  source: string
-  observedAt: number
-  receivedAt: number
-  typeCode: string | null
-  origin: string | null
-  destination: string | null
-  flightRules: string | null
+/**
+ * Map one observation from the host's WebSocket into the timeline store's observation and metadata.
+ *
+ * @param obs - The observation as the host sent it
+ * @param now - Local receive time in ms, used for reconciliation
+ * @returns The callsign, observation and metadata for `addObservationBatch`
+ */
+export function toTimelineObservation(
+  obs: RemoteObservationData,
+  now: number,
+): { callsign: string; observation: AircraftObservation; metadata: AircraftMetadata } {
+  const observation: AircraftObservation = {
+    latitude: obs.latitude,
+    longitude: obs.longitude,
+    altitude: obs.altitude,
+    heading: obs.heading,
+    groundspeed: obs.groundspeed,
+    groundTrack: obs.groundTrack,
+    verticalRate: obs.verticalRate,
+    onGround: obs.onGround,
+    heightAboveGround: obs.heightAboveGround ?? undefined,
+    pitch: obs.pitch,
+    roll: obs.roll,
+    headingIsTrue: obs.source === 'vnas' || obs.source === 'vatsim',
+    source: obs.source as 'vatsim' | 'vnas' | 'realtraffic',
+    observedAt: obs.observedAt,
+    receivedAt: now, // Use local time for reconciliation
+    displayDelay:
+      SOURCE_DISPLAY_DELAYS[obs.source as keyof typeof SOURCE_DISPLAY_DELAYS] ?? SOURCE_DISPLAY_DELAYS.vatsim,
+  }
+
+  const metadata: AircraftMetadata = {
+    cid: 0, // Unknown CID for remote observations
+    aircraftType: obs.typeCode ?? 'UNKN',
+    transponder: '', // Unknown transponder for remote observations
+    departure: obs.origin,
+    arrival: obs.destination,
+  }
+
+  return { callsign: obs.callsign, observation, metadata }
 }
+
+// Types for WebSocket messages (match Rust types in server.rs)
 
 interface InitMessage {
   type: 'init'
@@ -61,7 +84,7 @@ interface InitMessage {
 
 interface ObservationsMessage {
   type: 'observations'
-  data: ObservationData[]
+  data: RemoteObservationData[]
 }
 
 interface RemovalsMessage {
@@ -149,37 +172,7 @@ export function useRemoteObservations(): void {
           case 'observations': {
             // Convert to timeline store format
             const now = Date.now()
-            const batch = message.data.map((obs) => {
-              const observation: AircraftObservation = {
-                latitude: obs.latitude,
-                longitude: obs.longitude,
-                altitude: obs.altitude,
-                heading: obs.heading,
-                groundspeed: obs.groundspeed,
-                groundTrack: obs.groundTrack,
-                verticalRate: obs.verticalRate,
-                onGround: obs.onGround,
-                pitch: obs.pitch,
-                roll: obs.roll,
-                headingIsTrue: obs.source === 'vnas' || obs.source === 'vatsim',
-                source: obs.source as 'vatsim' | 'vnas' | 'realtraffic',
-                observedAt: obs.observedAt,
-                receivedAt: now, // Use local time for reconciliation
-                displayDelay:
-                  SOURCE_DISPLAY_DELAYS[obs.source as keyof typeof SOURCE_DISPLAY_DELAYS] ??
-                  SOURCE_DISPLAY_DELAYS.vatsim,
-              }
-
-              const metadata: AircraftMetadata = {
-                cid: 0, // Unknown CID for remote observations
-                aircraftType: obs.typeCode ?? 'UNKN',
-                transponder: '', // Unknown transponder for remote observations
-                departure: obs.origin,
-                arrival: obs.destination,
-              }
-
-              return { callsign: obs.callsign, observation, metadata }
-            })
+            const batch = message.data.map((obs) => toTimelineObservation(obs, now))
 
             if (batch.length > 0) {
               addObservationBatch(batch)

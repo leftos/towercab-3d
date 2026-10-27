@@ -1,9 +1,15 @@
 import * as Cesium from 'cesium'
 import { useCallback, useEffect, useRef } from 'react'
+import { aircraftDimensionsService } from '@/services/AircraftDimensionsService'
+import {
+  clearSurfaceState,
+  surfaceFrameFor,
+  updateSurfaceAnimation,
+  wheelRadiusForWingspan,
+} from '@/utils/surfaceAnimationController'
 import { SUN_ELEVATION_DAY, SUN_ELEVATION_NIGHT } from '../constants/lighting'
 import {
   FSLTL_MODEL_HEIGHT_OFFSET,
-  GROUNDSPEED_THRESHOLD_KNOTS,
   getFsltlModelColorBlendAmount,
   getModelColorBlendAmount,
   getModelColorRgb,
@@ -18,6 +24,7 @@ import type { InterpolatedAircraftState } from '../types/vatsim'
 import { neutralEnvironmentMapOptions } from '../utils/environmentMap'
 import {
   applyGearAnimation,
+  applySurfaceAnimation,
   clearGearState,
   gearHeightAboveGroundMeters,
   getCurrentGearProgress,
@@ -330,8 +337,8 @@ export function useAircraftModels(
           modelPoolAssignments.current.set(poolIndex, aircraft.callsign)
 
           // Initialize gear state based on aircraft's current conditions
-          // This ensures aircraft spawning in flight have gear up, while ground aircraft have gear down
-          const isOnGround = aircraft.interpolatedGroundspeed < GROUNDSPEED_THRESHOLD_KNOTS
+          // This ensures aircraft spawning in flight have gear up, while aircraft in ground contact have gear down
+          const inContact = aircraft.inContact === true
           const altitudeAglMeters = gearHeightAboveGroundMeters(
             aircraft.interpolatedAltitude,
             groundElevationMeters,
@@ -340,7 +347,7 @@ export function useAircraftModels(
           )
           const altitudeAglFeet = altitudeAglMeters * 3.28084
           const verticalRateFpm = aircraft.verticalRate * 3.28084
-          initializeGearState(aircraft.callsign, altitudeAglFeet, verticalRateFpm, isOnGround)
+          initializeGearState(aircraft.callsign, altitudeAglFeet, verticalRateFpm, inContact)
         }
       }
 
@@ -508,8 +515,8 @@ export function useAircraftModels(
           const isModelLoading = modelPoolLoading.current.has(poolIndex)
 
           if (isFsltlForGear && model.ready && !isModelLoading) {
-            // Determine if aircraft is on ground based on groundspeed threshold
-            const isOnGround = aircraft.interpolatedGroundspeed < GROUNDSPEED_THRESHOLD_KNOTS
+            // Ground contact from the interpolation pass (null only before the aircraft's first drawn frame)
+            const inContact = aircraft.inContact === true
 
             // AGL from the ellipsoidal aircraft altitude and the MSL ground, converted to one datum
             const altitudeAglMeters = gearHeightAboveGroundMeters(
@@ -524,11 +531,15 @@ export function useAircraftModels(
             const verticalRateFpm = aircraft.verticalRate * 3.28084
 
             // Update gear animation state and get current progress
+            // The time out of contact counts on the data-source time of the frame (replay-aware)
             const gearProgress = updateGearAnimation(
               aircraft.callsign,
-              altitudeAglFeet,
-              verticalRateFpm,
-              isOnGround,
+              {
+                altitudeFt: altitudeAglFeet,
+                verticalRateFpm,
+                inContact,
+                dataTime: aircraft.timestamp,
+              },
               Date.now(),
             )
 
@@ -536,6 +547,14 @@ export function useAircraftModels(
             // Pass known animation count from gltfCallback for reliable animation access
             const knownAnimCount = modelAnimationCountsRef.current.get(modelInfo.modelUrl)
             applyGearAnimation(model, gearProgress, aircraft.callsign, modelInfo.modelUrl, knownAnimCount)
+
+            // Spoilers, reversers and wheel spin run on the data-source time of the frame, so a paused replay holds them
+            const wingspanM = aircraftDimensionsService.getDimensions(aircraft.aircraftType)?.wingspan ?? null
+            const surfacePose = updateSurfaceAnimation(
+              aircraft.callsign,
+              surfaceFrameFor(aircraft, wheelRadiusForWingspan(wingspanM)),
+            )
+            applySurfaceAnimation(model, surfacePose, modelInfo.modelUrl)
           }
         }
       }
@@ -545,8 +564,9 @@ export function useAircraftModels(
     // Use reverse lookup to find stale assignments - O(seenCallsigns) instead of O(poolSize)
     for (const [callsign, idx] of callsignToPoolIndexRef.current.entries()) {
       if (!seenCallsigns.has(callsign)) {
-        // Clean up gear animation state for this aircraft
+        // Clean up gear, spoiler, reverser and wheel animation state for this aircraft
         clearGearState(callsign)
+        clearSurfaceState(callsign)
 
         // Release this slot and hide the model
         modelPoolAssignments.current.set(idx, null)

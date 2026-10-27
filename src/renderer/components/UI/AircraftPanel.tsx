@@ -250,7 +250,7 @@ function AircraftPanel() {
       const altitudeMsl = geoidService.ellipsoidalToMsl(
         aircraft.interpolatedLatitude,
         aircraft.interpolatedLongitude,
-        aircraft.interpolatedAltitude,
+        aircraft.reportedAltitude,
       )
       return {
         callsign: aircraft.callsign,

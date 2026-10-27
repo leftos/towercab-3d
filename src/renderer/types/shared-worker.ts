@@ -82,6 +82,7 @@ export interface SerializedAircraftState {
   interpolatedLatitude: number
   interpolatedLongitude: number
   interpolatedAltitude: number
+  reportedAltitude: number
   interpolatedHeading: number
   interpolatedGroundspeed: number
   interpolatedPitch: number
@@ -254,6 +255,7 @@ export function serializeBasicAircraftState(state: AircraftState): SerializedAir
     interpolatedLatitude: state.latitude,
     interpolatedLongitude: state.longitude,
     interpolatedAltitude: state.altitude,
+    reportedAltitude: state.altitude,
     interpolatedHeading: state.heading,
     interpolatedGroundspeed: state.groundspeed,
     interpolatedPitch: 0,

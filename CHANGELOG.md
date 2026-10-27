@@ -10,6 +10,7 @@ All notable changes to TowerCab 3D will be documented in this file.
 - 3D buildings now show rows of windows on their walls, some of them lit at night.
 - New **Weather quality** setting (Low, Medium, High) under Settings → Graphics; iPads and phones start lower, and small insets step down.
 - New **About** tab in Settings shows the app version and the credits for the map, terrain, imagery and 3D building data in use.
+- FSLTL and AIG aircraft now deploy spoilers and thrust reversers on landing, and their wheels turn as they roll.
 
 ### Changed
 - 3D buildings and aircraft no longer have an olive-green cast on their walls and fuselages; their reflected ground light is now a neutral grey.
@@ -20,6 +21,7 @@ All notable changes to TowerCab 3D will be documented in this file.
 - Weather fog now fades in as visibility drops from 10 to 8 miles, and eases over six seconds when visibility changes, instead of popping.
 - Tower mod cabs now darken at night with the rest of the view and cast a shadow on the ground.
 - Tower mod `rotation` now turns the cab clockwise, as documented; a cab with a rotation other than 0 may now face a different way.
+- vNAS aircraft now rest on their wheels whichever simulator flies them, touch down and lift off with the simulator's aircraft, and raise their gear a few seconds after liftoff.
 
 ### Fixed
 - FSLTL and AIG aircraft now use their own livery's textures instead of another livery's, and AIG models with many liveries convert again.
@@ -31,10 +33,11 @@ All notable changes to TowerCab 3D will be documented in this file.
 - Aircraft in flight are no longer drawn 5 m above their reported altitude.
 - Nose wheels no longer appear turned to full lock while the gear is down.
 - Landing gear now extends and retracts at the right height at every airport, not only those near sea level.
-- The flight phase badge now shows "Go Around" after a go-around, and leaves "Short Final" as soon as the aircraft climbs away.
+- The flight phase badge now keeps pace with the aircraft you see: "Roll Out" only from touchdown to turn-off, and "Go Around" after a go-around.
 - Aircraft passing over an airport at altitude are no longer labelled "Final" or "Short Final".
 - Datablocks on iPads and other high-resolution screens now sit on their aircraft at full size, instead of half size and in the wrong place.
 - Tower and aircraft mod models now load on iPads and other browsers connected to the desktop app.
+- vNAS aircraft whose flight plan files a different type than the one they fly now keep the flown type's model, instead of swapping every few seconds.
 - The MSFS model cache size limit, Unlimited included, now survives a restart instead of resetting and deleting converted models.
 - Converting an FSLTL or AIG model can no longer read files from outside that model's own MSFS package.
 - Mods you turn off in Settings → Mods stay off after a restart, and stay listed so you can turn them back on.
@@ -45,6 +48,7 @@ All notable changes to TowerCab 3D will be documented in this file.
 - An overcast now reaches the horizon and meets the distant haze in one grey, and broken layers beneath it no longer show bright horizon streaks.
 - vNAS no longer writes your sign-in tokens or sign-in code into the log file or into connection error messages.
 - vNAS: aircraft no longer linger in Nearby Aircraft after your CRC session ends, each update arrives once, and the connection status stays right through bursts of updates.
+- Stopped vNAS aircraft no longer creep forward while vNAS is quiet, show their next movement up to 20 s late, or play takeoff rolls fast.
 
 ### Removed
 - The experimental VR mode and its VR button in the controls bar.

@@ -8,15 +8,17 @@
  * - 0.0 = Gear fully retracted (up)
  * - 1.0 = Gear fully extended (down)
  *
- * ## Gear State Logic (with hysteresis)
+ * ## Gear State Logic
  * Gear EXTENDS when:
- * - On the ground
+ * - In ground contact
  * - Descending below 2,000 ft AGL
  *
  * Gear RETRACTS when:
- * - Climbing above 500 ft AGL
+ * - Climbing after 2 s out of ground contact (positive rate confirmed)
+ * - Climbing above 150 ft AGL, for an aircraft not in contact since it was drawn
  *
- * The hysteresis prevents gear cycling during level flight near thresholds.
+ * Otherwise the gear keeps its state, so level flight does not cycle it.
+ * Each transition takes 8 s on an ease-out curve.
  *
  * ## Implementation Notes
  * We bypass Cesium's built-in animation system (which has issues with animationTime
@@ -28,8 +30,15 @@
  */
 
 import type * as Cesium from 'cesium'
+import type { GearContact, GearFrameInput } from '@/types'
+import { clearAllSurfaceStates, type SurfacePose } from '@/utils/surfaceAnimationController'
 import { geoidService } from '../services/GeoidService'
-import { type AnimationSet, applyGearAnimationsPercent, parseAnimationSetFromUrl } from './gltfAnimationParser'
+import {
+  type AnimationSet,
+  applyClipAnimationsPercent,
+  applyWheelSpin,
+  parseAnimationSetFromUrl,
+} from './gltfAnimationParser'
 
 /**
  * Height of an aircraft above the ground, in one datum, for the gear rules.
@@ -58,7 +67,7 @@ export type GearState = 'up' | 'extending' | 'down' | 'retracting'
 export interface GearAnimationConfig {
   /** Altitude below which gear extends when descending (feet AGL) */
   extendAltitude: number
-  /** Altitude above which gear retracts when climbing (feet AGL) */
+  /** Altitude above which an aircraft not in contact since it was drawn retracts when climbing (feet AGL) */
   retractAltitude: number
   /** Vertical rate threshold to consider aircraft "descending" (ft/min, negative) */
   descentRateThreshold: number
@@ -71,14 +80,24 @@ export interface GearAnimationConfig {
 /** Default gear animation configuration */
 export const DEFAULT_GEAR_CONFIG: GearAnimationConfig = {
   extendAltitude: 2000, // Extend gear when descending below 2000ft AGL
-  retractAltitude: 150, // Retract gear when climbing above 150ft AGL
+  retractAltitude: 150, // Without a liftoff seen, retract when climbing above 150ft AGL
   descentRateThreshold: -100, // ft/min - consider descending if < -100 ft/min
   climbRateThreshold: 100, // ft/min - consider climbing if > 100 ft/min
-  transitionTime: 12.0, // 12 seconds to extend/retract (realistic timing)
+  transitionTime: 8.0, // 8 seconds to extend/retract (737-800: 8-10 s)
 }
+
+/** Seconds out of ground contact before a climbing aircraft retracts its gear (positive rate confirmed) */
+export const GEAR_RETRACT_MIN_AIRBORNE_SECONDS = 2
 
 /** Per-aircraft gear animation state */
 interface GearAnimationState {
+  /** Data-source time of the last frame in ground contact, or null when not in contact since it was drawn */
+  lastContactTime: number | null
+  /**
+   * Whether the leave-contact retract has been commanded since the last contact. While set and out of contact the
+   * gear holds its state (bar the extension when descending), so a later climb below retractAltitude does not retract.
+   */
+  leaveContactRetractDone: boolean
   /** Current gear progress (0 = up, 1 = down) */
   progress: number
   /** Target gear progress */
@@ -101,6 +120,8 @@ function getGearState(callsign: string): GearAnimationState {
   let state = gearStates.get(callsign)
   if (!state) {
     state = {
+      lastContactTime: null,
+      leaveContactRetractDone: false,
       progress: 1.0, // Start with gear down (safer default)
       targetProgress: 1.0,
       transitionStartTime: 0,
@@ -127,14 +148,14 @@ function getGearState(callsign: string): GearAnimationState {
  * @param callsign - Aircraft callsign
  * @param altitude - Current altitude in feet AGL
  * @param verticalRate - Vertical rate in feet per minute (positive = climbing)
- * @param isOnGround - Whether aircraft is on the ground
+ * @param inContact - Whether the aircraft is in ground contact
  * @param config - Gear animation configuration
  */
 export function initializeGearState(
   callsign: string,
   altitude: number,
   verticalRate: number,
-  isOnGround: boolean,
+  inContact: boolean,
   config: GearAnimationConfig = DEFAULT_GEAR_CONFIG,
 ): void {
   // For NEW aircraft (verticalRate=0 indicates no history), be more conservative about gear state.
@@ -149,12 +170,15 @@ export function initializeGearState(
 
   // For new aircraft, only assume gear UP if clearly at cruise altitude
   // For aircraft with vertical rate history, use normal logic
-  const assumeGearDown = isNewAircraft ? !clearlyCruising : isOnGround || altitude < config.extendAltitude
+  const assumeGearDown = isNewAircraft ? !clearlyCruising : inContact || altitude < config.extendAltitude
 
   // Calculate what the gear state should be based on current aircraft conditions
-  const initialProgress = calculateTargetGearProgress(altitude, verticalRate, isOnGround, assumeGearDown, config)
+  const contact: GearContact = { inContact, secondsSinceContact: inContact ? 0 : null }
+  const initialProgress = calculateTargetGearProgress(altitude, verticalRate, contact, assumeGearDown, config)
 
   const state: GearAnimationState = {
+    lastContactTime: null,
+    leaveContactRetractDone: false,
     progress: initialProgress,
     targetProgress: initialProgress,
     transitionStartTime: 0,
@@ -167,14 +191,17 @@ export function initializeGearState(
 /**
  * Determine target gear state based on aircraft conditions
  *
- * Uses hysteresis to prevent gear cycling:
+ * - Gear is down while in ground contact
  * - Gear extends when descending below extendAltitude (2000ft default)
- * - Gear retracts when climbing above retractAltitude (500ft default)
- * - Between thresholds, gear maintains current state
+ * - After leaving contact, gear retracts once climbing and out of contact for
+ *   GEAR_RETRACT_MIN_AIRBORNE_SECONDS (positive rate confirmed)
+ * - An aircraft not in contact since it was drawn (airborne spawn, go-around without touchdown) retracts when
+ *   climbing above retractAltitude and stays down below it
+ * - Otherwise the gear keeps its current state, so level flight does not cycle it
  *
  * @param altitude - Altitude in feet AGL
  * @param verticalRate - Vertical rate in feet per minute (positive = climbing)
- * @param isOnGround - Whether aircraft is on the ground
+ * @param contact - Ground contact and the time since the aircraft was last in contact
  * @param currentGearDown - Current gear state (true = down, false = up)
  * @param config - Gear animation configuration
  * @returns Target gear progress (0 = up, 1 = down)
@@ -182,35 +209,77 @@ export function initializeGearState(
 export function calculateTargetGearProgress(
   altitude: number,
   verticalRate: number,
-  isOnGround: boolean,
+  contact: GearContact,
   currentGearDown: boolean,
   config: GearAnimationConfig = DEFAULT_GEAR_CONFIG,
 ): number {
-  // Always gear down when on ground
-  if (isOnGround) {
+  if (contact.inContact) {
     return 1.0
   }
 
-  const isDescending = verticalRate < config.descentRateThreshold
   const isClimbing = verticalRate > config.climbRateThreshold
+  const hold = currentGearDown ? 1.0 : 0.0
 
-  // Extend gear when descending below extend altitude
-  if (altitude < config.extendAltitude && isDescending) {
+  if (isExtendingOnDescent(altitude, verticalRate, config)) {
     return 1.0
   }
 
-  // Retract gear when climbing above retract altitude
-  if (altitude > config.retractAltitude && isClimbing) {
+  if (contact.secondsSinceContact === null) {
+    return targetWithoutContactSeen(altitude, isClimbing, hold, config)
+  }
+
+  if (isLeaveContactRetract(verticalRate, contact, config)) {
     return 0.0
   }
 
-  // Very low altitude - always gear down for safety
-  if (altitude < config.retractAltitude) {
-    return 1.0
-  }
+  return hold
+}
 
-  // Between thresholds or level flight - maintain current state (hysteresis)
-  return currentGearDown ? 1.0 : 0.0
+/** Whether the aircraft is descending below extendAltitude, where the gear extends. */
+function isExtendingOnDescent(altitude: number, verticalRate: number, config: GearAnimationConfig): boolean {
+  return altitude < config.extendAltitude && verticalRate < config.descentRateThreshold
+}
+
+/** Whether the leave-contact retract applies: out of contact for the minimum time and climbing (positive rate). */
+function isLeaveContactRetract(verticalRate: number, contact: GearContact, config: GearAnimationConfig): boolean {
+  return (
+    !contact.inContact &&
+    contact.secondsSinceContact !== null &&
+    contact.secondsSinceContact >= GEAR_RETRACT_MIN_AIRBORNE_SECONDS &&
+    verticalRate > config.climbRateThreshold
+  )
+}
+
+/**
+ * Target gear progress for an aircraft not in contact since it was drawn (airborne spawn, go-around without
+ * touchdown): up when climbing above retractAltitude, down below it, else held.
+ */
+function targetWithoutContactSeen(
+  altitude: number,
+  isClimbing: boolean,
+  hold: number,
+  config: GearAnimationConfig,
+): number {
+  if (altitude > config.retractAltitude && isClimbing) {
+    return 0.0
+  }
+  return altitude < config.retractAltitude ? 1.0 : hold
+}
+
+/**
+ * Keep the remembered last contact for this frame: a contact records its time and clears the leave-contact retract;
+ * passing retractAltitude out of contact or a seek back past the last contact (replay scrub) forgets both, so the
+ * aircraft takes the retractAltitude rule until its next contact and the time out of contact never runs negative.
+ */
+function updateRememberedContact(state: GearAnimationState, frame: GearFrameInput, config: GearAnimationConfig): void {
+  const seekedBack = state.lastContactTime !== null && frame.dataTime < state.lastContactTime
+  if (frame.inContact) {
+    state.lastContactTime = frame.dataTime
+    state.leaveContactRetractDone = false
+  } else if (seekedBack || frame.altitudeFt > config.retractAltitude) {
+    state.lastContactTime = null
+    state.leaveContactRetractDone = false
+  }
 }
 
 /**
@@ -218,24 +287,39 @@ export function calculateTargetGearProgress(
  * Should be called each frame for aircraft with animations
  *
  * @param callsign - Aircraft callsign
- * @param altitude - Current altitude in feet AGL
- * @param verticalRate - Vertical rate in feet per minute (positive = climbing)
- * @param isOnGround - Whether aircraft is on ground
- * @param currentTime - Current time in milliseconds (Date.now())
+ * @param frame - This frame's altitude, vertical rate, ground contact and data-source time
+ * @param currentTime - Current time in milliseconds (Date.now()), the clock the transition runs on
  * @param config - Gear animation configuration
  * @returns Current gear progress (0-1)
  */
 export function updateGearAnimation(
   callsign: string,
-  altitude: number,
-  verticalRate: number,
-  isOnGround: boolean,
+  frame: GearFrameInput,
   currentTime: number,
   config: GearAnimationConfig = DEFAULT_GEAR_CONFIG,
 ): number {
   const state = getGearState(callsign)
+  updateRememberedContact(state, frame, config)
+  const contact: GearContact = {
+    inContact: frame.inContact,
+    secondsSinceContact: state.lastContactTime === null ? null : (frame.dataTime - state.lastContactTime) / 1000,
+  }
   const currentGearDown = state.progress > 0.5 // Consider gear "down" if more than halfway
-  const targetProgress = calculateTargetGearProgress(altitude, verticalRate, isOnGround, currentGearDown, config)
+  let targetProgress: number
+  if (state.leaveContactRetractDone && !frame.inContact) {
+    // Hold the commanded target, not the progress: the retract has just started while the gear is still down
+    const extending = isExtendingOnDescent(frame.altitudeFt, frame.verticalRateFpm, config)
+    targetProgress = extending ? 1.0 : state.targetProgress
+  } else {
+    targetProgress = calculateTargetGearProgress(
+      frame.altitudeFt,
+      frame.verticalRateFpm,
+      contact,
+      currentGearDown,
+      config,
+    )
+    state.leaveContactRetractDone = isLeaveContactRetract(frame.verticalRateFpm, contact, config)
+  }
 
   // Check if target changed
   if (Math.abs(targetProgress - state.targetProgress) > 0.01) {
@@ -251,8 +335,8 @@ export function updateGearAnimation(
     const elapsed = (currentTime - state.transitionStartTime) / 1000 // Convert to seconds
     const transitionProgress = Math.min(elapsed / config.transitionTime, 1.0)
 
-    // Ease in-out for smooth animation
-    const easedProgress = easeInOutCubic(transitionProgress)
+    // Ease out: the gear moves at once and slows into its stop
+    const easedProgress = easeOutCubic(transitionProgress)
 
     // Interpolate between start and target
     state.progress =
@@ -330,14 +414,32 @@ export function applyGearAnimation(
   }
 
   // Apply gear animations using direct node transforms (with caching by modelUrl)
-  applyGearAnimationsPercent(model, animSet, progress, modelUrl)
+  applyClipAnimationsPercent(model, animSet, 'gear', progress, modelUrl)
 }
 
 /**
- * Cubic ease in-out function for smooth transitions
+ * Apply spoiler, reverser and wheel-spin clips to a Cesium model, from the animation set applyGearAnimation loaded.
+ * Spoilers and reversers use the progress cache; wheel spin is uncached.
+ *
+ * @param model - Cesium Model instance
+ * @param pose - Spoiler and reverser deployment and wheel phase (updateSurfaceAnimation)
+ * @param modelUrl - Model URL
  */
-function easeInOutCubic(t: number): number {
-  return t < 0.5 ? 4 * t * t * t : 1 - (-2 * t + 2) ** 3 / 2
+export function applySurfaceAnimation(model: Cesium.Model, pose: SurfacePose, modelUrl: string): void {
+  const animSet = model.ready ? animationSets.get(modelUrl) : undefined
+  if (!animSet) {
+    return // Not ready, or applyGearAnimation is still loading the animation set
+  }
+  applyClipAnimationsPercent(model, animSet, 'spoiler', pose.spoiler, modelUrl)
+  applyClipAnimationsPercent(model, animSet, 'reverser', pose.reverser, modelUrl)
+  applyWheelSpin(model, animSet, pose.wheelPhase)
+}
+
+/**
+ * Cubic ease-out function for gear transitions
+ */
+function easeOutCubic(t: number): number {
+  return 1 - (1 - t) ** 3
 }
 
 /**
@@ -352,6 +454,7 @@ export function clearGearState(callsign: string): void {
  */
 export function clearAllGearStates(): void {
   gearStates.clear()
+  clearAllSurfaceStates()
   animationSets.clear()
   animationSetsLoading.clear()
 }

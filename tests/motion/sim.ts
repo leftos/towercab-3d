@@ -50,6 +50,12 @@ interface Controls {
   crabTarget?: number // deg, heading = course + crab
 }
 
+/** A level pass held before a go-around: its height (ft) and how long it is held (s) */
+export interface LevelPass {
+  ft: number
+  seconds: number
+}
+
 export interface Segment {
   name: string
   until: (s: State, segT: number) => boolean
@@ -198,8 +204,13 @@ export function departureFlight() {
   ])
 }
 
-/** Approach with a crosswind crab, 3 deg glide, exponential flare from 30 ft, de-crab, rollout, 90 deg exit, taxi-in. */
-export function arrivalFlight(aimX: number, aimY: number, goAround: boolean) {
+/**
+ * Approach with a crosswind crab, 3 deg glide, exponential flare from 30 ft, de-crab, rollout, 90 deg exit, taxi-in;
+ * with `goAroundFt` set, a go-around begun at that height instead of the flare; with `levelPass` set as well, the glide
+ * ends at `levelPass.ft` instead and the aircraft holds that height for `levelPass.seconds` before the go-around.
+ */
+export function arrivalFlight(aimX: number, aimY: number, goAroundFt: number | null, levelPass: LevelPass | null) {
+  const goAround = goAroundFt !== null
   const startDist = 8 * 1852
   const segs: Segment[] = [
     {
@@ -209,7 +220,7 @@ export function arrivalFlight(aimX: number, aimY: number, goAround: boolean) {
     },
     {
       name: 'glide',
-      until: (s) => s.agl <= (goAround ? 200 : 30) * FT,
+      until: (s) => s.agl <= (goAroundFt === null ? 30 : (levelPass?.ft ?? goAroundFt)) * FT,
       ctl: (s) => ({
         gsTarget: 140,
         accel: 1,
@@ -220,6 +231,13 @@ export function arrivalFlight(aimX: number, aimY: number, goAround: boolean) {
     },
   ]
   if (goAround) {
+    if (levelPass !== null) {
+      segs.push({
+        name: 'level_pass',
+        until: (_s, t) => t >= levelPass.seconds,
+        ctl: () => ({ gsTarget: 128, accel: 1, vsTarget: 0, crabTarget: -6 }),
+      })
+    }
     segs.push(
       {
         name: 'go_around',

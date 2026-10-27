@@ -376,7 +376,7 @@ export function useCesiumLabels(params: UseCesiumLabelsParams) {
           const altitudeMsl = geoidService.ellipsoidalToMsl(
             aircraft.interpolatedLatitude,
             aircraft.interpolatedLongitude,
-            aircraft.interpolatedAltitude,
+            aircraft.reportedAltitude,
           )
           const altitudeFeet = Math.max(0, altitudeMsl / 0.3048)
           const dataLine = isAirborne

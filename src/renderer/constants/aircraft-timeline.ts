@@ -76,6 +76,95 @@ export const AIRCRAFT_TIMEOUT = 30000 // 30 seconds
 export const VNAS_PREFERENCE_THRESHOLD_MS = 30000 // 30 seconds
 
 /**
+ * Ground contact is entered below this height over the aircraft's resting height, its own else its type's (3 ft).
+ * While the aircraft has neither, lane B decides contact instead (`DROP_CONTACT_*`) over a provisional resting height
+ * by the same rule; it also takes this as the most a settled run of samples may move and as the move that turns its
+ * descent memory.
+ */
+export const CONTACT_ENTER_HEIGHT_METERS = 3 * 0.3048
+
+/**
+ * Ground contact is left above this height over the aircraft's resting height, its own else its type's (5 ft); a
+ * stopped vNAS sample at or below it is parked. While the aircraft has neither, the parked test takes the raw height.
+ */
+export const CONTACT_EXIT_HEIGHT_METERS = 5 * 0.3048
+
+/** A vNAS sample under this groundspeed (kt) is a resting-height sample for its aircraft and its type */
+export const RESTING_HEIGHT_MAX_GROUNDSPEED_KTS = 5
+
+/** A vNAS sample below this raw height above ground (-3 ft) is never a resting-height sample */
+export const RESTING_HEIGHT_MIN_SAMPLE_METERS = -3 * 0.3048
+
+/** A vNAS sample above this raw height above ground (16 ft) is never a resting-height sample */
+export const RESTING_HEIGHT_MAX_SAMPLE_METERS = 16 * 0.3048
+
+/** Resting-height samples kept per aircraft and per aircraft type; the resting height is their median */
+export const RESTING_HEIGHT_SAMPLE_WINDOW = 9
+
+/** Resting-height samples an aircraft or a type needs before its resting height is learned */
+export const RESTING_HEIGHT_MIN_SAMPLES = 3
+
+/** While an aircraft has no resting height, contact is entered only at or below this raw height (16 ft) */
+export const DROP_CONTACT_MAX_HEIGHT_METERS = 16 * 0.3048
+
+/**
+ * While an aircraft has no resting height, contact is left above this raw height (25 ft); out of contact, the share of
+ * its provisional resting height taken off the drawn height fades from all of it here to none at
+ * DROP_CONTACT_REST_DROP_HEIGHT_METERS
+ */
+export const DROP_CONTACT_EXIT_HEIGHT_METERS = 25 * 0.3048
+
+/** While an aircraft has no resting height, its provisional resting height is dropped above this raw height (100 ft) */
+export const DROP_CONTACT_REST_DROP_HEIGHT_METERS = 100 * 0.3048
+
+/**
+ * While an aircraft has no resting height, contact is entered on the shortest run of its height samples ending at the
+ * bracket's newest readable sample that holds at least DROP_CONTACT_SETTLE_MIN_SAMPLES samples spanning at least this
+ * long (ms)
+ */
+export const DROP_CONTACT_SETTLE_SPAN_MS = 2500
+
+/** The fewest height samples in the run contact is entered on while an aircraft has no resting height */
+export const DROP_CONTACT_SETTLE_MIN_SAMPLES = 3
+
+/**
+ * While an aircraft has no resting height, display time going back or jumping forward more than this (ms) drops its
+ * provisional resting height and restarts its contact as at first sight
+ */
+export const DROP_CONTACT_SEEK_MS = 2000
+
+/** While an aircraft has no resting height, a change of contact eases its drawn height over this long (ms) */
+export const DROP_CONTACT_EASE_MS = 1000
+
+/** Time over which an aircraft's drawn height eases when its resting height (its own, else its type's) changes (ms) */
+export const RESTING_HEIGHT_EASE_MS = 250
+
+/**
+ * Span of vNAS samples over which a sample's own speed is measured (ms).
+ *
+ * The speed is the distance from the sample at or just before this long earlier to the sample, over the time
+ * between them. Under STOPPED_SPEED_KTS the sample marks a stop: the silence after it is parking. A span rather
+ * than the last two samples, because vNAS can repeat a position for a moving aircraft.
+ */
+export const VNAS_STOP_WINDOW_MS = 3000 // 3 seconds
+
+/**
+ * An interval between two samples of one source up to this long (ms) counts toward the display-delay statistics
+ * whether or not the aircraft moved across it.
+ *
+ * A longer interval counts only when the aircraft moved across it (STOPPED_SPEED_KTS for vNAS and the other sources,
+ * VATSIM_MOVING_MIN_SPEED_KTS for VATSIM), so a hold does not raise the delay.
+ */
+export const CADENCE_ANY_MOTION_MAX_MS = 3000 // 3 seconds
+
+/**
+ * Speed (kt), measured from the two reports' positions, at or over which an interval between two VATSIM reports longer
+ * than CADENCE_ANY_MOTION_MAX_MS counts toward the display-delay statistics. Higher than STOPPED_SPEED_KTS because a VATSIM
+ * snapshot taken during a stop can sit short of where the aircraft came to rest.
+ */
+export const VATSIM_MOVING_MIN_SPEED_KTS = 5
+
+/**
  * Minimum time between observations to consider them distinct (ms).
  *
  * If two observations arrive within this window, we might skip one
