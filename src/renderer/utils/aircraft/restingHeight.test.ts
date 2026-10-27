@@ -16,6 +16,13 @@ const T0 = Date.UTC(2026, 0, 1, 12, 0, 0)
 let rest: RestModule
 let tl: TimelineModule
 
+// The store graph and the estimator load cold at the top level, where collection runs them with no timeout
+// (tests/setup/hookBudget.ts). The beforeEach reassigns `tl` and `rest` after resetModules, so these loads only warm
+// the transform cache: the modules are evaluated again there, but not transformed again.
+await import('@/stores/vnasStore')
+await import('@/stores/aircraftTimelineStore')
+await import('@/utils/aircraft/restingHeight')
+
 beforeEach(async () => {
   vi.resetModules()
   // vnasStore registers a removal listener at module init; loading it first resolves the store import cycle

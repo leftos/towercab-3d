@@ -1912,7 +1912,13 @@ export const useAircraftTimelineStore = create<AircraftTimelineStore>((set, get)
         updatedTimelines.set(callsign, stripped)
         updatedDelays.set(
           callsign,
-          updateDynamicDelayState(dynamicDelays.get(callsign), stripped.observations, newest.receivedAt),
+          updateDynamicDelayState(
+            dynamicDelays.get(callsign),
+            stripped.observations,
+            newest.receivedAt,
+            callsign,
+            stripped.metadata.aircraftType,
+          ),
         )
         continue
       }

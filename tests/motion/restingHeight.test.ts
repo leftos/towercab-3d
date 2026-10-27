@@ -7,7 +7,7 @@
  * rule decides: contact at or below 16 ft once the rate has stayed flat for 1 s after a descent, the drawn height
  * easing over 1 s of display time.
  */
-import { beforeAll, describe, expect, it, vi } from 'vitest'
+import { describe, expect, it, vi } from 'vitest'
 import { DROP_CONTACT_EASE_MS, DROP_CONTACT_FLAT_MS, DROP_CONTACT_RATE_WINDOW_MS } from '@/constants'
 import type { AircraftMetadata, AircraftObservation } from '@/types/aircraft-timeline'
 import {
@@ -49,42 +49,43 @@ const BASE: ScenarioOptions = {
   goAroundFt: LOW_PASS_FT,
 }
 
-/** The departing A320 teaches its type during the pushback, before the arriving A320 lands. */
-let learned: ScenarioResult
-/** No A320 is on the ground before the arriving one lands; the departing B77L teaches its type. */
-let unlearned: ScenarioResult
-/** Every flight a B738 that reads 0 ft at rest. */
-let zeroRest: ScenarioResult
-/** GA1, an A320, is airborne when the arriving A320 stops and teaches the type. */
-let learnedMidFlight: ScenarioResult
-/** DEP1, the only B77L, is first seen by vNAS on its takeoff roll, so its type is never learned. */
-let lateFeed: ScenarioResult
-
-/** GA1, an A320 reading 0 ft at rest whose type nothing teaches, holds a level pass at 18 ft before going around. */
-let levelPass: ScenarioResult
-
 // DEP1's vNAS feed starts this far into its takeoff roll, past every sample under 5 kt (taxi start, line-up stop)
 const LATE_FEED_ROLL_S = 3
 const LEVEL_PASS = { ft: 18, seconds: 8 }
 
-beforeAll(async () => {
-  learned = await runScenario({ ...BASE, aircraftTypes: { DEP1: 'A320', ARR1: 'A320', GA1: 'C17' } })
-  unlearned = await runScenario({ ...BASE, aircraftTypes: { DEP1: 'B77L', ARR1: 'A320', GA1: 'B77L' } })
-  zeroRest = await runScenario({ ...BASE, restingHeightsFt: {} })
-  learnedMidFlight = await runScenario({ ...BASE, aircraftTypes: { DEP1: 'B77L', ARR1: 'A320', GA1: 'A320' } })
-  const dep = buildFlights(LOW_PASS_FT).flights.find((f) => f.callsign === 'DEP1') as Flight
-  lateFeed = await runScenario({
-    ...BASE,
-    aircraftTypes: { DEP1: 'B77L', ARR1: 'A320', GA1: 'C17' },
-    vnasFromS: { DEP1: dep.offset + dep.events.takeoff_roll + LATE_FEED_ROLL_S },
-  })
-  levelPass = await runScenario({
-    ...BASE,
-    aircraftTypes: { DEP1: 'B77L', ARR1: 'B77L', GA1: 'A320' },
-    restingByCallsignFt: { GA1: 0 },
-    levelPass: LEVEL_PASS,
-  })
-}, 300_000)
+const dep = buildFlights(LOW_PASS_FT).flights.find((f) => f.callsign === 'DEP1') as Flight
+
+// The scenarios run at the top level, where collection has no timeout (tests/setup/hookBudget.ts).
+/** The departing A320 teaches its type during the pushback, before the arriving A320 lands. */
+const learned: ScenarioResult = await runScenario({
+  ...BASE,
+  aircraftTypes: { DEP1: 'A320', ARR1: 'A320', GA1: 'C17' },
+})
+/** No A320 is on the ground before the arriving one lands; the departing B77L teaches its type. */
+const unlearned: ScenarioResult = await runScenario({
+  ...BASE,
+  aircraftTypes: { DEP1: 'B77L', ARR1: 'A320', GA1: 'B77L' },
+})
+/** Every flight a B738 that reads 0 ft at rest. */
+const zeroRest: ScenarioResult = await runScenario({ ...BASE, restingHeightsFt: {} })
+/** GA1, an A320, is airborne when the arriving A320 stops and teaches the type. */
+const learnedMidFlight: ScenarioResult = await runScenario({
+  ...BASE,
+  aircraftTypes: { DEP1: 'B77L', ARR1: 'A320', GA1: 'A320' },
+})
+/** DEP1, the only B77L, is first seen by vNAS on its takeoff roll, so its type is never learned. */
+const lateFeed: ScenarioResult = await runScenario({
+  ...BASE,
+  aircraftTypes: { DEP1: 'B77L', ARR1: 'A320', GA1: 'C17' },
+  vnasFromS: { DEP1: dep.offset + dep.events.takeoff_roll + LATE_FEED_ROLL_S },
+})
+/** GA1, an A320 reading 0 ft at rest whose type nothing teaches, holds a level pass at 18 ft before going around. */
+const levelPass: ScenarioResult = await runScenario({
+  ...BASE,
+  aircraftTypes: { DEP1: 'B77L', ARR1: 'B77L', GA1: 'A320' },
+  restingByCallsignFt: { GA1: 0 },
+  levelPass: LEVEL_PASS,
+})
 
 function frames(result: ScenarioResult, callsign: string): FrameRecord[] {
   const recs = result.frames.get(callsign) ?? []

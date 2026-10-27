@@ -16,6 +16,12 @@ const METADATA = { cid: 0, aircraftType: 'B738', transponder: '', departure: nul
 
 let tl: TimelineModule
 
+// The store graph loads cold at the top level, where collection runs it with no timeout (tests/setup/hookBudget.ts).
+// The beforeEach reassigns `tl` after resetModules, so these loads only warm the transform cache: the modules are
+// evaluated again there, but not transformed again.
+await import('@/stores/vnasStore')
+await import('@/stores/aircraftTimelineStore')
+
 beforeEach(async () => {
   vi.resetModules()
   // vnasStore registers a removal listener at module init; loading it first resolves the store import cycle

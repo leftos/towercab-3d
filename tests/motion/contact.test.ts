@@ -5,7 +5,7 @@
  * the simulator's height, so a 1.5 m mismatch either way leaves one change of contact per flight, and the
  * aircraft sits on the drawn runway through the roll.
  */
-import { beforeAll, describe, expect, it, vi } from 'vitest'
+import { describe, expect, it, vi } from 'vitest'
 import { type FrameRecord, runScenario, type ScenarioResult } from './harness'
 
 vi.mock('react', () => {
@@ -29,23 +29,25 @@ const UNSAMPLED_ROLL_HEIGHT_ERR_MAX_M = 0.2 // measured 0.063 m (299.9 m when dr
 const FLARE_CHECK_MAX_AGL_M = 15 // FLARE_START_ALTITUDE_METERS
 const FLARE_PITCH_DIFF_MAX_DEG = 0.01 // measured 0.000 deg
 
+// The scenarios run at the top level, where collection has no timeout (tests/setup/hookBudget.ts).
 const scenarios = new Map<number, ScenarioResult>()
-let jittered: ScenarioResult
-let unsampled: ScenarioResult
-
-beforeAll(async () => {
-  for (const offset of [TERRAIN_MISMATCH_M, -TERRAIN_MISMATCH_M]) {
-    scenarios.set(offset, await runScenario({ fps: 60, useVnas: true, vnasFirst: false, durationS: 720, terrainOffsetM: offset }))
-  }
-  jittered = await runScenario({ fps: 60, useVnas: true, vnasFirst: false, durationS: 720, vnasHeightJitterM: HEIGHT_JITTER_M })
-  unsampled = await runScenario({
-    fps: 60,
-    useVnas: true,
-    vnasFirst: false,
-    durationS: 240,
-    unsampledReferenceOffsetM: UNSAMPLED_REFERENCE_OFFSET_M,
-  })
-}, 300_000)
+for (const offset of [TERRAIN_MISMATCH_M, -TERRAIN_MISMATCH_M]) {
+  scenarios.set(offset, await runScenario({ fps: 60, useVnas: true, vnasFirst: false, durationS: 720, terrainOffsetM: offset }))
+}
+const jittered: ScenarioResult = await runScenario({
+  fps: 60,
+  useVnas: true,
+  vnasFirst: false,
+  durationS: 720,
+  vnasHeightJitterM: HEIGHT_JITTER_M,
+})
+const unsampled: ScenarioResult = await runScenario({
+  fps: 60,
+  useVnas: true,
+  vnasFirst: false,
+  durationS: 240,
+  unsampledReferenceOffsetM: UNSAMPLED_REFERENCE_OFFSET_M,
+})
 
 /** Number of times contact changes between frames that carry it. */
 function contactChanges(recs: FrameRecord[]): number {

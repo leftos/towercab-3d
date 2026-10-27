@@ -5,7 +5,7 @@
  * deploys nothing, turns its wheels backwards in the pushback and lets them coast to a stop after liftoff; the
  * go-around never touches down and deploys nothing.
  */
-import { beforeAll, describe, expect, it, vi } from 'vitest'
+import { describe, expect, it, vi } from 'vitest'
 import { KNOTS_TO_MS } from '@/constants/precipitation'
 import {
   buildFlights,
@@ -29,12 +29,11 @@ vi.mock('react', () => {
 
 const WHEEL_RADIUS_M = 0.55 // the harness flies a B738
 const revPerSec = (kts: number) => (kts * KNOTS_TO_MS) / (2 * Math.PI * WHEEL_RADIUS_M)
+// The VATSIM cases below are reported this far above the drawn terrain, so a drawn touchdown is read off the drawn
+// terrain rather than the reported height.
+const TERRAIN_OFFSET_M = -8
 
-let result: ScenarioResult
-
-beforeAll(async () => {
-  result = await runScenario({ fps: 60, useVnas: true, vnasFirst: false, durationS: 720 })
-}, 300_000)
+const result: ScenarioResult = await runScenario({ fps: 60, useVnas: true, vnasFirst: false, durationS: 720 })
 
 const framesOf = (callsign: string): FrameRecord[] => result.frames.get(callsign) ?? []
 
@@ -132,12 +131,6 @@ describe('the go-around', () => {
 const ON_TERRAIN_M = 0.5
 
 describe('a VATSIM arrival (no height above ground)', () => {
-  let vatsim: ScenarioResult
-
-  beforeAll(async () => {
-    vatsim = await runScenario({ fps: 60, useVnas: false, vnasFirst: false, durationS: 720 })
-  }, 300_000)
-
   it('keeps the spoilers stowed while the drawn aircraft is above the terrain and deploys them after the drawn touchdown', () => {
     const recs = vatsim.frames.get('ARR1') ?? []
     const drawnTouchdown = recs.findIndex((r) => r.agl <= ON_TERRAIN_M)
@@ -148,19 +141,6 @@ describe('a VATSIM arrival (no height above ground)', () => {
 })
 
 describe('a VATSIM arrival reported 8 m above the drawn terrain', () => {
-  const TERRAIN_OFFSET_M = -8
-  let high: ScenarioResult
-
-  beforeAll(async () => {
-    high = await runScenario({
-      fps: 60,
-      useVnas: false,
-      vnasFirst: false,
-      durationS: 720,
-      terrainOffsetM: TERRAIN_OFFSET_M,
-    })
-  }, 300_000)
-
   it('deploys the spoilers fully within 2 s of the drawn touchdown and keeps them out through the rollout to 60 kt', () => {
     const recs = high.frames.get('ARR1') ?? []
     const drawnTouchdown = recs.find((r) => r.agl - TERRAIN_OFFSET_M <= ON_TERRAIN_M) as FrameRecord
@@ -199,24 +179,45 @@ function shortFinalReport(f: Flight): number {
   throw new Error('no VATSIM report falls on the short final')
 }
 
+// The runs that pick their feed from the built flights follow the helpers that pick it. All run at the top level,
+// where collection has no timeout (tests/setup/hookBudget.ts).
+const arrFlight = flightOf('ARR1')
+const depFlight = flightOf('DEP1')
+const vatsim: ScenarioResult = await runScenario({ fps: 60, useVnas: false, vnasFirst: false, durationS: 720 })
+const high: ScenarioResult = await runScenario({
+  fps: 60,
+  useVnas: false,
+  vnasFirst: false,
+  durationS: 720,
+  terrainOffsetM: TERRAIN_OFFSET_M,
+})
+const taxiing: ScenarioResult = await runScenario({
+  fps: 60,
+  useVnas: false,
+  vnasFirst: false,
+  durationS: 420,
+  terrainOffsetM: TERRAIN_OFFSET_M,
+  vatsimFromS: { ARR1: reportAtOrAfter(arrFlight.offset + arrFlight.events.taxi_in + 5) },
+})
+const rolling: ScenarioResult = await runScenario({
+  fps: 60,
+  useVnas: false,
+  vnasFirst: false,
+  durationS: 300,
+  terrainOffsetM: TERRAIN_OFFSET_M,
+  vatsimFromS: { DEP1: reportAtOrAfter(depFlight.offset + depFlight.events.takeoff_roll + 18) },
+})
+const late: ScenarioResult = await runScenario({
+  fps: 60,
+  useVnas: false,
+  vnasFirst: false,
+  durationS: 420,
+  vatsimFromS: { ARR1: shortFinalReport(arrFlight) },
+})
+const slow: ScenarioResult = await runScenario({ fps: 1000 / 150, useVnas: true, vnasFirst: false, durationS: 720 })
+
 describe('a VATSIM aircraft first seen 8 m above the drawn terrain', () => {
-  const TERRAIN_OFFSET_M = -8
-
   describe('taxiing in', () => {
-    let taxiing: ScenarioResult
-
-    beforeAll(async () => {
-      const arr = flightOf('ARR1')
-      taxiing = await runScenario({
-        fps: 60,
-        useVnas: false,
-        vnasFirst: false,
-        durationS: 420,
-        terrainOffsetM: TERRAIN_OFFSET_M,
-        vatsimFromS: { ARR1: reportAtOrAfter(arr.offset + arr.events.taxi_in + 5) },
-      })
-    }, 300_000)
-
     it('spins its wheels on every taxi frame', () => {
       const recs = taxiing.frames.get('ARR1') ?? []
       expect(recs.every((r) => r.truth.segment === 'taxi_in' || r.truth.segment === 'taxi_in_stop')).toBe(true)
@@ -227,20 +228,6 @@ describe('a VATSIM aircraft first seen 8 m above the drawn terrain', () => {
   })
 
   describe('on a takeoff roll above 60 kt', () => {
-    let rolling: ScenarioResult
-
-    beforeAll(async () => {
-      const dep = flightOf('DEP1')
-      rolling = await runScenario({
-        fps: 60,
-        useVnas: false,
-        vnasFirst: false,
-        durationS: 300,
-        terrainOffsetM: TERRAIN_OFFSET_M,
-        vatsimFromS: { DEP1: reportAtOrAfter(dep.offset + dep.events.takeoff_roll + 18) },
-      })
-    }, 300_000)
-
     it('deploys nothing through liftoff', () => {
       const recs = rolling.frames.get('DEP1') ?? []
       expect(recs[0]?.truth.segment).toBe('takeoff_roll')
@@ -251,18 +238,6 @@ describe('a VATSIM aircraft first seen 8 m above the drawn terrain', () => {
 })
 
 describe('a VATSIM arrival first seen on short final below 30 m', () => {
-  let late: ScenarioResult
-
-  beforeAll(async () => {
-    late = await runScenario({
-      fps: 60,
-      useVnas: false,
-      vnasFirst: false,
-      durationS: 420,
-      vatsimFromS: { ARR1: shortFinalReport(flightOf('ARR1')) },
-    })
-  }, 300_000)
-
   it('deploys the spoilers after the drawn touchdown', () => {
     const recs = late.frames.get('ARR1') ?? []
     expect(recs[0]?.truth.segment).toBe('glide')
@@ -274,12 +249,6 @@ describe('a VATSIM arrival first seen on short final below 30 m', () => {
 })
 
 describe('an arrival drawn at 150 ms frame steps', () => {
-  let slow: ScenarioResult
-
-  beforeAll(async () => {
-    slow = await runScenario({ fps: 1000 / 150, useVnas: true, vnasFirst: false, durationS: 720 })
-  }, 300_000)
-
   it('deploys the reversers on the rollout', () => {
     const recs = slow.frames.get('ARR1') ?? []
     expect(recs.some((r) => r.reverser === 1)).toBe(true)

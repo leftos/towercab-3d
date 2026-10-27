@@ -4,7 +4,7 @@
  * ground flag for labels only: the arrival is drawn by the landing blend a VATSIM arrival gets on the same path, not
  * snapped to the runway from 50 ft with its angle of attack dropped.
  */
-import { beforeAll, expect, it, vi } from 'vitest'
+import { expect, it, vi } from 'vitest'
 import { type FrameRecord, runScenario, type ScenarioResult } from './harness'
 
 vi.mock('react', () => {
@@ -22,14 +22,11 @@ const CHECK_AGL_TOLERANCE_M = 0.5
 const HEIGHT_DIFF_MAX_M = 0.01
 const PITCH_DIFF_MAX_DEG = 0.01
 
-let flagged: ScenarioResult
-let unflagged: ScenarioResult
+const base = { fps: 60, useVnas: true, vnasFirst: false, durationS: 720, vnasWithoutHeight: true }
 
-beforeAll(async () => {
-  const base = { fps: 60, useVnas: true, vnasFirst: false, durationS: 720, vnasWithoutHeight: true }
-  flagged = await runScenario(base)
-  unflagged = await runScenario({ ...base, vnasWithoutGroundFlag: true })
-}, 300_000)
+// The scenarios run at the top level, where collection has no timeout (tests/setup/hookBudget.ts).
+const flagged: ScenarioResult = await runScenario(base)
+const unflagged: ScenarioResult = await runScenario({ ...base, vnasWithoutGroundFlag: true })
 
 function arrival(result: ScenarioResult): FrameRecord[] {
   return (result.frames.get('ARR1') ?? []).filter((r) => r.truth.segment === 'glide' || r.truth.segment === 'flare')

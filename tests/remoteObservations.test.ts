@@ -4,20 +4,18 @@
  * ground when the host sends it and leaving it absent when the key is missing (an older host, or a source without
  * a height).
  */
-import { beforeAll, describe, expect, it } from 'vitest'
+import { describe, expect, it } from 'vitest'
 import type { RemoteObservationData } from '@/types'
 
 type RemoteModule = typeof import('@/hooks/useRemoteObservations')
 
 const NOW = 1_700_000_000_000
-let toTimelineObservation: RemoteModule['toTimelineObservation']
 
-beforeAll(async () => {
-  // vnasStore registers a removal listener at module init; loading it first resolves the store import cycle in
-  // the order the app does
-  await import('@/stores/vnasStore')
-  ;({ toTimelineObservation } = await import('@/hooks/useRemoteObservations'))
-})
+// The modules load at the top level, where collection runs them with no timeout (tests/setup/hookBudget.ts).
+// vnasStore registers a removal listener at module init; loading it first resolves the store import cycle in the
+// order the app does.
+await import('@/stores/vnasStore')
+const { toTimelineObservation }: RemoteModule = await import('@/hooks/useRemoteObservations')
 
 function wireObservation(extra: Partial<RemoteObservationData> = {}): RemoteObservationData {
   return {
