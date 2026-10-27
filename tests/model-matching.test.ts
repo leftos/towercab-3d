@@ -15,7 +15,7 @@
  *   npm run test:matching -- --reporter=verbose
  */
 
-import { describe, it, expect, beforeAll } from 'vitest'
+import { describe, it, expect } from 'vitest'
 import {
   parseVMRFiles,
   scanMSFSModels,
@@ -218,7 +218,8 @@ function getAvailableAircraftTypes(): Set<string> {
 // Test Setup
 // =============================================================================
 
-beforeAll(() => {
+// Runs at the top level, where collection has no timeout (tests/setup/hookBudget.ts).
+function loadModelData(): void {
   console.log('\n=== Loading VMR Files ===')
   vmrRules = parseVMRFiles(VMR_FILES)
 
@@ -246,7 +247,9 @@ beforeAll(() => {
   console.log(`Loaded ${defaultRules.size} default rules, ${airlineRules.size} airline rules`)
   console.log(`Indexed ${fsltlModels.length} FSLTL models, ${aigModels.length} AIG models`)
   console.log('')
-})
+}
+
+loadModelData()
 
 // =============================================================================
 // Tests

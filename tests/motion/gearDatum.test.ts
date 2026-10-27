@@ -4,7 +4,7 @@
  * height that subtracts the MSL ground from the ellipsoidal altitude reads ~158 ft on the runway there, so the
  * gear starts up at liftoff and only the 40 kt ground rule keeps it down on the ground.
  */
-import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest'
+import { afterAll, describe, expect, it, vi } from 'vitest'
 import { type FrameRecord, runScenario, type ScenarioResult } from './harness'
 
 // The harness reads its site when it is first imported, so the site is set before any import runs.
@@ -28,16 +28,13 @@ vi.mock('react', () => {
 const MIN_RETRACT_DELAY_AFTER_LIFTOFF_S = 2
 const MIN_GEAR_DOWN = 0.95
 
-let res: ScenarioResult
+// The scenario runs at the top level, where collection has no timeout (tests/setup/hookBudget.ts).
+const res: ScenarioResult = await runScenario({ fps: 60, useVnas: true, vnasFirst: false, durationS: 720 })
 
 function restoreEnv(name: string, value: string | undefined): void {
   if (value === undefined) delete process.env[name]
   else process.env[name] = value
 }
-
-beforeAll(async () => {
-  res = await runScenario({ fps: 60, useVnas: true, vnasFirst: false, durationS: 720 })
-}, 300_000)
 
 afterAll(() => {
   restoreEnv('MOTION_LAT', previousSite.lat)

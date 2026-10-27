@@ -3,7 +3,7 @@
  * The minimum spacing between observations applies per source: a VATSIM sample that arrives just before a
  * vNAS packet must not cause the store to drop that packet.
  */
-import { beforeAll, expect, it } from 'vitest'
+import { expect, it } from 'vitest'
 import type { AircraftMetadata, AircraftObservation } from '@/types/aircraft-timeline'
 
 type TimelineModule = typeof import('@/stores/aircraftTimelineStore')
@@ -11,13 +11,10 @@ type TimelineModule = typeof import('@/stores/aircraftTimelineStore')
 const T0 = Date.UTC(2026, 0, 1, 12, 0, 0)
 const META: AircraftMetadata = { cid: 1, aircraftType: 'B738', transponder: '1200', departure: 'KOAK', arrival: 'KLAX' }
 
-let tl: TimelineModule
-
-beforeAll(async () => {
-  // vnasStore first resolves the store import cycle in the order the app does (see harness.ts).
-  await import('@/stores/vnasStore')
-  tl = await import('@/stores/aircraftTimelineStore')
-})
+// The store graph loads at the top level, where collection runs it with no timeout (tests/setup/hookBudget.ts).
+// vnasStore first resolves the store import cycle in the order the app does (see harness.ts).
+await import('@/stores/vnasStore')
+const tl: TimelineModule = await import('@/stores/aircraftTimelineStore')
 
 function observation(source: 'vatsim' | 'vnas', observedAt: number, receivedAt: number): AircraftObservation {
   return {
