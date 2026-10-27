@@ -9,6 +9,7 @@ All notable changes to TowerCab 3D will be documented in this file.
 - vNAS can join your CRC session on a YAAT training server: YAAT1, or YAAT Local when a local YAAT server is running.
 - 3D buildings now show rows of windows on their walls, some of them lit at night.
 - New **Weather quality** setting (Low, Medium, High) under Settings → Graphics; iPads and phones start lower, and small insets step down.
+- New **About** tab in Settings shows the app version and the credits for the map, terrain, imagery and 3D building data in use.
 
 ### Changed
 - 3D buildings and aircraft no longer have an olive-green cast on their walls and fuselages; their reflected ground light is now a neutral grey.

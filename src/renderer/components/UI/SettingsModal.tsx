@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 import { useSettingsStore } from '../../stores/settingsStore'
 import { useUIFeedbackStore } from '../../stores/uiFeedbackStore'
 import { isCoarsePointer } from '../../utils/deviceDetection'
+import SettingsAboutTab from './SettingsAboutTab'
 import SettingsAdvancedTab from './SettingsAdvancedTab'
 import SettingsAircraftLabelsTab from './SettingsAircraftLabelsTab'
 import SettingsConfigurationTab from './SettingsConfigurationTab'
@@ -11,7 +12,15 @@ import SettingsModsTab from './SettingsModsTab'
 import SettingsPerformanceTab from './SettingsPerformanceTab'
 import './ControlsBar.css'
 
-type SettingsTab = 'configuration' | 'aircraft' | 'graphics' | 'controls' | 'performance' | 'mods' | 'advanced'
+type SettingsTab =
+  | 'configuration'
+  | 'aircraft'
+  | 'graphics'
+  | 'controls'
+  | 'performance'
+  | 'mods'
+  | 'advanced'
+  | 'about'
 
 interface SettingsModalProps {
   isOpen: boolean
@@ -272,6 +281,13 @@ function SettingsModal({ isOpen, onClose, onShowImportModal, onShowExportModal, 
           >
             Advanced
           </button>
+          <button
+            type="button"
+            className={`tab-button ${activeTab === 'about' ? 'active' : ''}`}
+            onClick={() => setActiveTab('about')}
+          >
+            About
+          </button>
         </div>
 
         <div className="settings-content">
@@ -288,6 +304,7 @@ function SettingsModal({ isOpen, onClose, onShowImportModal, onShowExportModal, 
           {activeTab === 'performance' && <SettingsPerformanceTab />}
           {activeTab === 'mods' && <SettingsModsTab onRequestClose={onClose} />}
           {activeTab === 'advanced' && <SettingsAdvancedTab />}
+          {activeTab === 'about' && <SettingsAboutTab />}
         </div>
       </div>
     </div>

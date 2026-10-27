@@ -643,8 +643,11 @@ App.tsx (root)
 │   │   ├─ Tile cache sizes
 │   │   ├─ Aircraft data radius
 │   │   └─ Replay buffer settings
-│   └─ SettingsHelpTab
-│       └─ Keyboard shortcuts reference
+│   ├─ SettingsHelpTab
+│   │   └─ Keyboard shortcuts reference
+│   └─ SettingsAboutTab (last tab)
+│       ├─ App version
+│       └─ Map data credits (utils/mapCredits.ts)
 │
 ├─ ContributeDialog (tower position contribution prompt)
 │   └─ GitHub integration for sharing custom positions
@@ -682,7 +685,7 @@ ControlsBar.tsx (530 LOC - main orchestrator)
          │    ├─ Timeline scrubber with time display
          │    └─ Speed selector and LIVE button
          │
-         ├─ SettingsModal.tsx (89 LOC - tab container)
+         ├─ SettingsModal.tsx (314 LOC - tab container)
          │    ├─ Modal wrapper with tab navigation
          │    └─ Renders active tab component
          │
@@ -711,6 +714,10 @@ ControlsBar.tsx (530 LOC - main orchestrator)
          │
          ├─ SettingsHelpTab.tsx (130 LOC)
          │    └─ Keyboard shortcuts reference table
+         │
+         ├─ SettingsAboutTab.tsx (99 LOC)
+         │    ├─ App version
+         │    └─ Map data credits: Cesium ion logo, © OpenStreetMap contributors, and the credits Cesium collected for the terrain and imagery in use when the tab opened (read once through utils/mapCredits.ts; the main viewer registers its CreditDisplay with setMapCreditSource in useCesiumViewer.ts)
          │
          └─ ContributeDialog.tsx (73 LOC)
               └─ GitHub contribution prompt for tower positions
@@ -888,12 +895,13 @@ src/renderer/
 │   ├─ UI/
 │   │   ├─ ControlsBar.tsx (530 LOC, main controls orchestrator)
 │   │   ├─ ReplayControls.tsx (208 LOC, replay UI mode)
-│   │   ├─ SettingsModal.tsx (89 LOC, tabbed modal container)
+│   │   ├─ SettingsModal.tsx (314 LOC, tabbed modal container)
 │   │   ├─ SettingsGeneralTab.tsx (203 LOC)
 │   │   ├─ SettingsDisplayTab.tsx (209 LOC)
 │   │   ├─ SettingsGraphicsTab.tsx (18 LOC, delegates to settings/ components)
 │   │   ├─ SettingsPerformanceTab.tsx (180 LOC)
 │   │   ├─ SettingsHelpTab.tsx (130 LOC)
+│   │   ├─ SettingsAboutTab.tsx (99 LOC, version and map data credits)
 │   │   ├─ ContributeDialog.tsx (73 LOC)
 │   │   ├─ settings/
 │   │   │   ├─ TerrainSettings.tsx (44 LOC)

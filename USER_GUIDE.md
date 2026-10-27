@@ -47,7 +47,7 @@ Welcome to TowerCab 3D, a real-time 3D tower visualization tool for VATSIM air t
 ### Understanding the Display
 
 Once configured, you'll see:
-- A 3D globe with satellite imagery and terrain
+- A 3D globe with satellite imagery and terrain (the map data credits are in Settings > About)
 - Aircraft displayed as 3D models with callsign labels (datablocks)
 - Aircraft physics emulation: pitch during climbs/descents, banking in turns, landing flare
 
@@ -785,7 +785,7 @@ Access these settings in **Settings > Graphics & Weather > Terrain**.
 
 ## Settings
 
-Access settings by clicking the gear icon in the bottom-right corner. Settings are organized into six tabs.
+Access settings by clicking the gear icon in the bottom-right corner. Settings are organized into eight tabs.
 
 **Tip:** The Settings modal can be dragged by its title bar to any position on screen. Your position preference is remembered across sessions.
 
@@ -813,6 +813,8 @@ See the [MSFS Model Support](#msfs-model-support) section for details on using F
 2. Go to Access Tokens
 3. Create a new token with default permissions
 4. Paste the token in the settings field
+
+The credits for the terrain and imagery it unlocks are in Settings > About.
 
 ### Aircraft & Labels Tab
 
@@ -911,6 +913,10 @@ See the [MSFS Model Support](#msfs-model-support) section for details on using F
 | **Theme** | Light or dark interface | Dark |
 | **Interpolation Debug Logs** | Log aircraft position calculations | Off |
 | **Debug Coordinate Overlay** | Show camera coordinates | Off |
+
+### About Tab
+
+The last tab (the tab bar wraps to a second row at desktop width). It shows the app version, on the desktop and in remote browsers alike, then **Map data**: the Cesium ion logo, "© OpenStreetMap contributors", and every credit Cesium collected for the terrain and imagery in use when the tab opened (for the default imagery and terrain, Microsoft/Bing, Maxar, Airbus, Earthstar, USGS and others; Google when Google imagery is selected), duplicates removed. Links open in your system browser, or in a new tab in a remote browser. If Cesium's credits cannot be read, the tab shows the OpenStreetMap line and "Imagery and terrain credits are unavailable."
 
 ---
 

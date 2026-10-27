@@ -6,6 +6,7 @@ import { AIRCRAFT_POOL_SIZE, getModelColorBlendAmount, getModelColorRgb } from '
 import type { InsetGraphicsSettings } from '../types/settings'
 import { applyCesiumDebugPatch } from '../utils/cesiumDebugPatch'
 import { neutralEnvironmentMapOptions } from '../utils/environmentMap'
+import { setMapCreditSource } from '../utils/mapCredits'
 
 export interface CesiumViewerSettings {
   /** Cesium Ion access token for terrain/imagery */
@@ -188,6 +189,7 @@ export function useCesiumViewer(
     // If viewer already exists, destroy it before recreating
     // This handles token changes (e.g., user entering token after first launch)
     if (viewerRef.current) {
+      if (!isInset) setMapCreditSource(null)
       viewerRef.current.destroy()
       viewerRef.current = null
       setViewer(null)
@@ -428,6 +430,7 @@ export function useCesiumViewer(
 
     viewerRef.current = newViewer
     setViewer(newViewer)
+    if (!isInset) setMapCreditSource(newViewer.creditDisplay)
 
     // Apply debug patch to capture crash diagnostics (e.g., updateFrustums errors)
     applyCesiumDebugPatch(newViewer)
@@ -480,6 +483,7 @@ export function useCesiumViewer(
     const modelPoolLoading = modelPoolLoadingRef.current
 
     return () => {
+      if (!isInset) setMapCreditSource(null)
       newViewer.destroy()
       viewerRef.current = null
       setViewer(null)

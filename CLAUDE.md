@@ -243,7 +243,7 @@ Zustand state management. Most stores are domain-named and self-explanatory (vat
 
 - **Modals must register with the modal stack:** call `useUIFeedbackStore.pushModal()` on open and `popModal()` on close. App.tsx and other global keyboard handlers gate on `isInputBlocked()`, which returns true when any modal is open or `CommandInput` is active. New modals that skip this will let camera shortcuts fire under the modal.
 - **Cross-component UI triggers use a request/acknowledge pair on `uiFeedbackStore`** (e.g. `settingsOpenRequested` + `requestOpenSettings()` + `acknowledgeOpenSettings()`). Use this when a global handler (App.tsx) needs to drive state owned by another component (e.g. Settings modal lives in ControlsBar). Mirrors the existing `clearTerrainCacheRequested` pattern.
-- **No React Portals.** All modals mount inline; backdrops use `position: fixed` with `role="presentation"` + `onClick={onClose}` and a `// biome-ignore lint/a11y/noStaticElementInteractions: modal overlay backdrop` comment. See `SettingsModal.tsx:168-183` for the canonical Esc handler + modal-stack registration pattern.
+- **No React Portals.** All modals mount inline; backdrops use `position: fixed` with `role="presentation"` + `onClick={onClose}` and a `// biome-ignore lint/a11y/noStaticElementInteractions: modal overlay backdrop` comment. See `SettingsModal.tsx:189-205` for the canonical Esc handler + modal-stack registration pattern.
 
 ## External Dependencies
 

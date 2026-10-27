@@ -300,7 +300,7 @@ towercab-3d/
 - **VATSIM**: Virtual ATC traffic from [data.vatsim.net](https://data.vatsim.net/v3/vatsim-data.json)
 - **RealTraffic**: Optional real-world ADS-B traffic (requires license key subscription)
 - **Airports**: Database from [github.com/mwgg/Airports](https://github.com/mwgg/Airports)
-- **Terrain/Imagery**: Cesium Ion World Terrain and Bing Maps Aerial
+- **Terrain/Imagery**: Cesium Ion World Terrain and Bing Maps Aerial. The map data credits are in Settings > About; [CREDITS.md](CREDITS.md) lists every data source and its licence
 - **Aircraft Dimensions**: Wingspan and length data from [FAA Aircraft Characteristics Database](https://www.faa.gov/airports/engineering/aircraft_char_database)
 - **Aircraft 3D Models**: 39 aircraft models from [Flightradar24/fr24-3d-models](https://github.com/Flightradar24/fr24-3d-models) (GPL-2.0, originally from FlightGear) - includes A320 family, B737/747/757/767/777/787, CRJ, E-Jets, Q400, and more
 
