@@ -67,7 +67,7 @@ export function VnasPanel() {
   const handleManualCallback = useCallback(async () => {
     if (!callbackUrl.trim()) return
     try {
-      console.log('[vNAS] Processing manual callback URL:', callbackUrl)
+      console.log('[vNAS] Processing manual callback URL')
       await handleOAuthCallback(callbackUrl.trim())
       setCallbackUrl('')
       setIsAuthenticating(false)

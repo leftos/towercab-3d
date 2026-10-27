@@ -748,7 +748,12 @@ pub fn run() {
                 let _ = window.set_focus();
                 let _ = window.unminimize();
             }
-            tracing::info!("Single instance triggered with args: {:?}", argv);
+            tracing::info!(
+                "Single instance triggered with args: {:?}",
+                argv.iter()
+                    .map(|arg| vnas::url_without_query(arg))
+                    .collect::<Vec<_>>()
+            );
         }))
         .plugin(tauri_plugin_deep_link::init())
         .plugin(tauri_plugin_shell::init())

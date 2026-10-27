@@ -57,6 +57,7 @@ import { useVnasStore } from './stores/vnasStore'
 import { useWeatherStore } from './stores/weatherStore'
 import { setIonAccessToken } from './utils/devIonServer'
 import { stopFileLogging } from './utils/fileLogger'
+import { urlWithoutQuery } from './utils/redactUrl'
 import { isRemoteMode } from './utils/remoteMode'
 import type { UrlCameraState } from './utils/urlParams'
 import {
@@ -413,7 +414,7 @@ function App() {
         if (!isActive) return
 
         cleanup = await onOpenUrl((urls) => {
-          console.log('[App] Deep link received:', urls)
+          console.log('[App] Deep link received:', urls.map(urlWithoutQuery))
 
           for (const url of urls) {
             // Handle OAuth callback

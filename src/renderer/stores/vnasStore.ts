@@ -4,6 +4,7 @@ import { geoidService } from '../services/GeoidService'
 import type { AircraftMetadata, AircraftObservation } from '../types/aircraft-timeline'
 import type { AircraftState } from '../types/vatsim'
 import type { VnasAircraft, VnasEnvironment, VnasStatus } from '../types/vnas'
+import { urlWithoutQuery } from '../utils/redactUrl'
 import { isRemoteMode } from '../utils/remoteMode'
 import { addAircraftRemovalListener, useAircraftTimelineStore } from './aircraftTimelineStore'
 import { useSettingsStore } from './settingsStore'
@@ -567,7 +568,7 @@ export const useVnasStore = create<VnasStore>((set, get) => ({
     }
     lastProcessedOAuthCallback = callbackUrl
 
-    console.log('[vNAS] Handling OAuth callback:', callbackUrl)
+    console.log('[vNAS] Handling OAuth callback:', urlWithoutQuery(callbackUrl))
 
     // Clear any previous error when processing new callback
     set((state) => ({

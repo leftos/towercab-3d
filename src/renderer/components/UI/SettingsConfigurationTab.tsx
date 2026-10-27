@@ -198,7 +198,7 @@ function SettingsConfigurationTab({
   const handleVnasManualCallback = useCallback(async () => {
     if (!vnasCallbackUrl.trim()) return
     try {
-      console.log('[vNAS] Processing manual callback URL:', vnasCallbackUrl)
+      console.log('[vNAS] Processing manual callback URL')
       await vnasHandleOAuthCallback(vnasCallbackUrl.trim())
       setVnasCallbackUrl('')
       setVnasIsAuthenticating(false)

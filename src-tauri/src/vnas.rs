@@ -465,6 +465,17 @@ pub async fn vnas_probe_yaat_local(url: String) -> YaatLocalProbe {
     }
 }
 
+/// `url` with everything from its first `?` or `#` to the end removed.
+///
+/// A vNAS OAuth callback carries a one-time authorization code in its query, so a URL
+/// logged with this keeps its scheme, host and path and nothing that can be exchanged.
+pub(crate) fn url_without_query(url: &str) -> &str {
+    match url.find(['?', '#']) {
+        Some(end) => &url[..end],
+        None => url,
+    }
+}
+
 // =============================================================================
 // REAL IMPLEMENTATION (when vnas feature is enabled)
 // =============================================================================
@@ -1258,7 +1269,10 @@ mod real_impl {
         state: State<'_, VnasState>,
         callback_url: String,
     ) -> Result<(), String> {
-        tracing::info!("vNAS OAuth callback received: {}", callback_url);
+        tracing::info!(
+            "vNAS OAuth callback received: {}",
+            url_without_query(&callback_url)
+        );
 
         // Deduplication: Check if we've already processed this callback URL.
         // With single-instance as the first plugin, duplicates should be rare,
@@ -2479,6 +2493,38 @@ mod tests {
         assert!(yaat_local_probe_base("ftp://localhost:5000").is_err());
         assert!(yaat_local_probe_base("not a url").is_err());
         assert!(yaat_local_probe_base("").is_err());
+    }
+
+    #[test]
+    fn url_without_query_drops_the_code() {
+        let redacted = url_without_query("tc3d://oauth/callback?code=SECRET123&state=s");
+        assert_eq!(redacted, "tc3d://oauth/callback");
+        assert!(!redacted.contains("SECRET123"));
+
+        let query_then_fragment = url_without_query("tc3d://oauth/callback?code=SECRET#frag");
+        assert_eq!(query_then_fragment, "tc3d://oauth/callback");
+        assert!(!query_then_fragment.contains("SECRET"));
+
+        let fragment_then_query = url_without_query("tc3d://oauth/callback#a?code=SECRET");
+        assert_eq!(fragment_then_query, "tc3d://oauth/callback");
+        assert!(!fragment_then_query.contains("SECRET"));
+    }
+
+    #[test]
+    fn url_without_query_drops_a_fragment() {
+        assert_eq!(
+            url_without_query("tc3d://oauth/callback#code=X"),
+            "tc3d://oauth/callback"
+        );
+    }
+
+    #[test]
+    fn url_without_query_keeps_a_plain_url() {
+        assert_eq!(
+            url_without_query("tc3d://oauth/callback"),
+            "tc3d://oauth/callback"
+        );
+        assert_eq!(url_without_query(""), "");
     }
 
     fn subscribed_status(facilities: &[&str]) -> VnasStatus {
