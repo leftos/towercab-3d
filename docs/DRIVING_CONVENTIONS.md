@@ -163,6 +163,16 @@ Do not reach app internals by their bundler-hashed module URL either. In Wave 1 
 Put live engine objects on the hook instead. (Importing a source module by its dev-server source path, such as `/stores/vatsimStore.ts`, is stable and is still the documented way to start VATSIM polling in the frontend-only browser.)
 Source: commit b39260a (docs/plans/MAIN.md Wave 1 friction list, "Babylon was reachable only by import()…"); src/renderer/hooks/useAgentHarness.ts:41-57; CLAUDE.md:36. Seen: Wave 1 run; led to commit 20ccd0b.
 
+### Return nothing or a small plain value from an evaluate, never a live engine object
+<!-- rule: evaluate-returns-plain-values -->
+
+Playwright copies an evaluate's return value in full, so returning a live engine object (a tileset, the viewer, a scene, a whole store state) makes the page process walk its whole object graph. Write a call that only acts as a block with no `return`, and a call that reads as a small plain object of the values needed.
+
+In the TC3D-376 mock run, `page.evaluate(() => window.__ftWrap())` returned the OSM buildings tileset 12 s after an airport was selected. At KHWD every probe after it timed out, the page process grew from 3.0 to 13.3 GB in about a minute and Edge killed it, while the GPU process stayed flat. At KVNY, with fewer tiles loaded, the same call took 11 s and returned. The same call written as a block returned in 12 ms.
+
+A page that stops answering right after an evaluate is this problem until shown otherwise, not a stuck GPU.
+Source: TC3D-384 repro (`.playwright-mcp/ft-init.js:70`, logs `ft-KHWD.log:63`, `ft-KOAK.log:66`). Seen: TC3D-376 mock run, every shot at KHWD, KSMF and KLAX.
+
 ### Force rare conditions through a dev-only control, and know what it replaces
 <!-- rule: force-conditions-dev-panel -->
 
