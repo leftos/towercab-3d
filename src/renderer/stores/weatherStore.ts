@@ -428,8 +428,10 @@ export const useWeatherStore = create<WeatherState>((set, get) => ({
     const state = get()
     const oldPos = state.cameraPosition
 
-    // Always update camera position
-    set({ cameraPosition: { lat, lon } })
+    // Write only a moved position: every write re-renders the components that select it
+    if (!oldPos || oldPos.lat !== lat || oldPos.lon !== lon) {
+      set({ cameraPosition: { lat, lon } })
+    }
 
     // Handle interpolation mode
     if (state.useInterpolation) {

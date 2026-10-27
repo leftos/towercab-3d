@@ -340,6 +340,11 @@ CesiumViewer Component Mount
            ├─ Renders datablock labels, leader lines, weather effects
            └─ Handles measuring tool visualizations
 
+    (after the hooks above) useFrameListeners(viewer, { babylonOverlay, ... })
+           ├─ Attaches the Cesium scene's per-frame listeners once per viewer; every option is read through a ref refreshed on each render, so a re-render never re-attaches them
+           ├─ Phase marks for performanceMonitor, GPU timers (main viewport only) and the once-per-viewer `[GPU] Cesium renderer=...` log
+           └─ In postRender: Babylon syncCamera + render, the weather store's updateCameraPosition and the auto-airport-switch position
+
 IMPORTANT: Babylon overlay MUST be initialized AFTER Cesium viewer
 is fully set up, as it depends on viewer camera for synchronization.
 ```
@@ -436,6 +441,7 @@ weatherStore
 ├─ cloudLayers: CloudLayer[]
 ├─ ceiling: number | null (feet AGL)
 ├─ fogDensity: number (0-0.015)
+├─ cameraPosition: { lat, lon } | null (written each frame through updateCameraPosition, which skips the write, and so the subscribers' re-render, when the position equals the stored one)
 └─ Used by:
      ├─ useCesiumWeather (fog effects)
      └─ useBabylonOverlay (weather visualization)
@@ -560,7 +566,7 @@ requestAnimationFrame
     ├─ Renders terrain, imagery, 3D buildings
     └─ Renders aircraft models from model pool
          ↓
-3. Cesium postRender Event
+3. Cesium postRender Event (listener attached by useFrameListeners)
     ├─ useAircraftModels updates (already done in preRender)
     ├─ useBabylonOverlay.syncCamera()
     │    ├─ Reads Cesium camera matrix
@@ -905,7 +911,7 @@ Terrain Sampling Failure
 src/renderer/
 ├─ components/
 │   ├─ CesiumViewer/
-│   │   └─ CesiumViewer.tsx (659 LOC, orchestrates hooks)
+│   │   └─ CesiumViewer.tsx (orchestrates hooks)
 │   ├─ UI/
 │   │   ├─ ControlsBar.tsx (530 LOC, main controls orchestrator)
 │   │   ├─ ReplayControls.tsx (208 LOC, replay UI mode)
@@ -929,6 +935,7 @@ src/renderer/
 │   ├─ Core Cesium hooks (useCesiumViewer, useTerrainQuality, etc.)
 │   ├─ Aircraft hooks (useAircraftInterpolation, useAircraftModels, etc.)
 │   ├─ Camera hooks (useCesiumCamera, useCameraInput, etc.)
+│   ├─ Frame hook (useFrameListeners: per-frame Babylon sync and render, GPU timers, camera-position tracking)
 │   └─ Babylon hooks (useBabylonOverlay, useBabylonCameraSync, etc.)
 │
 ├─ stores/

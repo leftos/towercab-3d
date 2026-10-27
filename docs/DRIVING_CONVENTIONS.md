@@ -275,6 +275,18 @@ Source: CLAUDE.md:39; commit 66062dd. Seen: documented, used for the keyboard ch
 Shift+Home resets the camera to the app default; the "Defaults" button restores the user's saved default. A run that wants a known pose uses Shift+Home (or `camera.set`), never "Defaults".
 Source: CLAUDE.md:54; commit b39260a. Seen: Wave 1 run.
 
+### A second headless server needs `pnpm exec vite`, because `pnpm run` swallows the port
+<!-- rule: second-headless-server-port scope: project -->
+
+`pnpm run vite:headless -- --port N` still binds 5174: pnpm passes the `--` through to Vite, which stops reading arguments there. A second headless server (a debugger or implementer run beside the first) runs as `pnpm exec vite --mode headless --port N --strictPort`, and the dev API answers on that port.
+Source: CLAUDE.md "E2E testing via Playwright MCP", recipe step 1. Seen: TC3D-375 debugger and implementer runs.
+
+### `lookAt` aims the camera and does not move it
+<!-- rule: lookat-aims-not-moves scope: project -->
+
+`__tc3d.lookAt(lat, lon, altFt)` sets the tower camera's heading and pitch toward a point; the camera's position is unchanged. After ten `lookAt` calls the weather store's `cameraPosition` was the same, so a check that needs the camera to travel (a weather camera-position update, an auto-airport switch) must move it another way, and reads the value back to confirm.
+Source: src/renderer/hooks/useAgentHarness.ts; `lookAtPosition` in src/renderer/stores/viewportStore.ts. Seen: TC3D-375 app check.
+
 ### The dev build reads its fixtures from the build folder
 <!-- rule: dev-mods-in-target scope: project -->
 
