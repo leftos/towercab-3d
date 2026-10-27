@@ -55,6 +55,7 @@ async function startVite(logger = createLogger('silent')): Promise<number> {
         modsRoot: null,
         bundledTowerPositionsDir: join(dir, 'none'),
         airportSurfacesFile: join(dir, 'none.gz'),
+        aerodromesFile: join(dir, 'none.gz'),
         fetch: vi.fn<typeof fetch>(),
         logger: viteLogger,
       })),

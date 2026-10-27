@@ -411,6 +411,17 @@ export {
 } from './airportSurfaces'
 
 // ============================================================================
+// AERODROME BOUNDARY TYPES (OSM aerodrome polygons)
+// ============================================================================
+
+export type {
+  AerodromeBoundary,
+  AerodromeData,
+  AerodromeMeta,
+  AerodromeRing,
+} from './aerodromes'
+
+// ============================================================================
 // PERFORMANCE TYPES
 // ============================================================================
 

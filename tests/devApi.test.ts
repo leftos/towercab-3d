@@ -26,6 +26,7 @@ interface Fixture {
   outside: string
   bundledTowerPositionsDir: string
   airportSurfacesFile: string
+  aerodromesFile: string
 }
 
 interface Reply {
@@ -77,8 +78,10 @@ function makeFixture(): Fixture {
 
   const airportSurfacesFile = join(dir, 'airport-surfaces.json.gz')
   writeFileSync(airportSurfacesFile, gzipSync(JSON.stringify({ KOAK: [] })))
+  const aerodromesFile = join(dir, 'aerodromes.json.gz')
+  writeFileSync(aerodromesFile, gzipSync(JSON.stringify({ airports: {} })))
 
-  return { dir, settingsFile, modsRoot, outside, bundledTowerPositionsDir, airportSurfacesFile }
+  return { dir, settingsFile, modsRoot, outside, bundledTowerPositionsDir, airportSurfacesFile, aerodromesFile }
 }
 
 function silentLogger() {
@@ -95,6 +98,7 @@ function options(overrides: Partial<DevApiOptions> = {}): DevApiOptions {
     modsRoot: fixture.modsRoot,
     bundledTowerPositionsDir: fixture.bundledTowerPositionsDir,
     airportSurfacesFile: fixture.airportSurfacesFile,
+    aerodromesFile: fixture.aerodromesFile,
     fetch: fetchSpy(),
     logger: silentLogger(),
     ...overrides,
@@ -495,6 +499,10 @@ describe('devApi', () => {
     expect(surfaces.status).toBe(200)
     expect(surfaces.headers['content-type']).toMatch(/application\/json/)
     expect(JSON.parse(surfaces.body)).toEqual({ KOAK: [] })
+    const aerodromes = await send(port, '/api/aerodromes')
+    expect(aerodromes.status).toBe(200)
+    expect(aerodromes.headers['content-type']).toMatch(/application\/json/)
+    expect(JSON.parse(aerodromes.body)).toEqual({ airports: {} })
   })
 
   it('devHealthReportsOnlyFlags', async () => {

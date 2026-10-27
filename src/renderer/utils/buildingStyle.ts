@@ -17,6 +17,7 @@
  */
 
 import * as Cesium from 'cesium'
+import buildingOutlines from '../data/buildingOutlines.json'
 
 /** Facade grammar a building gets, by its OSM tags. */
 export const FacadeClass = {
@@ -134,6 +135,9 @@ const RULE_TAG_VALUES: readonly (readonly string[])[] = CLASS_RULES.map((rule) =
 /** Per-feature scratch for the rule tags, so each is read once and no Map is built. */
 const TAG_VALUES: unknown[] = new Array<unknown>(RULE_TAG_KEYS.length).fill(undefined)
 
+/** The rule tags of each OSM outline relation, keyed by relation id. */
+const OUTLINE_TAGS: Readonly<Record<string, Readonly<Record<string, string>>>> = buildingOutlines.relations
+
 /** The height tags a building or a part carries, built once so no key is built per feature. */
 interface HeightKeys {
   minLevel: string
@@ -193,11 +197,14 @@ function orZero(value: number): number {
   return Number.isNaN(value) ? 0 : value
 }
 
-function classify(feature: Feature): FacadeClassCode {
-  let best = RULE_BY_BUILDING.get(String(feature.getProperty('building'))) ?? CLASS_RULES.length
+/** One source of tags: a feature's own, or one entry of the outline table. */
+type TagSource = (key: string) => unknown
+
+function classify(read: TagSource): FacadeClassCode {
+  let best = RULE_BY_BUILDING.get(String(read('building'))) ?? CLASS_RULES.length
   if (best > 0) {
     for (let slot = 0; slot < RULE_TAG_KEYS.length; slot++) {
-      TAG_VALUES[slot] = feature.getProperty(RULE_TAG_KEYS[slot])
+      TAG_VALUES[slot] = read(RULE_TAG_KEYS[slot])
     }
     for (let index = 0; index < best; index++) {
       const slots = RULE_TAG_SLOTS[index]
@@ -211,6 +218,27 @@ function classify(feature: Feature): FacadeClassCode {
     }
   }
   return best < CLASS_RULES.length ? CLASS_RULES[best].code : FacadeClass.GENERIC
+}
+
+/** The feature `classifyFeature` is classifying, so the reader below builds no closure per feature. */
+let currentFeature: Feature | undefined
+
+/** Reads a tag of `currentFeature`: the tag source for a feature's own tags. */
+const readCurrentTag: TagSource = (key) => currentFeature?.getProperty(key)
+
+/**
+ * A feature's class: its own tags first, then, when they say nothing, the outline relation it
+ * belongs to. Only a feature tagged `type=building` is looked up. A part's unprefixed tags and
+ * elementId are its parent relation's, while a way shares the relation number space, so a way's
+ * elementId must never reach the table.
+ */
+function classifyFeature(feature: Feature): FacadeClassCode {
+  currentFeature = feature
+  const own = classify(readCurrentTag)
+  currentFeature = undefined
+  if (own !== FacadeClass.GENERIC || feature.getProperty('type') !== 'building') return own
+  const outline = OUTLINE_TAGS[String(feature.getProperty('elementId'))]
+  return outline === undefined ? FacadeClass.GENERIC : classify((key) => outline[key])
 }
 
 /**
@@ -278,7 +306,7 @@ class BuildingColour extends Cesium.StyleExpression {
     // Cesium evaluates the style with no feature for tile content that has none.
     if (feature === undefined) return Cesium.Color.clone(Cesium.Color.WHITE, result)
     const { storeys, wallM } = storeysAndWall(feature)
-    const red = 255 - (classify(feature) * PACK_HASH_STATES + hashOf(feature))
+    const red = 255 - (classifyFeature(feature) * PACK_HASH_STATES + hashOf(feature))
     const green = 255 - clampCode(storeys)
     const blue = 255 - clampCode(wallM / PACK_HEIGHT_STEP_M)
     return Cesium.Color.fromBytes(red, green, blue, 255, result)

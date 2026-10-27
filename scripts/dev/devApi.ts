@@ -35,6 +35,8 @@ export interface DevApiOptions {
   bundledTowerPositionsDir: string
   /** The bundled `airport-surfaces.json.gz`. */
   airportSurfacesFile: string
+  /** The bundled `aerodromes.json.gz`. */
+  aerodromesFile: string
   /** How upstream calls (METAR, Cesium ion) are made. */
   fetch: typeof fetch
   logger: DevApiLogger
@@ -222,6 +224,14 @@ export function createDevApiHandler(options: DevApiOptions): DevApiHandler {
     streamFile(res, options.airportSurfacesFile, 'application/json', logger, true)
   }
 
+  function serveAerodromes(res: ServerResponse): void {
+    if (!existsSync(options.aerodromesFile)) {
+      sendJson(res, 404, { error: 'Aerodrome data not found' })
+      return
+    }
+    streamFile(res, options.aerodromesFile, 'application/json', logger, true)
+  }
+
   async function proxyMetar(res: ServerResponse, query: URLSearchParams): Promise<void> {
     const raw = query.get('url')
     if (raw === null) {
@@ -297,6 +307,8 @@ export function createDevApiHandler(options: DevApiOptions): DevApiHandler {
         return sendJson(res, 200, readTowerPositions(options.bundledTowerPositionsDir, options.modsRoot))
       case '/api/airport-surfaces':
         return serveAirportSurfaces(res)
+      case '/api/aerodromes':
+        return serveAerodromes(res)
       case '/api/proxy':
         return proxyMetar(res, query)
       default:
@@ -407,6 +419,7 @@ export function devApiOptionsFromEnv(repoRoot: string, logger: DevApiLogger): De
     modsRoot: devModsRoot(process.env, repoRoot),
     bundledTowerPositionsDir: join(repoRoot, 'src-tauri', 'resources', 'tower-positions'),
     airportSurfacesFile: join(repoRoot, 'src-tauri', 'resources', 'airport-surfaces.json.gz'),
+    aerodromesFile: join(repoRoot, 'src-tauri', 'resources', 'aerodromes.json.gz'),
     fetch: globalThis.fetch,
     logger,
   }

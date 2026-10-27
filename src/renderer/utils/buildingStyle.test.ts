@@ -79,6 +79,31 @@ describe('createBuildingStyle class', () => {
   })
 })
 
+describe('outline table', () => {
+  it("takes the outline relation's class for a part under a grouping relation", () => {
+    const part = { ...AT_KSFO, type: 'building', elementId: 15730419, 'part#elementId': 1 }
+    expect(packed(part).facadeClass).toBe(FacadeClass.TERMINAL)
+  })
+
+  it('ignores the outline when the tags themselves give a class', () => {
+    const typed = { ...AT_KSFO, type: 'building', elementId: 15730419, building: 'hangar', 'part#elementId': 1 }
+    expect(packed(typed).facadeClass).toBe(FacadeClass.HANGAR)
+  })
+
+  it('never looks up a way that shares a relation id', () => {
+    expect(packed({ ...AT_KSFO, elementId: 15730419 }).facadeClass).toBe(FacadeClass.GENERIC)
+  })
+
+  it('never looks up a part whose parent is a way', () => {
+    const part = { ...AT_KSFO, elementId: 15730419, 'part#elementId': 1 }
+    expect(packed(part).facadeClass).toBe(FacadeClass.GENERIC)
+  })
+
+  it('stays GENERIC for an id the table does not hold', () => {
+    expect(packed({ ...AT_KSFO, type: 'building', elementId: 999999999 }).facadeClass).toBe(FacadeClass.GENERIC)
+  })
+})
+
 describe('createBuildingStyle levels', () => {
   it('reads building:levels, a string on the ion tileset', () => {
     expect(packed({ building: 'office', 'building:levels': '7' }).levels).toBe(7)

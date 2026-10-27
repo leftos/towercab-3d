@@ -540,6 +540,7 @@ fn create_router(state: Arc<ServerState>) -> Router {
     let routes = Router::new()
         // API routes
         .route("/api/airport-surfaces", get(get_airport_surfaces))
+        .route("/api/aerodromes", get(get_aerodromes))
         .route(
             "/api/global-settings",
             get(get_global_settings).post(update_global_settings),
@@ -593,10 +594,50 @@ fn create_router(state: Arc<ServerState>) -> Router {
 async fn get_airport_surfaces(
     State(state): State<Arc<ServerState>>,
 ) -> Result<Response<Body>, (StatusCode, String)> {
-    // Find the airport-surfaces.json.gz file in bundled resources
-    // Check dev path first (CARGO_MANIFEST_DIR/resources/), then production path
-    let dev_path =
-        PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("resources/airport-surfaces.json.gz");
+    let decompressed = read_bundled_gzip(
+        &state,
+        "airport-surfaces.json.gz",
+        "airport surfaces",
+        AIRPORT_SURFACES_MISSING,
+        AIRPORT_SURFACES_ERROR,
+    )?;
+    Ok(cached_json_response(decompressed))
+}
+
+/// GET /api/aerodromes - Return the aerodrome boundary polygons (decompressed JSON)
+///
+/// This endpoint reads the compressed aerodromes.json.gz file from bundled
+/// resources and serves the decompressed JSON: the OSM `aeroway=aerodrome`
+/// polygons of the towered airports.
+async fn get_aerodromes(
+    State(state): State<Arc<ServerState>>,
+) -> Result<Response<Body>, (StatusCode, String)> {
+    let decompressed = read_bundled_gzip(
+        &state,
+        "aerodromes.json.gz",
+        "aerodromes",
+        AERODROMES_MISSING,
+        AERODROMES_ERROR,
+    )?;
+    Ok(cached_json_response(decompressed))
+}
+
+/// The decompressed text of a bundled gzip resource: the dev path
+/// (`CARGO_MANIFEST_DIR/resources/`) when it exists, else the production resource
+/// directory.
+///
+/// `what` names the data in the host log, `missing` is the 404 body, and `error` is the
+/// fixed 500 text a remote client gets, its detail kept in the host log.
+fn read_bundled_gzip(
+    state: &Arc<ServerState>,
+    file_name: &str,
+    what: &str,
+    missing: &'static str,
+    error: &'static str,
+) -> Result<String, (StatusCode, String)> {
+    let dev_path = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+        .join("resources")
+        .join(file_name);
 
     let resource_path = if dev_path.exists() {
         dev_path
@@ -605,41 +646,29 @@ async fn get_airport_surfaces(
             .app_handle
             .path()
             .resource_dir()
-            .map_err(|e| {
-                remote_error(
-                    AIRPORT_SURFACES_ERROR,
-                    format!("Failed to get resource dir: {}", e),
-                )
-            })?
-            .join("airport-surfaces.json.gz");
+            .map_err(|e| remote_error(error, format!("Failed to get resource dir: {}", e)))?
+            .join(file_name);
 
         if !prod_path.exists() {
-            return Err((
-                StatusCode::NOT_FOUND,
-                "Airport surfaces data not found. The airport-surfaces.json.gz file is missing from resources.".to_string(),
-            ));
+            return Err((StatusCode::NOT_FOUND, missing.to_string()));
         }
         prod_path
     };
 
-    // Read and decompress the gzip file
-    let compressed_data = fs::read(&resource_path).map_err(|e| {
-        remote_error(
-            AIRPORT_SURFACES_ERROR,
-            format!("Failed to read airport surfaces file: {}", e),
-        )
-    })?;
+    let compressed_data = fs::read(&resource_path)
+        .map_err(|e| remote_error(error, format!("Failed to read {} file: {}", what, e)))?;
 
     let mut decoder = GzDecoder::new(&compressed_data[..]);
     let mut decompressed = String::new();
-    decoder.read_to_string(&mut decompressed).map_err(|e| {
-        remote_error(
-            AIRPORT_SURFACES_ERROR,
-            format!("Failed to decompress airport surfaces: {}", e),
-        )
-    })?;
+    decoder
+        .read_to_string(&mut decompressed)
+        .map_err(|e| remote_error(error, format!("Failed to decompress {}: {}", what, e)))?;
 
-    // Build response with JSON content type
+    Ok(decompressed)
+}
+
+/// A JSON reply cached for a day, since bundled data rarely changes.
+fn cached_json_response(decompressed: String) -> Response<Body> {
     let mut resp = Response::builder()
         .status(StatusCode::OK)
         .body(Body::from(decompressed))
@@ -650,13 +679,12 @@ async fn get_airport_surfaces(
         HeaderValue::from_static("application/json"),
     );
 
-    // Cache for 24 hours since this data rarely changes
     resp.headers_mut().insert(
         header::CACHE_CONTROL,
         HeaderValue::from_static("public, max-age=86400"),
     );
 
-    Ok(resp)
+    resp
 }
 
 /// Which settings route an error came from: `GET` reads the settings file, `POST` writes it.
@@ -666,8 +694,16 @@ enum SettingsRoute {
     Write,
 }
 
+/// The 404 a remote client gets when `/api/airport-surfaces` finds no bundled file.
+const AIRPORT_SURFACES_MISSING: &str =
+    "Airport surfaces data not found. The airport-surfaces.json.gz file is missing from resources.";
 /// The 500 a remote client gets when `/api/airport-surfaces` fails.
 const AIRPORT_SURFACES_ERROR: &str = "Could not load airport surfaces";
+/// The 404 a remote client gets when `/api/aerodromes` finds no bundled file.
+const AERODROMES_MISSING: &str =
+    "Aerodromes data not found. The aerodromes.json.gz file is missing from resources.";
+/// The 500 a remote client gets when `/api/aerodromes` fails.
+const AERODROMES_ERROR: &str = "Could not load aerodromes";
 /// The 500 a remote client gets when `/api/mods/discover` or a mod list route fails.
 const LIST_MODS_ERROR: &str = "Could not list mods";
 /// The 500 a remote client gets when `GET /api/tower-positions` fails.
@@ -2354,6 +2390,7 @@ mod tests {
     fn remote_errors_send_fixed_text_holding_no_host_path() {
         let messages = [
             (AIRPORT_SURFACES_ERROR, "Could not load airport surfaces"),
+            (AERODROMES_ERROR, "Could not load aerodromes"),
             (LIST_MODS_ERROR, "Could not list mods"),
             (READ_TOWER_POSITIONS_ERROR, "Could not read tower positions"),
             (
