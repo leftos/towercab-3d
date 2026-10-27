@@ -61,9 +61,10 @@
 
 ## OSM buildings
 
-### B1 Shader on the ion tiles (6/13 done)
+### B1 Shader on the ion tiles (6/14 done)
 - [ ] TC3D-211 OSM facades on feat/osm-facades · release vNext
   - [/] TC3D-218 Type OSM building parts from their outline, then by shape near the field · release vNext
+    - [ ] TC3D-376 Mock facades for more OSM building types before typing fire stations
   - [ ] TC3D-226 Merge feat/osm-facades to main (#263) · release vNext
 - [ ] TC3D-165 Draw curtain-wall glass on terminals through Cesium's reflections · release vNext+1
 - [ ] TC3D-166 Light windows at night by building use and local time · release vNext+1
@@ -152,7 +153,7 @@
 
 ## Aircraft motion model
 
-### feat/aircraft-motion merge (#264) (2/21 done)
+### feat/aircraft-motion merge (#264) (3/25 done)
 - [ ] TC3D-241 Aircraft motion on feat/aircraft-motion · release vNext
   - [ ] TC3D-52 Aircraft orientation model: bank, rotation and flare
   - [ ] TC3D-53 Curved VATSIM paths: splines with heading from the path
@@ -172,6 +173,9 @@
   - [ ] TC3D-298 Split stabilizePhase and detectRawFlightPhase and drop their dead state · release vNext+1
   - [ ] TC3D-299 Bound when the departure Rolling label ends in the motion suite · release vNext+1
   - [ ] TC3D-304 Test the phase-state drop on a scrub back and size the RealTraffic regression tolerance · release vNext+1
+  - [/] TC3D-369 Enter vNAS contact for a slowly sinking unlearned arrival within 2.5 s · release vNext
+  - [/] TC3D-373 A parked vNAS aircraft's display delay grows to about 18 s · release vNext
+  - [ ] TC3D-371 A parked vNAS aircraft leaves contact on a short burst of bad height samples · release vNext
 
 ### Follow-ups on main (0/11 done)
 - [ ] TC3D-179 Use the terrain under the aircraft as the gear datum in orbit mode with no airport
@@ -190,6 +194,9 @@
 - [ ] TC3D-340 Split runInterpolationFrame into per-stage functions · release vNext+1
 - [ ] TC3D-342 Learn resting height only from aircraft in contact, capped per callsign · release vNext+1
 - [ ] TC3D-362 Ease the drawn height correctly when display time goes back mid-transition · release vNext+1
+- [ ] TC3D-372 Resting-height tests pass when the height is missing (toBeCloseTo accepts null) · release vNext+1
+- [ ] TC3D-374 Verify four unverified review findings on feat/aircraft-motion · release vNext+1
+- [ ] TC3D-377 A scrub back keeps a vNAS aircraft in ground contact on short final
 
 ## Remote server hardening
 
@@ -334,3 +341,4 @@
 - [ ] TC3D-107 Reconcile the orbit camera defaults and fix wrong camera comments
 - [ ] TC3D-357 Open new-window links in the system browser, not a WebView2 popup · release vNext+1
 - [ ] TC3D-359 Style the Cesium credit links on the About tab as links · release vNext+1
+- [ ] TC3D-375 The GPU renderer line is logged on every frame · release vNext+1
