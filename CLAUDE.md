@@ -364,7 +364,12 @@ scripts/
 **Shipping scripts** are used for building, development, and data generation:
 - `shipping/build/` - Build tools: check.js, build_converter.py, dev-wrapper.js
 - `shipping/conversion/` - Runtime conversion: convert_fsltl_batch.py, and its tests test_convert_fsltl_batch.py
-- `shipping/data-generation/` - One-off scripts: convert-aircraft-data.py, extract-airport-surfaces.py, scrape-tower-positions.py
+- `shipping/data-generation/` - One-off scripts: convert-aircraft-data.py, extract-airport-buildings.py, extract-airport-surfaces.py, scrape-tower-positions.py
+- `extract-airport-buildings.py` reads the local OSM planet through osmium-tool and pyosmium and writes `src/renderer/data/buildingOutlines.json` (rule tags of building-relation outlines near towered airports) and `src-tauri/resources/aerodromes.json.gz` (OSM aerodrome boundaries of towered airports); the paths and flags are in its docstring, and `docs/plans/osm-buildings.md` ("Generated data") has the counts. Its tests (stdlib `unittest`, needs `osmium`):
+
+  ```bash
+  uv run --no-project --python 3.12 --with osmium python -m unittest discover -s scripts/shipping/data-generation -p "test_extract_airport_buildings.py" -v
+  ```
 
 **Debugging scripts** are utilities for development and troubleshooting:
 - `analyze_animations.py` - GLB animation analysis

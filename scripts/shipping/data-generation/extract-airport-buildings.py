@@ -26,8 +26,10 @@ Options:
 
 import argparse
 import gzip
+import itertools
 import json
 import math
+import os
 import subprocess
 import sys
 import time
@@ -93,7 +95,7 @@ def ring_area(ring: list[tuple[float, float]]) -> float:
 def point_in_ring(lon: float, lat: float, ring: list) -> bool:
     """Ray-casting point-in-polygon test for one closed [lon, lat] ring."""
     inside = False
-    for (x1, y1), (x2, y2) in zip(ring, ring[1:]):
+    for (x1, y1), (x2, y2) in itertools.pairwise(ring):
         if (y1 > lat) != (y2 > lat):
             x_cross = x1 + (lat - y1) * (x2 - x1) / (y2 - y1)
             if lon < x_cross:
@@ -126,6 +128,15 @@ class BoundaryIndex:
                     self._cells.setdefault((cx, cy), []).append((bbox, boundary))
 
     def contains(self, lon: float, lat: float) -> bool:
+        """Whether the point lies inside any indexed aerodrome boundary.
+
+        Args:
+            lon: Longitude in degrees.
+            lat: Latitude in degrees.
+
+        Returns:
+            True when the point is inside one of the boundaries.
+        """
         for bbox, boundary in self._cells.get((math.floor(lon), math.floor(lat)), ()):
             if bbox[0] <= lon <= bbox[2] and bbox[1] <= lat <= bbox[3] and point_in_boundary(lon, lat, boundary):
                 return True
@@ -137,13 +148,40 @@ class BoundaryIndex:
 # =============================================================================
 
 
-def _area_rings(area) -> tuple[list[list[tuple[float, float]]], list[list[tuple[float, float]]]]:
-    outers, inners = [], []
+def _valid_points(nodes) -> tuple[list[tuple[float, float]], int]:
+    """The (lon, lat) of the nodes with a valid location, and how many locations were invalid."""
+    points: list[tuple[float, float]] = []
+    invalid = 0
+    for node in nodes:
+        if node.location.valid():
+            points.append((node.lon, node.lat))
+        else:
+            invalid += 1
+    return points, invalid
+
+
+def _area_rings(area) -> tuple[list[list[tuple[float, float]]], list[list[tuple[float, float]]], int]:
+    """An area's outer and inner rings as (lon, lat) point lists, and its invalid node locations.
+
+    Args:
+        area: An area assembled by pyosmium.
+
+    Returns:
+        (outers, inners, invalid): the outer and inner rings, each a list of (lon, lat) points with
+        the nodes whose location is invalid left out, and how many node locations were left out.
+    """
+    outers: list[list[tuple[float, float]]] = []
+    inners: list[list[tuple[float, float]]] = []
+    invalid = 0
     for outer in area.outer_rings():
-        outers.append([(n.lon, n.lat) for n in outer if n.location.valid()])
+        points, dropped = _valid_points(outer)
+        outers.append(points)
+        invalid += dropped
         for inner in area.inner_rings(outer):
-            inners.append([(n.lon, n.lat) for n in inner if n.location.valid()])
-    return outers, inners
+            points, dropped = _valid_points(inner)
+            inners.append(points)
+            invalid += dropped
+    return outers, inners, invalid
 
 
 def _area_icao_keys(tags) -> tuple[str | None, str | None]:
@@ -152,25 +190,32 @@ def _area_icao_keys(tags) -> tuple[str | None, str | None]:
     return (icao.strip().upper() if icao else None, ref_icao.strip().upper() if ref_icao else None)
 
 
-def read_aerodromes(path: Path, icaos: set[str]) -> tuple[dict[str, dict], list[str]]:
+def read_aerodromes(path: Path, icaos: set[str]) -> tuple[dict[str, dict], list[str], int]:
     """Read the aeroway=aerodrome areas of an OSM file and pick one boundary per ICAO in `icaos`.
 
     An area whose `icao` tag equals the ICAO wins over one whose `ref:icao` does; among several
     matches of the winning kind the largest area wins.
 
+    Args:
+        path: The OSM file holding the aeroway=aerodrome areas.
+        icaos: The ICAO codes to find a boundary for.
+
     Returns:
-        (boundaries, duplicates): ICAO -> {"p": outer rings, "h"?: inner rings}, rings as closed,
-        rounded [lon, lat] lists; and the sorted ICAOs that had several matches of the winning kind.
+        (boundaries, duplicates, dropped): ICAO -> {"p": outer rings, "h"?: inner rings}, rings as
+        closed, rounded [lon, lat] lists; the sorted ICAOs that had several matches of the winning
+        kind; and how many node locations were dropped from the rings as invalid.
     """
     by_icao: dict[str, list[tuple[float, int, list, list]]] = {}
     by_ref: dict[str, list[tuple[float, int, list, list]]] = {}
+    dropped = 0
     for obj in osmium.FileProcessor(str(path)).with_areas():
         if not obj.is_area() or obj.tags.get("aeroway") != "aerodrome":
             continue
         icao, ref_icao = _area_icao_keys(obj.tags)
         if icao not in icaos and ref_icao not in icaos:
             continue
-        outers, inners = _area_rings(obj)
+        outers, inners, invalid = _area_rings(obj)
+        dropped += invalid
         size = sum(ring_area(r) for r in outers) - sum(ring_area(r) for r in inners)
         candidate = (size, obj.id, outers, inners)
         if icao in icaos:
@@ -190,7 +235,7 @@ def read_aerodromes(path: Path, icaos: set[str]) -> tuple[dict[str, dict], list[
         if inners:
             boundary["h"] = [round_ring(r) for r in inners]
         boundaries[icao] = boundary
-    return boundaries, duplicates
+    return boundaries, duplicates, dropped
 
 
 # =============================================================================
@@ -248,6 +293,8 @@ class _BuildingFile:
             return "outline_missing", None
         if not _is_typed(tags):
             return "outline_untyped", None
+        if not parts:
+            return "no_part_ways", None
         if not any(ref in self.inside_ways for ref in parts):
             return "outside_boundaries", None
         return "kept", tags
@@ -260,10 +307,14 @@ def read_outline_relations(path: Path, boundaries: dict[str, dict]) -> tuple[dic
     aeroway, amenity, parking, or a building value other than yes), and at least one `part` member
     way has a node inside one of `boundaries`.
 
+    Args:
+        path: The OSM file holding the type=building relations and their members.
+        boundaries: ICAO -> boundary, as returned by `read_aerodromes`.
+
     Returns:
         (relations, counts): relation id as a string -> the outline's RULE_KEYS tags; and the number
         of relations per outcome (kept, no_outline, several_outlines, outline_missing,
-        outline_untyped, outside_boundaries).
+        outline_untyped, no_part_ways, outside_boundaries).
     """
     data = _BuildingFile()
     data.read(path, BoundaryIndex(boundaries))
@@ -291,20 +342,53 @@ def load_towered_icaos(directory: Path) -> set[str]:
 
 
 def run_filter(osmium_exe: Path, planet: Path, expression: str, output: Path, force: bool) -> None:
-    """Run `osmium tags-filter` unless its output is already newer than the planet."""
+    """Run `osmium tags-filter` unless its output is already newer than the planet.
+
+    The filter writes to `<output name>.partial` and that file is moved onto `output` only after
+    osmium exits 0, so an interrupted run never leaves a truncated extract for the next run to reuse.
+
+    Args:
+        osmium_exe: The osmium-tool executable.
+        planet: The planet .osm.pbf to filter.
+        expression: The tags-filter expression, e.g. "nwr/aeroway=aerodrome".
+        output: The extract path, replaced only when the filter succeeds.
+        force: Filter even when `output` is newer than `planet`.
+    """
     if not force and output.exists() and output.stat().st_mtime > planet.stat().st_mtime:
         print(f"Skipping {output.name}: newer than the planet (use --force to rebuild)")
         return
+    partial = output.with_name(output.name + ".partial")
     print(f"Filtering {expression} -> {output}")
     start = time.time()
-    subprocess.run(
-        [str(osmium_exe), "tags-filter", str(planet), expression, "-o", str(output), "--overwrite"],
-        check=True,
-    )
+    # `-f pbf` because the .partial name has no suffix osmium could infer the output format from.
+    command = [
+        str(osmium_exe),
+        "tags-filter",
+        str(planet),
+        expression,
+        "-f",
+        "pbf",
+        "-o",
+        str(partial),
+        "--overwrite",
+    ]
+    result = subprocess.run(command, check=False)
+    if result.returncode != 0:
+        partial.unlink(missing_ok=True)
+        raise subprocess.CalledProcessError(result.returncode, command)
+    os.replace(partial, output)
     print(f"  done in {time.time() - start:.0f} s, {output.stat().st_size:,} bytes")
 
 
 def encode_json(document: dict) -> bytes:
+    """Encode a document as compact, sort-keyed UTF-8 JSON.
+
+    Args:
+        document: The JSON-serialisable document.
+
+    Returns:
+        The UTF-8 bytes, with no indentation and no trailing newline.
+    """
     return json.dumps(document, sort_keys=True, separators=(",", ":"), ensure_ascii=False).encode("utf-8")
 
 
@@ -314,27 +398,45 @@ def encode_source_json(document: dict) -> bytes:
 
 
 def write_outputs(relations: dict, boundaries: dict) -> None:
+    """Write the outline table and the gzipped aerodrome boundaries into the repository.
+
+    Args:
+        relations: Relation id -> the outline's RULE_KEYS tags.
+        boundaries: ICAO -> {"p": outer rings, "h"?: inner rings}.
+    """
     outlines = encode_source_json({"_meta": META, "relations": relations})
     OUTLINES_FILE.parent.mkdir(parents=True, exist_ok=True)
     OUTLINES_FILE.write_bytes(outlines)
     aerodromes = encode_json({"_meta": META, "airports": boundaries})
     AERODROMES_FILE.write_bytes(gzip.compress(aerodromes, mtime=0))
     print(f"{OUTLINES_FILE.relative_to(PROJECT_ROOT)}: {len(outlines):,} bytes")
-    print(
-        f"{AERODROMES_FILE.relative_to(PROJECT_ROOT)}: {AERODROMES_FILE.stat().st_size:,} bytes "
-        f"({len(aerodromes):,} uncompressed)"
-    )
+    print(f"{AERODROMES_FILE.relative_to(PROJECT_ROOT)}: {AERODROMES_FILE.stat().st_size:,} bytes ({len(aerodromes):,} uncompressed)")
 
 
-def print_report(icaos: set[str], boundaries: dict, duplicates: list[str], counts: Counter) -> None:
+def print_report(icaos: set[str], boundaries: dict, duplicates: list[str], counts: Counter, dropped_nodes: int) -> None:
+    """Print the run's counts: airports with and without a boundary, duplicates and grouping outcomes.
+
+    Args:
+        icaos: Every towered ICAO.
+        boundaries: ICAO -> boundary, for the airports that have one.
+        duplicates: ICAOs with several matches, where the largest area was taken.
+        counts: Grouping relation outcomes from `read_outline_relations`.
+        dropped_nodes: Node locations dropped from the boundary rings as invalid.
+    """
     missing = sorted(icaos - set(boundaries))
     print(f"Airports: {len(icaos)} towered, {len(boundaries)} with a boundary, {len(missing)} without")
     print(f"  without a boundary: {' '.join(missing) if missing else 'none'}")
     print(f"  several matches, largest taken: {len(duplicates)} ({' '.join(duplicates) if duplicates else 'none'})")
+    print(f"  node locations dropped from boundaries as invalid: {dropped_nodes}")
     print("Grouping relations: " + ", ".join(f"{k} {v}" for k, v in sorted(counts.items())))
 
 
 def main() -> int:
+    """Run both filters and write the outline table and the gzipped aerodrome boundaries.
+
+    Returns:
+        The process exit status: 0 on success, 1 when the planet or the osmium executable is missing.
+    """
     parser = argparse.ArgumentParser(description="Extract building outline tags and aerodrome boundaries from OSM")
     parser.add_argument("--force", action="store_true", help="Re-run the osmium filters")
     parser.add_argument("--planet", type=Path, default=DEFAULT_PLANET, help="OSM planet .osm.pbf")
@@ -354,14 +456,14 @@ def main() -> int:
 
     icaos = load_towered_icaos(TOWER_POSITIONS_DIR)
     start = time.time()
-    boundaries, duplicates = read_aerodromes(aerodromes_pbf, icaos)
+    boundaries, duplicates, dropped_nodes = read_aerodromes(aerodromes_pbf, icaos)
     print(f"Read aerodromes in {time.time() - start:.0f} s")
     start = time.time()
     relations, counts = read_outline_relations(relations_pbf, boundaries)
     print(f"Read building relations in {time.time() - start:.0f} s")
 
     write_outputs(relations, boundaries)
-    print_report(icaos, boundaries, duplicates, counts)
+    print_report(icaos, boundaries, duplicates, counts, dropped_nodes)
     return 0
 
 

@@ -112,6 +112,15 @@ The spike measured no frame cost: every mode hit the 240 Hz cap on the RTX 4090.
 
 All five fit the level 2 shader, so they ship before the level 3 pipeline and improve every airport. Ideas 6–8 follow with level 3.
 
+## Generated data
+
+`scripts/shipping/data-generation/extract-airport-buildings.py` writes two files from the local OSM planet (osmium-tool filters, then pyosmium):
+
+- `src/renderer/data/buildingOutlines.json`: the outline table, 19 `type=building` relations near towered airports mapped to their outline's rule tags, 1897 bytes.
+- `src-tauri/resources/aerodromes.json.gz`: the OSM aerodrome boundary of each towered airport, 518 KB gzip. 499 of the 536 towered airports have one. The other 37 do not: 28 are an aerodrome node only, KBJC's area is a `type=public` relation, and 8 have no area carrying the code.
+
+Nothing at runtime reads either file yet. Regenerate with `uv run --no-project --python 3.12 --with osmium python scripts/shipping/data-generation/extract-airport-buildings.py` (`--planet`, `--osmium`, `--work` and `--force` are in the script's docstring); the output files carry the planet's date in their `META` block. Both are ODbL 1.0 derived databases, credited in `CREDITS.md`.
+
 ## Open questions for the owner
 
 1. **Night schedule:** (a) a fixed lit share by building class; (b) a share that follows local time through the night; (c) user-tunable.

@@ -6,6 +6,7 @@ Run:
 """
 
 import importlib.util
+import subprocess
 import tempfile
 import unittest
 from pathlib import Path
@@ -130,6 +131,42 @@ class TestOutlineRelations(unittest.TestCase):
         self.assertEqual(relations, {"5": {"building": "hangar"}})
         self.assertEqual(counts["kept"], 1)
 
+    def test_parts_inside_decide_even_when_outline_outside(self):
+        osm = OsmXml()
+        osm.way(60, square(5.0, 5.0, 0.1), TYPED)
+        osm.way(61, square(0.21, 0.21, 0.01), {"building:part": "yes"})
+        osm.relation(6, [("w", 60, "outline"), ("w", 61, "part")], {"type": "building"})
+        relations, counts = self._read(osm)
+        self.assertEqual(relations, {"6": TYPED})
+        self.assertEqual(counts["kept"], 1)
+
+    def test_outline_inside_parts_outside_is_dropped(self):
+        osm = OsmXml()
+        osm.way(62, square(0.2, 0.2, 0.1), TYPED)
+        osm.way(63, square(5.01, 5.01, 0.01), {"building:part": "yes"})
+        osm.relation(7, [("w", 62, "outline"), ("w", 63, "part")], {"type": "building"})
+        relations, counts = self._read(osm)
+        self.assertEqual(relations, {})
+        self.assertEqual(counts["outside_boundaries"], 1)
+
+    def test_amenity_typed_outline_is_kept(self):
+        osm = OsmXml()
+        outline_tags = {"building": "yes", "amenity": "fire_station", "name": "Fire Station 1"}
+        osm.way(70, square(0.2, 0.2, 0.1), outline_tags)
+        osm.way(71, square(0.21, 0.21, 0.01), {"building:part": "yes"})
+        osm.relation(8, [("w", 70, "outline"), ("w", 71, "part")], {"type": "building"})
+        relations, counts = self._read(osm)
+        self.assertEqual(relations, {"8": {"amenity": "fire_station", "building": "yes"}})
+        self.assertEqual(counts["kept"], 1)
+
+    def test_relation_with_no_outline_is_skipped_and_counted(self):
+        osm = OsmXml()
+        osm.way(80, square(0.21, 0.21, 0.01), {"building:part": "yes"})
+        osm.relation(9, [("w", 80, "part")], {"type": "building"})
+        relations, counts = self._read(osm)
+        self.assertEqual(relations, {})
+        self.assertEqual(counts["no_outline"], 1)
+
 
 class TestAerodromes(unittest.TestCase):
     def setUp(self):
@@ -141,12 +178,13 @@ class TestAerodromes(unittest.TestCase):
 
     def test_icao_beats_ref_icao_and_larger_icao_match_wins(self):
         osm = OsmXml()
-        osm.way(1, square(10.0, 10.0, 0.1), {"aeroway": "aerodrome", "icao": "KAAA"})
-        osm.way(2, square(20.0, 10.0, 0.5), {"aeroway": "aerodrome", "icao": "KAAA"})
+        # The larger KAAA area comes first (lower id, earlier in the file), so "take the last" fails.
+        osm.way(1, square(20.0, 10.0, 0.5), {"aeroway": "aerodrome", "icao": "KAAA"})
+        osm.way(2, square(10.0, 10.0, 0.1), {"aeroway": "aerodrome", "icao": "KAAA"})
         osm.way(3, square(30.0, 10.0, 0.5), {"aeroway": "aerodrome", "ref:icao": "KBBB"})
         osm.way(4, square(40.0, 10.0, 0.1), {"aeroway": "aerodrome", "icao": "KBBB"})
         osm.way(5, square(50.0, 10.0, 0.1), {"aeroway": "aerodrome", "ref:icao": "KCCC"})
-        boundaries, duplicates = eab.read_aerodromes(osm.write(self.tmp / "aero.osm"), {"KAAA", "KBBB", "KCCC", "KZZZ"})
+        boundaries, duplicates, _ = eab.read_aerodromes(osm.write(self.tmp / "aero.osm"), {"KAAA", "KBBB", "KCCC", "KZZZ"})
         self.assertEqual(sorted(boundaries), ["KAAA", "KBBB", "KCCC"])
         self.assertEqual(boundaries["KAAA"]["p"][0][0], [20.0, 10.0])
         self.assertEqual(boundaries["KBBB"]["p"][0][0], [40.0, 10.0])
@@ -158,10 +196,8 @@ class TestAerodromes(unittest.TestCase):
         outer = [(1.12345678, 2.0), (1.5, 2.0), (1.5, 2.5), (1.12345678, 2.5)]
         osm.way(1, outer, {})
         osm.way(2, square(1.2, 2.1, 0.1), {})
-        osm.relation(
-            7, [("w", 1, "outer"), ("w", 2, "inner")], {"type": "multipolygon", "aeroway": "aerodrome", "icao": "KHOL"}
-        )
-        boundaries, _ = eab.read_aerodromes(osm.write(self.tmp / "aero.osm"), {"KHOL"})
+        osm.relation(7, [("w", 1, "outer"), ("w", 2, "inner")], {"type": "multipolygon", "aeroway": "aerodrome", "icao": "KHOL"})
+        boundaries, _, _ = eab.read_aerodromes(osm.write(self.tmp / "aero.osm"), {"KHOL"})
         boundary = boundaries["KHOL"]
         self.assertEqual(len(boundary["p"]), 1)
         self.assertEqual(len(boundary["h"]), 1)
@@ -176,9 +212,43 @@ class TestAerodromes(unittest.TestCase):
     def test_way_without_hole_has_no_h_key(self):
         osm = OsmXml()
         osm.way(1, square(0.0, 0.0, 1.0), {"aeroway": "aerodrome", "icao": "KONE"})
-        boundaries, duplicates = eab.read_aerodromes(osm.write(self.tmp / "aero.osm"), {"KONE"})
+        boundaries, duplicates, _ = eab.read_aerodromes(osm.write(self.tmp / "aero.osm"), {"KONE"})
         self.assertNotIn("h", boundaries["KONE"])
         self.assertEqual(duplicates, [])
+
+
+class TestRunFilter(unittest.TestCase):
+    def setUp(self):
+        self._tmp = tempfile.TemporaryDirectory()
+        self.tmp = Path(self._tmp.name)
+
+    def tearDown(self):
+        self._tmp.cleanup()
+
+    def _stub_that_writes_and_fails(self) -> Path:
+        """A stub executable that writes the file osmium was told to write (-o <path>) and exits 3."""
+        stub = self.tmp / "osmium-stub.cmd"
+        stub.write_bytes(
+            b"@echo off\r\n"
+            b":args\r\n"
+            b'if "%~1"=="" exit /b 3\r\n'
+            b'if "%~1"=="-o" (\r\n'
+            b'  echo truncated> "%~2"\r\n'
+            b"  exit /b 3\r\n"
+            b")\r\n"
+            b"shift\r\n"
+            b"goto args\r\n"
+        )
+        return stub
+
+    def test_failed_filter_leaves_no_extract(self):
+        planet = self.tmp / "planet.osm.pbf"
+        planet.write_bytes(b"planet")
+        output = self.tmp / "aerodromes.osm.pbf"
+        with self.assertRaises(subprocess.CalledProcessError):
+            eab.run_filter(self._stub_that_writes_and_fails(), planet, "nwr/aeroway=aerodrome", output, force=True)
+        self.assertFalse(output.exists())
+        self.assertFalse(output.with_name(output.name + ".partial").exists())
 
 
 if __name__ == "__main__":
