@@ -104,10 +104,11 @@ def point_in_ring(lon: float, lat: float, ring: list) -> bool:
 
 
 def point_in_boundary(lon: float, lat: float, boundary: dict) -> bool:
-    """True when the point lies in an outer ring (`p`) of the boundary and in none of its holes (`h`)."""
-    if not any(point_in_ring(lon, lat, ring) for ring in boundary["p"]):
-        return False
-    return not any(point_in_ring(lon, lat, ring) for ring in boundary.get("h", []))
+    """True when the point lies in a polygon's outer ring and in none of that polygon's holes."""
+    for polygon in boundary["polygons"]:
+        if point_in_ring(lon, lat, polygon["outer"]) and not any(point_in_ring(lon, lat, hole) for hole in polygon.get("holes", ())):
+            return True
+    return False
 
 
 class BoundaryIndex:
@@ -116,7 +117,7 @@ class BoundaryIndex:
     def __init__(self, boundaries: dict[str, dict]):
         self._cells: dict[tuple[int, int], list[tuple[tuple[float, float, float, float], dict]]] = {}
         for boundary in boundaries.values():
-            points = [pt for ring in boundary["p"] for pt in ring]
+            points = [pt for polygon in boundary["polygons"] for pt in polygon["outer"]]
             bbox = (
                 min(p[0] for p in points),
                 min(p[1] for p in points),
@@ -148,9 +149,14 @@ class BoundaryIndex:
 # =============================================================================
 
 
-def _valid_points(nodes) -> tuple[list[tuple[float, float]], int]:
+# A ring's (lon, lat) points; and one area polygon as its outer ring with the holes inside it.
+LatLonRing = list[tuple[float, float]]
+AreaPolygon = tuple[LatLonRing, list[LatLonRing]]
+
+
+def _valid_points(nodes) -> tuple[LatLonRing, int]:
     """The (lon, lat) of the nodes with a valid location, and how many locations were invalid."""
-    points: list[tuple[float, float]] = []
+    points: LatLonRing = []
     invalid = 0
     for node in nodes:
         if node.location.valid():
@@ -160,28 +166,37 @@ def _valid_points(nodes) -> tuple[list[tuple[float, float]], int]:
     return points, invalid
 
 
-def _area_rings(area) -> tuple[list[list[tuple[float, float]]], list[list[tuple[float, float]]], int]:
-    """An area's outer and inner rings as (lon, lat) point lists, and its invalid node locations.
+def _area_rings(area) -> tuple[list[AreaPolygon], int]:
+    """An area's polygons and its invalid node locations.
 
     Args:
         area: An area assembled by pyosmium.
 
     Returns:
-        (outers, inners, invalid): the outer and inner rings, each a list of (lon, lat) points with
-        the nodes whose location is invalid left out, and how many node locations were left out.
+        (polygons, invalid): each outer ring with the inner rings inside it, each a (lon, lat)
+        point list with the nodes whose location is invalid left out, and how many node locations
+        were left out.
     """
-    outers: list[list[tuple[float, float]]] = []
-    inners: list[list[tuple[float, float]]] = []
+    polygons: list[AreaPolygon] = []
     invalid = 0
     for outer in area.outer_rings():
-        points, dropped = _valid_points(outer)
-        outers.append(points)
+        outer_points, dropped = _valid_points(outer)
         invalid += dropped
+        holes: list[LatLonRing] = []
         for inner in area.inner_rings(outer):
-            points, dropped = _valid_points(inner)
-            inners.append(points)
+            hole_points, dropped = _valid_points(inner)
+            holes.append(hole_points)
             invalid += dropped
-    return outers, inners, invalid
+        polygons.append((outer_points, holes))
+    return polygons, invalid
+
+
+def _polygon_json(outer: LatLonRing, holes: list[LatLonRing]) -> dict:
+    """One boundary polygon as JSON: the rounded outer ring, and the holes only when it has any."""
+    polygon = {"outer": round_ring(outer)}
+    if holes:
+        polygon["holes"] = [round_ring(hole) for hole in holes]
+    return polygon
 
 
 def _area_icao_keys(tags) -> tuple[str | None, str | None]:
@@ -201,12 +216,13 @@ def read_aerodromes(path: Path, icaos: set[str]) -> tuple[dict[str, dict], list[
         icaos: The ICAO codes to find a boundary for.
 
     Returns:
-        (boundaries, duplicates, dropped): ICAO -> {"p": outer rings, "h"?: inner rings}, rings as
-        closed, rounded [lon, lat] lists; the sorted ICAOs that had several matches of the winning
-        kind; and how many node locations were dropped from the rings as invalid.
+        (boundaries, duplicates, dropped): ICAO -> {"polygons": [{"outer": ring, "holes"?: [ring]}]},
+        each polygon's outer ring with its own holes, rings as closed, rounded [lon, lat] lists; the
+        sorted ICAOs that had several matches of the winning kind; and how many node locations were
+        dropped from the rings as invalid.
     """
-    by_icao: dict[str, list[tuple[float, int, list, list]]] = {}
-    by_ref: dict[str, list[tuple[float, int, list, list]]] = {}
+    by_icao: dict[str, list[tuple[float, int, list[AreaPolygon]]]] = {}
+    by_ref: dict[str, list[tuple[float, int, list[AreaPolygon]]]] = {}
     dropped = 0
     for obj in osmium.FileProcessor(str(path)).with_areas():
         if not obj.is_area() or obj.tags.get("aeroway") != "aerodrome":
@@ -214,10 +230,10 @@ def read_aerodromes(path: Path, icaos: set[str]) -> tuple[dict[str, dict], list[
         icao, ref_icao = _area_icao_keys(obj.tags)
         if icao not in icaos and ref_icao not in icaos:
             continue
-        outers, inners, invalid = _area_rings(obj)
+        polygons, invalid = _area_rings(obj)
         dropped += invalid
-        size = sum(ring_area(r) for r in outers) - sum(ring_area(r) for r in inners)
-        candidate = (size, obj.id, outers, inners)
+        size = sum(ring_area(outer) for outer, _ in polygons) - sum(ring_area(hole) for _, holes in polygons for hole in holes)
+        candidate = (size, obj.id, polygons)
         if icao in icaos:
             by_icao.setdefault(icao, []).append(candidate)
         if ref_icao in icaos:
@@ -230,11 +246,8 @@ def read_aerodromes(path: Path, icaos: set[str]) -> tuple[dict[str, dict], list[
         if len(candidates) > 1:
             duplicates.append(icao)
         # Largest area first; equal areas fall back to the lower area id so the choice is stable.
-        _, _, outers, inners = max(candidates, key=lambda c: (c[0], -c[1]))
-        boundary = {"p": [round_ring(r) for r in outers]}
-        if inners:
-            boundary["h"] = [round_ring(r) for r in inners]
-        boundaries[icao] = boundary
+        _, _, polygons = max(candidates, key=lambda c: (c[0], -c[1]))
+        boundaries[icao] = {"polygons": [_polygon_json(outer, holes) for outer, holes in polygons]}
     return boundaries, duplicates, dropped
 
 
@@ -402,7 +415,7 @@ def write_outputs(relations: dict, boundaries: dict) -> None:
 
     Args:
         relations: Relation id -> the outline's RULE_KEYS tags.
-        boundaries: ICAO -> {"p": outer rings, "h"?: inner rings}.
+        boundaries: ICAO -> {"polygons": [{"outer": ring, "holes"?: [ring]}]}.
     """
     outlines = encode_source_json({"_meta": META, "relations": relations})
     OUTLINES_FILE.parent.mkdir(parents=True, exist_ok=True)

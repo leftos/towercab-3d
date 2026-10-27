@@ -58,7 +58,7 @@ def square(lon0: float, lat0: float, size: float) -> list[tuple[float, float]]:
 
 
 TYPED = {"building": "transportation", "aeroway": "terminal"}
-BOUNDARIES = {"KXXX": {"p": [[[0.0, 0.0], [1.0, 0.0], [1.0, 1.0], [0.0, 1.0], [0.0, 0.0]]]}}
+BOUNDARIES = {"KXXX": {"polygons": [{"outer": [[0.0, 0.0], [1.0, 0.0], [1.0, 1.0], [0.0, 1.0], [0.0, 0.0]]}]}}
 
 
 class TestOutlineRelations(unittest.TestCase):
@@ -186,9 +186,9 @@ class TestAerodromes(unittest.TestCase):
         osm.way(5, square(50.0, 10.0, 0.1), {"aeroway": "aerodrome", "ref:icao": "KCCC"})
         boundaries, duplicates, _ = eab.read_aerodromes(osm.write(self.tmp / "aero.osm"), {"KAAA", "KBBB", "KCCC", "KZZZ"})
         self.assertEqual(sorted(boundaries), ["KAAA", "KBBB", "KCCC"])
-        self.assertEqual(boundaries["KAAA"]["p"][0][0], [20.0, 10.0])
-        self.assertEqual(boundaries["KBBB"]["p"][0][0], [40.0, 10.0])
-        self.assertEqual(boundaries["KCCC"]["p"][0][0], [50.0, 10.0])
+        self.assertEqual(boundaries["KAAA"]["polygons"][0]["outer"][0], [20.0, 10.0])
+        self.assertEqual(boundaries["KBBB"]["polygons"][0]["outer"][0], [40.0, 10.0])
+        self.assertEqual(boundaries["KCCC"]["polygons"][0]["outer"][0], [50.0, 10.0])
         self.assertEqual(duplicates, ["KAAA"])
 
     def test_multipolygon_with_hole_yields_closed_outer_and_inner_rings(self):
@@ -199,22 +199,52 @@ class TestAerodromes(unittest.TestCase):
         osm.relation(7, [("w", 1, "outer"), ("w", 2, "inner")], {"type": "multipolygon", "aeroway": "aerodrome", "icao": "KHOL"})
         boundaries, _, _ = eab.read_aerodromes(osm.write(self.tmp / "aero.osm"), {"KHOL"})
         boundary = boundaries["KHOL"]
-        self.assertEqual(len(boundary["p"]), 1)
-        self.assertEqual(len(boundary["h"]), 1)
-        for ring in boundary["p"] + boundary["h"]:
+        self.assertEqual(len(boundary["polygons"]), 1)
+        polygon = boundary["polygons"][0]
+        self.assertEqual(len(polygon["holes"]), 1)
+        for ring in [polygon["outer"], *polygon["holes"]]:
             self.assertEqual(ring[0], ring[-1])
             self.assertEqual(len(ring), 5)
-        self.assertIn([1.123457, 2.0], boundary["p"][0])
-        self.assertIn([1.2, 2.1], boundary["h"][0])
+        self.assertIn([1.123457, 2.0], polygon["outer"])
+        self.assertIn([1.2, 2.1], polygon["holes"][0])
         self.assertTrue(eab.point_in_boundary(1.4, 2.4, boundary))
         self.assertFalse(eab.point_in_boundary(1.25, 2.15, boundary))
 
-    def test_way_without_hole_has_no_h_key(self):
+    def test_island_inside_another_polygons_hole_is_inside(self):
+        osm = OsmXml()
+        osm.way(1, square(0.0, 0.0, 10.0), {})
+        osm.way(2, square(2.0, 2.0, 6.0), {})
+        osm.way(3, square(4.0, 4.0, 2.0), {})
+        osm.relation(
+            8,
+            [("w", 1, "outer"), ("w", 2, "inner"), ("w", 3, "outer")],
+            {"type": "multipolygon", "aeroway": "aerodrome", "icao": "KISL"},
+        )
+        boundaries, _, _ = eab.read_aerodromes(osm.write(self.tmp / "aero.osm"), {"KISL"})
+        boundary = boundaries["KISL"]
+        self.assertEqual(len(boundary["polygons"]), 2)
+        self.assertEqual([len(p.get("holes", [])) for p in boundary["polygons"]], [1, 0])
+        self.assertTrue(eab.point_in_boundary(5.0, 5.0, boundary), "island centre")
+        self.assertFalse(eab.point_in_boundary(3.0, 3.0, boundary), "hole off the island")
+        self.assertTrue(eab.point_in_boundary(1.0, 1.0, boundary), "outer ring")
+
+    def test_polygon_without_hole_has_no_holes_key(self):
         osm = OsmXml()
         osm.way(1, square(0.0, 0.0, 1.0), {"aeroway": "aerodrome", "icao": "KONE"})
         boundaries, duplicates, _ = eab.read_aerodromes(osm.write(self.tmp / "aero.osm"), {"KONE"})
-        self.assertNotIn("h", boundaries["KONE"])
+        self.assertEqual(len(boundaries["KONE"]["polygons"]), 1)
+        self.assertNotIn("holes", boundaries["KONE"]["polygons"][0])
         self.assertEqual(duplicates, [])
+
+
+class TestPointInBoundary(unittest.TestCase):
+    def test_ring_inside_another_ring_with_no_hole_is_inside(self):
+        # A nested outer ring is its own polygon with no hole: it cuts nothing out of the other.
+        outer = [[0.0, 0.0], [10.0, 0.0], [10.0, 10.0], [0.0, 10.0], [0.0, 0.0]]
+        inner = [[4.0, 4.0], [6.0, 4.0], [6.0, 6.0], [4.0, 6.0], [4.0, 4.0]]
+        boundary = {"polygons": [{"outer": outer}, {"outer": inner}]}
+        self.assertTrue(eab.point_in_boundary(5.0, 5.0, boundary), "inner ring")
+        self.assertTrue(eab.point_in_boundary(1.0, 1.0, boundary), "outer ring outside the inner one")
 
 
 class TestRunFilter(unittest.TestCase):

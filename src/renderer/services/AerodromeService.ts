@@ -41,16 +41,21 @@ function ringsContain(rings: readonly AerodromeRing[], lon: number, lat: number)
 }
 
 /**
- * Whether a position lies inside a boundary: inside one of its outer rings and inside no hole.
+ * Whether a position lies inside a boundary: inside one polygon's outer ring and inside none of
+ * that polygon's holes.
  *
- * @param boundary - The airport's boundary rings
+ * @param boundary - The airport's boundary polygons
  * @param lon - Longitude in degrees
  * @param lat - Latitude in degrees
  * @returns true when the position is inside the aerodrome
  */
 export function pointInBoundary(boundary: AerodromeBoundary, lon: number, lat: number): boolean {
-  if (!ringsContain(boundary.p, lon, lat)) return false
-  return boundary.h === undefined || !ringsContain(boundary.h, lon, lat)
+  for (const polygon of boundary.polygons) {
+    if (!ringContains(polygon.outer, lon, lat)) continue
+    if (ringsContain(polygon.holes ?? [], lon, lat)) continue
+    return true
+  }
+  return false
 }
 
 /**

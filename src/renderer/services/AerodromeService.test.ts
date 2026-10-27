@@ -18,7 +18,7 @@ const AIRPORT = square(0, 0, 10, 10)
 /** A reply holding one airport whose boundary is `AIRPORT`. */
 const DATA: AerodromeData = {
   _meta: { generator: 'test', licence: 'test', source: 'test' },
-  airports: { KSFO: { p: [AIRPORT] } },
+  airports: { KSFO: { polygons: [{ outer: AIRPORT }] } },
 }
 
 function jsonReply(): Response {
@@ -38,24 +38,39 @@ afterEach(() => {
 
 describe('aerodrome boundaries', () => {
   it('inside an outer ring', () => {
-    expect(pointInBoundary({ p: [AIRPORT] }, 5, 5)).toBe(true)
+    expect(pointInBoundary({ polygons: [{ outer: AIRPORT }] }, 5, 5)).toBe(true)
   })
 
   it('outside every ring', () => {
-    expect(pointInBoundary({ p: [AIRPORT] }, 15, 5)).toBe(false)
-    expect(pointInBoundary({ p: [AIRPORT] }, -1, -1)).toBe(false)
+    expect(pointInBoundary({ polygons: [{ outer: AIRPORT }] }, 15, 5)).toBe(false)
+    expect(pointInBoundary({ polygons: [{ outer: AIRPORT }] }, -1, -1)).toBe(false)
   })
 
   it('inside a hole is outside', () => {
-    const boundary: AerodromeBoundary = { p: [AIRPORT], h: [square(4, 4, 6, 6)] }
+    const boundary: AerodromeBoundary = { polygons: [{ outer: AIRPORT, holes: [square(4, 4, 6, 6)] }] }
     expect(pointInBoundary(boundary, 5, 5)).toBe(false)
     expect(pointInBoundary(boundary, 2, 2)).toBe(true)
   })
 
   it('a second outer ring counts', () => {
-    const boundary: AerodromeBoundary = { p: [AIRPORT, square(20, 20, 30, 30)] }
+    const boundary: AerodromeBoundary = { polygons: [{ outer: AIRPORT }, { outer: square(20, 20, 30, 30) }] }
     expect(pointInBoundary(boundary, 25, 25)).toBe(true)
     expect(pointInBoundary(boundary, 15, 15)).toBe(false)
+  })
+
+  it("an island inside another polygon's hole is inside", () => {
+    const boundary: AerodromeBoundary = {
+      polygons: [{ outer: AIRPORT, holes: [square(4, 4, 6, 6)] }, { outer: square(4.5, 4.5, 5.5, 5.5) }],
+    }
+    expect(pointInBoundary(boundary, 5, 5)).toBe(true)
+    expect(pointInBoundary(boundary, 4.2, 4.2)).toBe(false)
+    expect(pointInBoundary(boundary, 1, 1)).toBe(true)
+  })
+
+  it('a ring inside another ring with no hole is inside', () => {
+    const boundary: AerodromeBoundary = { polygons: [{ outer: AIRPORT }, { outer: square(4, 4, 6, 6) }] }
+    expect(pointInBoundary(boundary, 5, 5)).toBe(true)
+    expect(pointInBoundary(boundary, 1, 1)).toBe(true)
   })
 
   it('an airport with no boundary is false', () => {

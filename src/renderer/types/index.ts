@@ -418,6 +418,7 @@ export type {
   AerodromeBoundary,
   AerodromeData,
   AerodromeMeta,
+  AerodromePolygon,
   AerodromeRing,
 } from './aerodromes'
 

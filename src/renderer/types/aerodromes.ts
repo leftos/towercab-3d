@@ -8,17 +8,24 @@
 /** One closed ring of `[lon, lat]` pairs, its last pair equal to its first. */
 export type AerodromeRing = [number, number][]
 
+/** One polygon of an aerodrome boundary: an outer ring and the holes cut out of it. */
+export interface AerodromePolygon {
+  /** The polygon's outer ring. */
+  outer: AerodromeRing
+  /** Holes cut out of the outer ring. */
+  holes?: AerodromeRing[]
+}
+
 /**
- * An airport's aerodrome boundary: the outer rings, and the holes cut out of them.
+ * An airport's aerodrome boundary: its polygons, each with its own holes.
  *
- * The holes are one flat list per airport, not tied to an outer ring: a position is inside the
- * aerodrome when it is inside any outer ring and inside no hole.
+ * A position is inside the aerodrome when it is inside one polygon's outer ring and inside none of
+ * that polygon's holes. A polygon inside another polygon's hole is a polygon of its own, so a
+ * position on it is inside; a polygon inside another's outer ring with no hole cuts nothing out.
  */
 export interface AerodromeBoundary {
-  /** Outer rings. */
-  p: AerodromeRing[]
-  /** Holes. */
-  h?: AerodromeRing[]
+  /** The airport's polygons. */
+  polygons: AerodromePolygon[]
 }
 
 /** Metadata of the aerodromes file. */
