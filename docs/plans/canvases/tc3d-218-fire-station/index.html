@@ -1,0 +1,170 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Fire Station Facade</title>
+<style>
+  :root {
+    --bg: #f6f6f3;
+    --panel: #ffffff;
+    --text: #1d1f22;
+    --muted: #5d636b;
+    --rule: #d9dbdf;
+    --accent: #0b6bcb;
+    --note-bg: #fff6dc;
+    --note-rule: #e8c766;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --bg: #131518;
+      --panel: #1b1e22;
+      --text: #e7e9ec;
+      --muted: #9aa1aa;
+      --rule: #30353b;
+      --accent: #6cb4ff;
+      --note-bg: #2b2616;
+      --note-rule: #7a6420;
+    }
+  }
+  :root[data-theme="dark"] {
+    --bg: #131518;
+    --panel: #1b1e22;
+    --text: #e7e9ec;
+    --muted: #9aa1aa;
+    --rule: #30353b;
+    --accent: #6cb4ff;
+    --note-bg: #2b2616;
+    --note-rule: #7a6420;
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--text); font: 15px/1.5 system-ui, -apple-system, "Segoe UI", sans-serif; }
+  main { max-width: 1800px; margin: 0 auto; padding: 24px 16px 64px; }
+  h1 { font-size: 1.6rem; margin: 0 0 4px; }
+  h2 { font-size: 1.2rem; margin: 0 0 6px; }
+  p, li { max-width: 1150px; }
+  .sub { color: var(--muted); margin: 0 0 16px; }
+  .note { background: var(--note-bg); border-left: 4px solid var(--note-rule); border-radius: 4px; padding: 10px 14px; margin: 0 0 16px; max-width: 1200px; }
+  a { color: var(--accent); }
+  .toc { display: flex; flex-wrap: wrap; gap: 6px 16px; margin: 0 0 24px; padding: 0; list-style: none; }
+  .toc a { text-decoration: none; }
+  section { background: var(--panel); border: 1px solid var(--rule); border-radius: 8px; padding: 16px; margin: 0 0 22px; }
+  .cap { color: var(--muted); margin: 0 0 12px; font-size: 0.92rem; }
+  .four { display: grid; gap: 12px; grid-template-columns: repeat(4, minmax(0, 1fr)); align-items: start; }
+  figure { margin: 0; }
+  figure img { display: block; width: 100%; height: auto; border-radius: 4px; border: 1px solid var(--rule); background: #000; }
+  figcaption { font-size: 0.88rem; margin: 6px 0 0; }
+  figcaption b { display: block; font-size: 0.95rem; }
+  .scroll { overflow-x: auto; }
+  table { border-collapse: collapse; font-size: 0.84rem; min-width: 760px; }
+  th, td { border: 1px solid var(--rule); padding: 4px 7px; text-align: left; vertical-align: top; white-space: nowrap; }
+  th { background: var(--bg); font-weight: 600; }
+  td.num { text-align: right; font-variant-numeric: tabular-nums; }
+  code { font-family: ui-monospace, "Cascadia Code", Consolas, monospace; font-size: 0.9em; }
+  @media (max-width: 1100px) {
+    .four { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  }
+  @media (max-width: 640px) {
+    .four { grid-template-columns: minmax(0, 1fr); }
+  }
+</style>
+</head>
+<body>
+<main>
+<h1>TC3D-218 step 4: which facade does a fire station get?</h1>
+<p class="sub">OSM Buildings facades, <code>feat/osm-facades</code> at 0fc2ea1. Headless Edge, Vite dev server (<code>vite:headless</code>), 1596×800 canvas, building quality high, METAR clouds off. Day stills at 12:00, the night still at 22:00 local.</p>
+
+<div class="note">
+<p><b>The question.</b> <code>amenity=fire_station</code> (and <code>building=fire_station</code>) becomes a class rule in <code>CLASS_RULES</code>. Which facade class should it map to? Each lane below forces one class on the same three fire stations, from the same camera per building, so the lanes differ only in the facade the shader draws.</p>
+<ul>
+<li><b>HANGAR</b>: ribbed cladding with panel seams, no windows.</li>
+<li><b>OFFICE</b>: continuous window bands.</li>
+<li><b>PLAIN</b>: a flat wall with no openings (the domestic-garage grammar).</li>
+<li><b>GENERIC</b>: the punched window grid, which is what an untagged building gets today.</li>
+</ul>
+</div>
+
+<ul class="toc">
+<li><a href="#buildings">The buildings</a></li>
+<li><a href="#hangar">HANGAR</a></li>
+<li><a href="#office">OFFICE</a></li>
+<li><a href="#plain">PLAIN</a></li>
+<li><a href="#generic">GENERIC</a></li>
+<li><a href="#approx">What is approximate</a></li>
+</ul>
+
+<section id="buildings">
+<h2>The buildings</h2>
+<p class="cap">All three are tagged <code>building=yes</code> and <code>amenity=fire_station</code> with no levels or height tag. Each lane forces its class on these three elements only, through the tileset style's colour; the storeys, wall height and hash stay as packed. Cameras are placed from the tower eye with the position offsets, on the bearing from the building toward the tower (turned where noted), then aimed with <code>window.__tc3d.lookAt</code>.</p>
+<div class="scroll">
+<table>
+<thead><tr><th>Building</th><th>OSM way</th><th>Footprint</th><th>Inside the boundary</th><th>Class today</th><th>Camera</th></tr></thead>
+<tbody>
+<tr><td>SFO Fire Station 1</td><td>25373259</td><td class="num">1,324 m²</td><td>yes (KSFO)</td><td>GENERIC (under the 1,500 m² hangar area)</td><td>140 m out, 26 m up, toward the tower, FOV 35</td></tr>
+<tr><td>SFO Fire Station 2</td><td>157225049</td><td class="num">1,291 m²</td><td>yes (KSFO)</td><td>GENERIC</td><td>85 m out, 14 m up, 30° right of the tower bearing, FOV 50</td></tr>
+<tr><td>Oakland Fire Station No. 22</td><td>468777914</td><td class="num">1,600 m²</td><td>yes (KOAK)</td><td>HANGAR, by shape (1,600 m², 3 m estimated height)</td><td>130 m out, 14 m up, 35° right of the tower bearing, FOV 50</td></tr>
+</tbody>
+</table>
+</div>
+<p class="cap">Oakland Fire Station 27 (way 310725196, 134 m², outside the KOAK boundary) gets the same rule but is not shot here; the lanes use the three larger stations.</p>
+</section>
+
+<section id="hangar">
+<h2>HANGAR</h2>
+<p class="cap">Grey ribbed cladding divided into wide panels, no windows. By day the stations read as sheds, the same as the maintenance hangar behind SFO Fire Station 2. At night the walls are dark, with no lit windows.</p>
+<div class="four">
+<figure><img src="sfo1-12-hangar.jpg" alt="SFO Fire Station 1 as HANGAR, noon"><figcaption><b>SFO Fire Station 1</b>12:00</figcaption></figure>
+<figure><img src="sfo2-12-hangar.jpg" alt="SFO Fire Station 2 as HANGAR, noon"><figcaption><b>SFO Fire Station 2</b>12:00</figcaption></figure>
+<figure><img src="oak22-12-hangar.jpg" alt="Oakland Fire Station No. 22 as HANGAR, noon"><figcaption><b>Oakland Fire Station No. 22</b>12:00; its look today</figcaption></figure>
+<figure><img src="sfo1-22-hangar.jpg" alt="SFO Fire Station 1 as HANGAR, night"><figcaption><b>SFO Fire Station 1</b>22:00: dark, no lit windows</figcaption></figure>
+</div>
+</section>
+
+<section id="office">
+<h2>OFFICE</h2>
+<p class="cap">A continuous band of dark glazing with thin mullions along each storey. At night several bays of the band are lit warm, on every face.</p>
+<div class="four">
+<figure><img src="sfo1-12-office.jpg" alt="SFO Fire Station 1 as OFFICE, noon"><figcaption><b>SFO Fire Station 1</b>12:00</figcaption></figure>
+<figure><img src="sfo2-12-office.jpg" alt="SFO Fire Station 2 as OFFICE, noon"><figcaption><b>SFO Fire Station 2</b>12:00</figcaption></figure>
+<figure><img src="oak22-12-office.jpg" alt="Oakland Fire Station No. 22 as OFFICE, noon"><figcaption><b>Oakland Fire Station No. 22</b>12:00</figcaption></figure>
+<figure><img src="sfo1-22-office.jpg" alt="SFO Fire Station 1 as OFFICE, night"><figcaption><b>SFO Fire Station 1</b>22:00: lit window bays</figcaption></figure>
+</div>
+</section>
+
+<section id="plain">
+<h2>PLAIN</h2>
+<p class="cap">A flat tan wall with no openings and no cladding lines. At night it is a dark brown block with no lights.</p>
+<div class="four">
+<figure><img src="sfo1-12-plain.jpg" alt="SFO Fire Station 1 as PLAIN, noon"><figcaption><b>SFO Fire Station 1</b>12:00</figcaption></figure>
+<figure><img src="sfo2-12-plain.jpg" alt="SFO Fire Station 2 as PLAIN, noon"><figcaption><b>SFO Fire Station 2</b>12:00</figcaption></figure>
+<figure><img src="oak22-12-plain.jpg" alt="Oakland Fire Station No. 22 as PLAIN, noon"><figcaption><b>Oakland Fire Station No. 22</b>12:00</figcaption></figure>
+<figure><img src="sfo1-22-plain.jpg" alt="SFO Fire Station 1 as PLAIN, night"><figcaption><b>SFO Fire Station 1</b>22:00: dark, no lights</figcaption></figure>
+</div>
+</section>
+
+<section id="generic">
+<h2>GENERIC</h2>
+<p class="cap">One row of square punched windows on a light wall, the look of any untagged building today (SFO Fire Stations 1 and 2 already show it). At night a scattering of the windows is lit.</p>
+<div class="four">
+<figure><img src="sfo1-12-generic.jpg" alt="SFO Fire Station 1 as GENERIC, noon"><figcaption><b>SFO Fire Station 1</b>12:00; its look today</figcaption></figure>
+<figure><img src="sfo2-12-generic.jpg" alt="SFO Fire Station 2 as GENERIC, noon"><figcaption><b>SFO Fire Station 2</b>12:00; its look today</figcaption></figure>
+<figure><img src="oak22-12-generic.jpg" alt="Oakland Fire Station No. 22 as GENERIC, noon"><figcaption><b>Oakland Fire Station No. 22</b>12:00</figcaption></figure>
+<figure><img src="sfo1-22-generic.jpg" alt="SFO Fire Station 1 as GENERIC, night"><figcaption><b>SFO Fire Station 1</b>22:00: some windows lit</figcaption></figure>
+</div>
+</section>
+
+<section id="approx">
+<h2>What is approximate</h2>
+<ul>
+<li><b>No rule exists yet.</b> Each class is forced on the three elements by wrapping the tileset style's colour from the page (the red channel's class code is replaced, the hash kept); no source file was changed. A real rule would type every fire station, including the off-field ones.</li>
+<li><b>The cameras are not the tower view.</b> They sit 85-140 m from each building so the facade can be read; from the KSFO tower eye both SFO stations are about 1.2 km away, where the controller sees far fewer pixels of each wall.</li>
+<li><b>Night ground.</b> At 22:00 the buildings darken and their windows light, but the satellite imagery in these headless stills stays bright.</li>
+<li><b>Clouds are off</b> (<code>weather.showClouds</code>): the METAR cloud layer drew across the walls at SFO and hid the cladding.</li>
+<li><b>A pale band under SFO Fire Station 1's wall</b> shows in every lane; it is the same in all four, so it does not bear on the choice.</li>
+</ul>
+</section>
+
+<p class="sub">Rebuild: <code>RECIPE.md</code> beside this page. The stills (16 JPEGs, 1.4 MB) live only in the review copy.</p>
+</main>
+</body>
+</html>
