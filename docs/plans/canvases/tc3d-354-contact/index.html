@@ -1,0 +1,638 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Contact without resting height</title>
+<style>
+  :root {
+    --bg: #0f1419; --panel: #182029; --line: #2b3742; --text: #e6edf3; --muted: #8b98a5;
+    --runway: #2a333c; --runway-edge: #6e7b88; --mark: #c9d1d9; --grid: #1f2831;
+    --plane: #f0b429; --plane-dark: #8a6510; --ghost: #7cc4ff; --accent: #58a6ff;
+    --ok: #3fb950; --ok-fill: rgba(63, 185, 80, 0.55); --err: #f85149; --err-fill: rgba(248, 81, 73, 0.6);
+    --btn: #22303c; --tick: #c9d1d9;
+  }
+  @media (prefers-color-scheme: light) {
+    :root {
+      --bg: #f6f8fa; --panel: #ffffff; --line: #d0d7de; --text: #1f2328; --muted: #57606a;
+      --runway: #d8dde3; --runway-edge: #8c959f; --mark: #57606a; --grid: #eef1f4;
+      --plane: #b07800; --plane-dark: #6b4a00; --ghost: #0969da; --accent: #0969da;
+      --ok: #1a7f37; --ok-fill: rgba(26, 127, 55, 0.45); --err: #cf222e; --err-fill: rgba(207, 34, 46, 0.5);
+      --btn: #eef1f4; --tick: #57606a;
+    }
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; padding: 20px 16px 32px; background: var(--bg); color: var(--text); font: 14px/1.45 system-ui, sans-serif; }
+  main { max-width: 1000px; margin: 0 auto; }
+  h1 { font-size: 20px; margin: 0 0 6px; }
+  p.intro { color: var(--muted); margin: 0 0 12px; max-width: 780px; }
+  .controls { position: sticky; top: 0; z-index: 2; display: flex; flex-wrap: wrap; align-items: center; gap: 8px 14px;
+    background: var(--bg); padding: 10px 0; margin-bottom: 12px; border-bottom: 1px solid var(--line); }
+  .grp { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
+  button { font: 600 12px system-ui, sans-serif; color: var(--text); background: var(--btn); border: 1px solid var(--line);
+    border-radius: 6px; padding: 5px 10px; cursor: pointer; }
+  button[aria-pressed="true"] { background: var(--accent); border-color: var(--accent); color: var(--bg); }
+  #play { min-width: 66px; }
+  #scrub { flex: 1 1 220px; min-width: 160px; accent-color: var(--accent); }
+  .clock { font: 600 13px ui-monospace, monospace; color: var(--accent); width: 100%; }
+  .clock .cut { color: var(--plane); }
+  .legend { display: flex; flex-wrap: wrap; gap: 6px 18px; color: var(--muted); font-size: 12px; margin: 0 0 12px; }
+  .key { display: inline-flex; align-items: center; gap: 6px; }
+  .sw { display: inline-block; width: 22px; height: 0; border-top: 2px solid var(--plane); }
+  .sw.ghost { border-top: 2px dashed var(--ghost); }
+  .sw.ok { height: 8px; border: none; background: var(--ok-fill); }
+  .sw.err { height: 8px; border: none; background: var(--err-fill); }
+  .tk { display: inline-block; width: 0; height: 12px; border-left: 1px dashed var(--tick); }
+  .tk.learn { border-left-color: var(--accent); }
+  .lane { background: var(--panel); border: 1px solid var(--line); border-radius: 10px; padding: 10px 12px 8px; margin-bottom: 12px; }
+  .lane h2 { font-size: 15px; margin: 0; }
+  .lane h2 .tag { display: inline-block; min-width: 20px; color: var(--accent); }
+  .lane .rule { color: var(--muted); font-size: 12.5px; margin: 1px 0 6px; }
+  canvas { display: block; width: 100%; }
+  canvas.plot { height: 210px; }
+  canvas.strip { height: 30px; margin-top: 4px; }
+  .readout { font: 13px ui-monospace, monospace; display: flex; gap: 6px 18px; flex-wrap: wrap; margin-top: 6px; min-height: 20px; }
+  .readout b { color: var(--plane); font-weight: 600; }
+  .readout .yes { color: var(--ok); font-weight: 600; }
+  .readout .no { color: var(--muted); }
+  .readout .errtag { color: var(--bg); background: var(--err); border-radius: 4px; padding: 0 6px; font-weight: 600; }
+  @media (max-width: 600px) { canvas.plot { height: 180px; } .lane .rule { font-size: 12px; } }
+</style>
+</head>
+<body>
+<main>
+  <h1>TC3D-354: drawing an arrival whose resting height is unknown</h1>
+  <p class="intro">The same vNAS aircraft through each rule, with neither its own resting height (R) nor its type's learned yet.
+    The camera follows the aircraft; the trail behind it is its wheel height over the last few seconds.</p>
+
+  <div class="controls">
+    <div class="grp" id="tabs" role="group" aria-label="Scenario"></div>
+    <div class="grp">
+      <button id="play" type="button">Pause</button>
+      <button type="button" data-speed="0.5" aria-pressed="false">0.5x</button>
+      <button type="button" data-speed="1" aria-pressed="true">1x</button>
+    </div>
+    <input id="scrub" type="range" min="0" max="10" step="0.01" value="0" aria-label="Timeline">
+    <div class="clock" id="clock"></div>
+  </div>
+
+  <div class="legend">
+    <span class="key"><span class="sw"></span>wheels as TowerCab draws them</span>
+    <span class="key"><span class="sw ghost"></span>wheels in the simulator</span>
+    <span class="key"><span class="sw ok"></span>in contact</span>
+    <span class="key"><span class="sw err"></span>drawn off the simulator by more than 0.5 m</span>
+    <span class="key"><span class="tk"></span>sim touchdown</span>
+    <span class="key"><span class="tk learn"></span>own R learned</span>
+    <span class="key">// rollout and taxi cut</span>
+  </div>
+
+  <div id="lanes"></div>
+</main>
+
+<script>
+"use strict";
+
+const FT = 0.3048;
+const FPS = 60;
+const DT = 1 / FPS;
+const GROUND_FT = 0.1 / FT;
+const FT_MAX = 40;
+const FT_MIN = -3;
+const TRAIL_S = 6;
+
+const LANES = [
+  { id: "A", name: "Today",
+    rule: "Drop rule: contact under 20 ft with |rate| ≤ 1 ft/s over 1 s, out over 25 ft or rising > 3 ft/s; raw height until contact, then a 15-frame snap at 60 fps." },
+  { id: "B", name: "Tighter drop rule + 1 s ease",
+    rule: "Contact only at or below 16 ft after a descent that has flattened (|rate| ≤ 1 ft/s for 1 s); raw height until contact, then a 1 s ease down." },
+  { id: "C", name: "Fleet default R",
+    rule: "Until it learns its own R, a provisional R of 9 ft from the first sample, with the learned rule (in under R+3 ft, out over R+5 ft); no drop rule." },
+  { id: "D", name: "No contact until learned",
+    rule: "Raw height, never in contact, until the aircraft learns its own R (about 3 s after it slows under 5 kt)." },
+];
+
+function rollout(samples, R, from, to) {
+  for (let t = from; t <= to + 1e-9; t += 1) samples.push([t, R + 0.02 * Math.sin(t * 1.7)]);
+  return samples;
+}
+
+function piecewise(pts, t) {
+  if (t <= pts[0][0]) return pts[0][1];
+  for (let i = 1; i < pts.length; i++) {
+    if (t <= pts[i][0]) {
+      const [t0, v0] = pts[i - 1];
+      const [t1, v1] = pts[i];
+      return v0 + (v1 - v0) * (t - t0) / (t1 - t0);
+    }
+  }
+  return pts[pts.length - 1][1];
+}
+
+function landingSpeed(V, td, L) {
+  return [[0, V], [td, V - 4], [td + 25, 28], [L - 9, 16], [L - 3, 5], [L, 2], [L + 2, 0], [L + 1000, 0]];
+}
+
+function buildScenarios() {
+  const s1R = -0.3;
+  const s1Td = 10.7;
+  const s1L = s1Td + 50;
+  const s1 = {
+    label: "A320, R = −0.3 ft, shallow flare", R: s1R, touchdown: s1Td, learnAt: s1L, scale: 1,
+    samples: rollout([[0, 46], [0.8, 36], [1.6, 27], [2.4, 20.2], [3.2, 16.1], [4.0, 15.3], [4.8, 14.6], [5.55, 12.1],
+      [6.3, 10.2], [7.05, 8.3], [7.8, 6.1], [8.55, 3.4], [9.3, 1.2], [10.0, 0.6], [10.7, s1R]], s1R, 11.7, s1L + 6),
+    speed: landingSpeed(135, s1Td, s1L),
+    segments: [[0, 21], [s1L - 7, s1L + 5]],
+  };
+
+  const s2R = 14.4;
+  const s2Td = 6.3;
+  const s2L = s2Td + 90;
+  const truth2 = [[0, 40], [0.9, 30], [1.7, 21.5], [2.5, 14.5], [3.3, 9.6], [4.1, 6.2], [4.9, 3.6], [5.7, 1.2], [6.3, 0]];
+  const s2 = {
+    label: "B789, R = 14.4 ft, normal flare", R: s2R, touchdown: s2Td, learnAt: s2L, scale: 1.15,
+    samples: rollout(truth2.map(([t, h]) => [t, h + s2R]), s2R, 7.3, s2L + 6),
+    speed: landingSpeed(145, s2Td, s2L),
+    segments: [[0, 18], [s2L - 7, s2L + 5]],
+  };
+
+  const s3R = -0.3;
+  const s3 = {
+    label: "A320 low pass at 13–23 ft", R: s3R, touchdown: null, learnAt: null, scale: 1,
+    samples: [[0, 52], [0.9, 41], [1.8, 31], [2.7, 24], [3.6, 18.9], [5.0, 20.0], [6.0, 21.7], [7.0, 20.7], [8.0, 21.5],
+      [9.0, 23.8], [10.0, 17.9], [11.0, 12.9], [12.0, 18.0], [13.0, 27], [14.0, 39], [15.0, 53], [16.0, 68]],
+    speed: [[0, 130], [11, 128], [16, 140]],
+    segments: [[0, 15.5]],
+  };
+  return [s1, s2, s3];
+}
+
+function interp(samples, t) {
+  if (t <= samples[0][0]) return samples[0][1];
+  let lo = 0;
+  let hi = samples.length - 1;
+  if (t >= samples[hi][0]) return samples[hi][1];
+  while (hi - lo > 1) {
+    const mid = (lo + hi) >> 1;
+    if (samples[mid][0] <= t) lo = mid; else hi = mid;
+  }
+  const [t0, h0] = samples[lo];
+  const [t1, h1] = samples[hi];
+  return h0 + (h1 - h0) * (t - t0) / (t1 - t0);
+}
+
+const smooth = (p) => p * p * (3 - 2 * p);
+const flat = (rate) => rate !== null && Math.abs(rate) <= 1 + 1e-9;
+
+function dropEnter(h, rate) { return h < 20 && flat(rate); }
+function dropStay(h, rate) { return h <= 25 && (rate === null || rate <= 3); }
+function learnedRule(inContact, over) { return inContact ? over <= 5 : over < 3; }
+
+function simulateLane(id, scn, raw, rate) {
+  const n = raw.length;
+  const drawn = new Float64Array(n);
+  const contact = new Uint8Array(n);
+  let inContact = false;
+  let mode = false;
+  let p = 1;
+  let flatTime = 0;
+  let afterDescent = false;
+  let offset = id === "C" ? 9 : 0;
+  let offsetFrom = offset;
+  let offsetTo = offset;
+  let offsetT = 1;
+  const easeFrames = id !== "B";
+  for (let f = 0; f < n; f++) {
+    const t = f * DT;
+    const h = raw[f];
+    const r = rate[f];
+    const learned = scn.learnAt !== null && t >= scn.learnAt;
+    const wantOffset = learned ? scn.R : (id === "C" ? 9 : 0);
+    if (wantOffset !== offsetTo) { offsetFrom = offset; offsetTo = wantOffset; offsetT = 0; }
+    offsetT = Math.min(1, offsetT + DT / 0.25);
+    offset = offsetFrom + (offsetTo - offsetFrom) * offsetT;
+
+    if (flat(r)) flatTime += DT; else { flatTime = 0; afterDescent = r !== null && r < -1; }
+
+    if (learned) inContact = learnedRule(inContact, h - offsetTo);
+    else if (id === "A") inContact = inContact ? dropStay(h, r) : dropEnter(h, r);
+    else if (id === "B") inContact = inContact ? dropStay(h, r) : (h <= 16 && afterDescent && flatTime >= 1 - 1e-9);
+    else if (id === "C") inContact = learnedRule(inContact, h - offsetTo);
+    else inContact = false;
+
+    if (inContact !== mode) { mode = inContact; p = 1 - p; }
+    p = Math.min(1, p + (easeFrames ? 0.07 : DT / 1.0));
+    const k = easeFrames ? p : smooth(p);
+    const air = h - offset;
+    drawn[f] = mode ? air + (GROUND_FT - air) * k : GROUND_FT + (air - GROUND_FT) * k;
+    contact[f] = inContact ? 1 : 0;
+  }
+  return { drawn, contact };
+}
+
+function simulate(scn) {
+  const end = scn.segments[scn.segments.length - 1][1];
+  const n = Math.ceil(end * FPS) + 1;
+  const raw = new Float64Array(n);
+  const truth = new Float64Array(n);
+  const gs = new Float64Array(n);
+  const dist = new Float64Array(n);
+  const rate = new Array(n);
+  for (let f = 0; f < n; f++) {
+    const t = f * DT;
+    raw[f] = interp(scn.samples, t);
+    truth[f] = raw[f] - scn.R;
+    gs[f] = piecewise(scn.speed, t);
+    dist[f] = f === 0 ? 0 : dist[f - 1] + gs[f] * 0.514444 * DT;
+    rate[f] = f >= FPS ? raw[f] - raw[f - FPS] : null;
+  }
+  const lanes = LANES.map((l) => simulateLane(l.id, scn, raw, rate));
+  for (const lane of lanes) {
+    lane.err = new Uint8Array(n);
+    for (let f = 0; f < n; f++) lane.err[f] = Math.abs(lane.drawn[f] - truth[f]) * FT > 0.5 ? 1 : 0;
+  }
+  return { n, raw, truth, gs, dist, lanes };
+}
+
+function displayTotal(scn) { return scn.segments.reduce((a, [s0, s1]) => a + (s1 - s0), 0); }
+
+function displayToSim(scn, d) {
+  let acc = 0;
+  for (let i = 0; i < scn.segments.length; i++) {
+    const [s0, s1] = scn.segments[i];
+    const len = s1 - s0;
+    if (d <= acc + len || i === scn.segments.length - 1) return { t: s0 + Math.min(len, Math.max(0, d - acc)), seg: i, segStart: acc };
+    acc += len;
+  }
+  return { t: 0, seg: 0, segStart: 0 };
+}
+
+function simToDisplay(scn, t) {
+  let acc = 0;
+  for (const [s0, s1] of scn.segments) {
+    if (t >= s0 && t <= s1) return acc + (t - s0);
+    acc += s1 - s0;
+  }
+  return null;
+}
+
+function runs(scn, sim, arr) {
+  const total = displayTotal(scn);
+  const out = [];
+  let start = null;
+  for (let d = 0; d <= total + 1e-9; d += DT) {
+    const { t } = displayToSim(scn, d);
+    const on = arr[Math.min(sim.n - 1, Math.round(t * FPS))] === 1;
+    if (on && start === null) start = d;
+    if (!on && start !== null) { out.push([start, d]); start = null; }
+  }
+  if (start !== null) out.push([start, total]);
+  return out;
+}
+
+const scenarios = buildScenarios();
+const state = { s: 0, d: 0, playing: true, speed: 1, sim: null, runs: null };
+const css = getComputedStyle(document.documentElement);
+const col = (name) => css.getPropertyValue(name).trim();
+
+const lanesEl = document.getElementById("lanes");
+const laneEls = LANES.map((l) => {
+  const sec = document.createElement("section");
+  sec.className = "lane";
+  sec.innerHTML = `<h2><span class="tag">${l.id}</span> ${l.name}</h2><div class="rule">${l.rule}</div>`
+    + `<canvas class="plot"></canvas><canvas class="strip"></canvas><div class="readout"></div>`;
+  lanesEl.appendChild(sec);
+  return { plot: sec.querySelector(".plot"), strip: sec.querySelector(".strip"), readout: sec.querySelector(".readout") };
+});
+
+const tabsEl = document.getElementById("tabs");
+const tabButtons = scenarios.map((scn, i) => {
+  const b = document.createElement("button");
+  b.type = "button";
+  b.textContent = `${i + 1}. ${scn.label}`;
+  b.addEventListener("click", () => selectScenario(i, 0));
+  tabsEl.appendChild(b);
+  return b;
+});
+
+const scrub = document.getElementById("scrub");
+const playBtn = document.getElementById("play");
+const clockEl = document.getElementById("clock");
+const speedBtns = [...document.querySelectorAll("[data-speed]")];
+
+function selectScenario(i, d) {
+  state.s = i;
+  const scn = scenarios[i];
+  state.sim = simulate(scn);
+  state.runs = state.sim.lanes.map((lane) => ({ contact: runs(scn, state.sim, lane.contact), err: runs(scn, state.sim, lane.err) }));
+  state.d = d;
+  scrub.max = displayTotal(scn).toFixed(2);
+  tabButtons.forEach((b, j) => b.setAttribute("aria-pressed", String(j === i)));
+  render();
+}
+
+function fitCanvas(c) {
+  const dpr = window.devicePixelRatio || 1;
+  const w = c.clientWidth;
+  const h = c.clientHeight;
+  if (c.width !== Math.round(w * dpr) || c.height !== Math.round(h * dpr)) {
+    c.width = Math.round(w * dpr);
+    c.height = Math.round(h * dpr);
+  }
+  const ctx = c.getContext("2d");
+  ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+  return { ctx, w, h };
+}
+
+const GUTTER_L = 64;
+const GUTTER_R = 46;
+
+function planePath(ctx, x, y, s) {
+  ctx.beginPath();
+  ctx.moveTo(x + 58 * s, y - 20 * s);
+  ctx.quadraticCurveTo(x + 66 * s, y - 20 * s, x + 64 * s, y - 25 * s);
+  ctx.quadraticCurveTo(x + 58 * s, y - 29 * s, x + 46 * s, y - 29 * s);
+  ctx.lineTo(x - 40 * s, y - 29 * s);
+  ctx.lineTo(x - 58 * s, y - 31 * s);
+  ctx.lineTo(x - 72 * s, y - 56 * s);
+  ctx.lineTo(x - 82 * s, y - 56 * s);
+  ctx.lineTo(x - 78 * s, y - 27 * s);
+  ctx.lineTo(x - 62 * s, y - 20 * s);
+  ctx.lineTo(x - 40 * s, y - 16 * s);
+  ctx.lineTo(x + 50 * s, y - 15 * s);
+  ctx.closePath();
+}
+
+function drawPlane(ctx, x, y, s, ghost) {
+  const plane = col("--plane");
+  const ghostCol = col("--ghost");
+  ctx.save();
+  ctx.lineJoin = "round";
+  if (ghost) {
+    ctx.setLineDash([5, 4]);
+    ctx.strokeStyle = ghostCol;
+    ctx.lineWidth = 1.6;
+    planePath(ctx, x, y, s);
+    ctx.stroke();
+    ctx.beginPath();
+    ctx.moveTo(x, y - 15 * s); ctx.lineTo(x, y - 5 * s);
+    ctx.moveTo(x + 42 * s, y - 15 * s); ctx.lineTo(x + 42 * s, y - 4 * s);
+    ctx.stroke();
+    ctx.setLineDash([]);
+    ctx.beginPath(); ctx.arc(x, y - 3.5 * s, 3.5 * s, 0, Math.PI * 2); ctx.stroke();
+    ctx.beginPath(); ctx.arc(x + 42 * s, y - 2.8 * s, 2.8 * s, 0, Math.PI * 2); ctx.stroke();
+  } else {
+    ctx.fillStyle = plane;
+    planePath(ctx, x, y, s);
+    ctx.fill();
+    ctx.fillStyle = col("--plane-dark");
+    ctx.beginPath(); ctx.ellipse(x + 8 * s, y - 20 * s, 22 * s, 3 * s, -0.04, 0, Math.PI * 2); ctx.fill();
+    ctx.beginPath(); ctx.ellipse(x + 14 * s, y - 13 * s, 9 * s, 4 * s, 0, 0, Math.PI * 2); ctx.fill();
+    ctx.strokeStyle = col("--plane-dark");
+    ctx.lineWidth = 2 * s;
+    ctx.beginPath();
+    ctx.moveTo(x, y - 15 * s); ctx.lineTo(x, y - 5 * s);
+    ctx.moveTo(x + 42 * s, y - 15 * s); ctx.lineTo(x + 42 * s, y - 4 * s);
+    ctx.stroke();
+    ctx.fillStyle = "#11161c";
+    ctx.beginPath(); ctx.arc(x, y - 3.5 * s, 3.5 * s, 0, Math.PI * 2); ctx.fill();
+    ctx.beginPath(); ctx.arc(x + 42 * s, y - 2.8 * s, 2.8 * s, 0, Math.PI * 2); ctx.fill();
+    ctx.fillStyle = plane;
+    ctx.strokeStyle = "#11161c";
+    ctx.lineWidth = 1.5;
+    ctx.beginPath(); ctx.arc(x, y, 3.2, 0, Math.PI * 2); ctx.fill(); ctx.stroke();
+  }
+  ctx.restore();
+}
+
+function drawPlot(li, frame, t) {
+  const scn = scenarios[state.s];
+  const sim = state.sim;
+  const lane = sim.lanes[li];
+  const { ctx, w, h } = fitCanvas(laneEls[li].plot);
+  const top = 8;
+  const bottom = h - 6;
+  const pxPerFt = (bottom - top) / (FT_MAX - FT_MIN);
+  const yOf = (ft) => top + (FT_MAX - ft) * pxPerFt;
+  const x0 = GUTTER_L;
+  const x1 = w - GUTTER_R;
+  const anchor = x0 + (x1 - x0) * 0.64;
+  ctx.clearRect(0, 0, w, h);
+
+  ctx.font = "11px system-ui, sans-serif";
+  ctx.textBaseline = "middle";
+  for (let ft = 0; ft <= FT_MAX; ft += 5) {
+    const y = yOf(ft);
+    ctx.strokeStyle = col("--grid");
+    ctx.lineWidth = 1;
+    ctx.beginPath(); ctx.moveTo(x0, y); ctx.lineTo(x1, y); ctx.stroke();
+    ctx.fillStyle = col("--muted");
+    ctx.textAlign = "right";
+    ctx.fillText(ft === 0 ? "0 ft" : `${ft}`, x0 - 6, y);
+  }
+  for (let m = 0; m * 3.28084 <= FT_MAX; m += 2) {
+    const y = yOf(m / FT);
+    ctx.strokeStyle = col("--muted");
+    ctx.beginPath(); ctx.moveTo(x1, y); ctx.lineTo(x1 + 4, y); ctx.stroke();
+    ctx.fillStyle = col("--muted");
+    ctx.textAlign = "left";
+    ctx.fillText(m === 0 ? "0 m" : `${m}`, x1 + 7, y);
+  }
+
+  const y0 = yOf(0);
+  ctx.fillStyle = col("--runway");
+  ctx.fillRect(x0, y0, x1 - x0, bottom - y0 + 6);
+  ctx.strokeStyle = col("--runway-edge");
+  ctx.lineWidth = 1.5;
+  ctx.beginPath(); ctx.moveTo(x0, y0); ctx.lineTo(x1, y0); ctx.stroke();
+  const shift = (sim.dist[frame] * 1.6) % 48;
+  ctx.fillStyle = col("--mark");
+  for (let x = x0 - shift; x < x1; x += 48) {
+    const a = Math.max(x, x0);
+    const b = Math.min(x + 24, x1);
+    if (b > a) ctx.fillRect(a, y0 + 5, b - a, 2);
+  }
+
+  ctx.save();
+  ctx.beginPath(); ctx.rect(x0, 0, x1 - x0, h); ctx.clip();
+  const pxPerS = (anchor - x0 - 8) / TRAIL_S;
+  const back = Math.min(frame, TRAIL_S * FPS);
+  const trail = (arr, colour, dash, width) => {
+    ctx.setLineDash(dash);
+    ctx.strokeStyle = colour;
+    ctx.lineWidth = width;
+    ctx.beginPath();
+    for (let k = back; k >= 0; k -= 1) {
+      const f = frame - k;
+      const x = anchor - (k / FPS) * pxPerS;
+      const y = yOf(arr[f]);
+      if (k === back) ctx.moveTo(x, y); else ctx.lineTo(x, y);
+    }
+    ctx.stroke();
+    ctx.setLineDash([]);
+  };
+  trail(sim.truth, col("--ghost"), [5, 4], 1.5);
+  trail(lane.drawn, col("--plane"), [], 2.2);
+
+  const s = scn.scale * Math.min(1, Math.max(0.75, w / 900));
+  const yTrue = yOf(sim.truth[frame]);
+  const yDrawn = yOf(lane.drawn[frame]);
+  drawPlane(ctx, anchor, yDrawn, s, false);
+  drawPlane(ctx, anchor, yTrue, s, true);
+
+  if (lane.err[frame]) {
+    const bx = Math.min(anchor + 74 * s, x1 - 6);
+    const offM = (lane.drawn[frame] - sim.truth[frame]) * FT;
+    ctx.strokeStyle = col("--err");
+    ctx.lineWidth = 2;
+    const ya = Math.max(top, Math.min(yDrawn, yTrue));
+    const yb = Math.min(bottom, Math.max(yDrawn, yTrue));
+    ctx.beginPath();
+    ctx.moveTo(bx - 4, ya); ctx.lineTo(bx + 4, ya);
+    ctx.moveTo(bx, ya); ctx.lineTo(bx, yb);
+    ctx.moveTo(bx - 4, yb); ctx.lineTo(bx + 4, yb);
+    ctx.stroke();
+    ctx.restore();
+    ctx.fillStyle = col("--err");
+    ctx.font = "600 12px ui-monospace, monospace";
+    const label = `${offM > 0 ? "+" : "−"}${Math.abs(offM).toFixed(1)} m`;
+    const tw = ctx.measureText(label).width;
+    const fits = bx + 8 + tw <= x1 - 2;
+    const lx = fits ? bx + 8 : bx - 8 - tw;
+    const ly = (ya + yb) / 2;
+    ctx.fillStyle = col("--panel");
+    ctx.fillRect(lx - 3, ly - 8, tw + 6, 16);
+    ctx.fillStyle = col("--err");
+    ctx.textAlign = "left";
+    ctx.fillText(label, lx, ly);
+  } else {
+    ctx.restore();
+  }
+
+  ctx.font = "600 11px system-ui, sans-serif";
+  ctx.textAlign = "center";
+  ctx.textBaseline = "top";
+  if (yDrawn < top) { ctx.fillStyle = col("--plane"); ctx.fillText("▲ drawn above view", anchor - 40, 2); }
+  if (yTrue < top) { ctx.fillStyle = col("--ghost"); ctx.fillText("▲ sim above view", anchor + 60, 2); }
+
+  const pos = displayToSim(scn, state.d);
+  if (pos.seg > 0 && state.d - pos.segStart < 1.6) {
+    ctx.fillStyle = col("--plane");
+    ctx.font = "600 13px system-ui, sans-serif";
+    ctx.textAlign = "left";
+    ctx.fillText("… rollout and taxi skipped …", x0 + 8, top + 2);
+  }
+}
+
+function drawStrip(li) {
+  const scn = scenarios[state.s];
+  const { ctx, w, h } = fitCanvas(laneEls[li].strip);
+  const x0 = GUTTER_L;
+  const x1 = w - GUTTER_R;
+  const total = displayTotal(scn);
+  const xOf = (d) => x0 + (d / total) * (x1 - x0);
+  ctx.clearRect(0, 0, w, h);
+  const rows = [{ y: 3, key: "contact", fill: col("--ok-fill"), label: "contact" }, { y: 16, key: "err", fill: col("--err-fill"), label: "off >0.5 m" }];
+  ctx.font = "10.5px system-ui, sans-serif";
+  ctx.textBaseline = "middle";
+  ctx.textAlign = "right";
+  for (const row of rows) {
+    ctx.fillStyle = col("--grid");
+    ctx.fillRect(x0, row.y, x1 - x0, 10);
+    ctx.fillStyle = row.fill;
+    for (const [a, b] of state.runs[li][row.key]) ctx.fillRect(xOf(a), row.y, Math.max(1, xOf(b) - xOf(a)), 10);
+    ctx.fillStyle = col("--muted");
+    ctx.fillText(row.label, x0 - 6, row.y + 5);
+  }
+  const mark = (t, colour) => {
+    if (t === null) return;
+    const d = simToDisplay(scn, t);
+    if (d === null) return;
+    ctx.strokeStyle = colour;
+    ctx.lineWidth = 1;
+    ctx.setLineDash([2, 2]);
+    ctx.beginPath(); ctx.moveTo(xOf(d), 0); ctx.lineTo(xOf(d), h); ctx.stroke();
+    ctx.setLineDash([]);
+  };
+  mark(scn.touchdown, col("--tick"));
+  mark(scn.learnAt, col("--accent"));
+  let acc = 0;
+  for (let i = 0; i < scn.segments.length - 1; i++) {
+    acc += scn.segments[i][1] - scn.segments[i][0];
+    ctx.fillStyle = col("--panel");
+    ctx.fillRect(xOf(acc) - 2, 0, 4, h);
+    ctx.fillStyle = col("--muted");
+    ctx.textAlign = "center";
+    ctx.fillText("//", xOf(acc), h - 3);
+  }
+  ctx.strokeStyle = col("--text");
+  ctx.lineWidth = 2;
+  ctx.beginPath(); ctx.moveTo(xOf(state.d), 0); ctx.lineTo(xOf(state.d), h); ctx.stroke();
+}
+
+function fmtRel(x) { return `${x >= 0 ? "+" : "−"}${Math.abs(x).toFixed(1)} s`; }
+
+function render() {
+  const scn = scenarios[state.s];
+  const sim = state.sim;
+  const pos = displayToSim(scn, state.d);
+  const frame = Math.min(sim.n - 1, Math.max(0, Math.round(pos.t * FPS)));
+  const when = scn.touchdown !== null ? `touchdown ${fmtRel(pos.t - scn.touchdown)}` : `t = ${pos.t.toFixed(1)} s`;
+  const learned = scn.learnAt !== null ? (pos.t >= scn.learnAt ? "own R learned" : `own R learned in ${(scn.learnAt - pos.t).toFixed(1)} s`) : "own R never learned";
+  const cut = pos.seg > 0 ? '<span class="cut">after the cut · </span>' : "";
+  clockEl.innerHTML = `${cut}${when} · ${Math.round(sim.gs[frame])} kt · sim wheels ${(sim.truth[frame] * FT).toFixed(2)} m · ${learned}`;
+  scrub.value = state.d.toFixed(2);
+  for (let li = 0; li < LANES.length; li++) {
+    drawPlot(li, frame, pos.t);
+    drawStrip(li);
+    const lane = sim.lanes[li];
+    const drawnM = lane.drawn[frame] * FT;
+    const offM = (lane.drawn[frame] - sim.truth[frame]) * FT;
+    const c = lane.contact[frame] === 1;
+    let html = `<span>drawn wheels <b>${drawnM.toFixed(2)} m</b> above runway</span>`
+      + `<span>contact <span class="${c ? "yes" : "no"}">${c ? "yes" : "no"}</span></span>`;
+    if (lane.err[frame]) html += `<span class="errtag">${Math.abs(offM).toFixed(1)} m ${offM > 0 ? "above" : "below"} the sim</span>`;
+    laneEls[li].readout.innerHTML = html;
+  }
+}
+
+let last = null;
+function tick(now) {
+  if (last !== null && state.playing) {
+    const total = displayTotal(scenarios[state.s]);
+    state.d += ((now - last) / 1000) * state.speed;
+    if (state.d > total + 1) state.d = 0;
+    render();
+  }
+  last = now;
+  requestAnimationFrame(tick);
+}
+
+function setPlaying(on) {
+  state.playing = on;
+  playBtn.textContent = on ? "Pause" : "Play";
+}
+
+playBtn.addEventListener("click", () => setPlaying(!state.playing));
+scrub.addEventListener("input", () => { state.d = Number(scrub.value); setPlaying(false); render(); });
+speedBtns.forEach((b) => b.addEventListener("click", () => {
+  state.speed = Number(b.dataset.speed);
+  speedBtns.forEach((o) => o.setAttribute("aria-pressed", String(o === b)));
+}));
+document.addEventListener("keydown", (e) => {
+  if (e.code === "Space" && e.target === document.body) { e.preventDefault(); setPlaying(!state.playing); }
+});
+window.addEventListener("resize", render);
+
+window.__mock = {
+  show(scenario, displaySeconds) { setPlaying(false); selectScenario(scenario - 1, displaySeconds); },
+  simToDisplay(scenario, t) { return simToDisplay(scenarios[scenario - 1], t); },
+};
+
+const params = new URLSearchParams(location.search);
+const startS = Math.min(3, Math.max(1, Number(params.get("s") || 1)));
+selectScenario(startS - 1, Number(params.get("t") || 0));
+if (params.has("t")) setPlaying(false);
+requestAnimationFrame(tick);
+</script>
+</body>
+</html>
