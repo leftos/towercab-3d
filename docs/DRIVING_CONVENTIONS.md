@@ -240,6 +240,9 @@ Measured in headless checks driven over raw CDP (or `playwright-headless`):
 - Headless Edge renders at 1 fps until `page.bringToFront()` is called (headless only; a hidden desktop window is the opposite, see hidden-window-keeps-rendering).
 - Launch it with `--disable-extensions`: even a fresh profile loaded extensions and logged about 88,000 "Unchecked runtime.lastError" lines in two minutes.
 - Do not restart Vite while the page is open: its client threw "send was called before connect" about 295,000 times in seven minutes. Close the page first.
+- Headless `requestAnimationFrame` runs at about 100 Hz while Cesium renders at 60, so a probe that steps once per frame across `perf()`'s 300-frame window steps on `scene.postRender` instead.
+- Stopping the background `pnpm run vite:headless` shell leaves the `vite.js` node process listening on 5174; stop that process too.
+- A facade check at the tower eye needs daylight: `updateCesiumSettings({ timeMode: 'fixed', fixedTimeHour: 13 })`.
 - `npm i` in a driver folder fails without a `package.json`; add one first.
 - The sun direction is `viewer.scene.context.uniformState.sunDirectionWC`, not `scene.light.direction`.
 Source: headless checks of TC3D-244's session. Seen: once.

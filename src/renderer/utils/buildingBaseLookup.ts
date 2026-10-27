@@ -17,7 +17,7 @@
  */
 import * as Cesium from 'cesium'
 import { BUILDING_LOOKUP_BUILD_BUDGET_MS } from '@/constants'
-import { isBuildingPart, tagValueNumber } from '@/utils/buildingStyle'
+import { isBuildingPart, tagValueNumber } from '@/utils/buildingTags'
 
 /** The sampler the patched stage declares and the facade shader reads. */
 export const BUILDING_LOOKUP_SAMPLER = 'tc3d_buildingLookup'
@@ -317,6 +317,22 @@ const PRIVATE = Cesium as unknown as CesiumPrivate
 const lookups = new WeakMap<object, { stats: TileFeatureStats; texture: LookupTexture }>()
 const emptyTextures = new WeakMap<LookupContext, LookupTexture>()
 
+/**
+ * Restyles one tile through `Cesium3DTileContent.applyStyle`, which Cesium marks `@private`
+ * (Cesium3DTileContent.js:268-270); a model's content sets its model's style, restyled on its next update.
+ * A throw is logged and the tile keeps its old style, so the pass goes on to the other tiles.
+ */
+function restyleTile(tile: Cesium.Cesium3DTile, style: Cesium.Cesium3DTileStyle): void {
+  try {
+    ;(tile.content as unknown as { applyStyle(style: Cesium.Cesium3DTileStyle): void }).applyStyle(style)
+  } catch (error) {
+    console.error(
+      '[buildingBaseLookup] restyling a built building tile failed; its shape types wait for the next restyle',
+      error,
+    )
+  }
+}
+
 function modelOf(content: Cesium.Cesium3DTileContent | undefined): (PrivateModel & object) | undefined {
   return (content as unknown as { _model?: PrivateModel } | undefined)?._model
 }
@@ -574,12 +590,15 @@ function release(model: object, attachment: Attachment): void {
  * @param tileset - The OSM Buildings tileset
  * @param scene - The scene drawing it
  * @param createTexture - Makes each tile's lookup texture (`createLookupTexture`)
+ * @param restyleWhen - Whether new stats can change the style (`isShapeFallbackOn`); when it
+ *   holds, each tile whose lookup a render pass built is restyled
  * @returns A function that stops listening and releases every lookup it built
  */
 export function attachBuildingLookup(
   tileset: Cesium.Cesium3DTileset,
   scene: Cesium.Scene,
   createTexture: LookupTextureFactory,
+  restyleWhen: () => boolean,
 ): () => void {
   const context = (scene as unknown as { context: LookupContext }).context
   if (!context.webgl2) {
@@ -594,12 +613,20 @@ export function attachBuildingLookup(
     unreadableLogged: false,
   }
   const pending = new Set<Cesium.Cesium3DTile>()
+  // Restyles only the tiles a pass built, while `restyleWhen` holds, so the style's shape fallback
+  // sees their new stats without re-evaluating every visible feature.
   const drain = () => {
     const start = performance.now()
+    const built: Cesium.Cesium3DTile[] = []
     for (const tile of pending) {
-      if (performance.now() - start > BUILDING_LOOKUP_BUILD_BUDGET_MS) return
-      if (tryBuildLookup(tile, attachment) !== 'waiting') pending.delete(tile)
+      if (performance.now() - start > BUILDING_LOOKUP_BUILD_BUDGET_MS) break
+      const outcome = tryBuildLookup(tile, attachment)
+      if (outcome !== 'waiting') pending.delete(tile)
+      if (outcome === 'built') built.push(tile)
     }
+    const style = tileset.style
+    if (built.length === 0 || style === undefined || !restyleWhen()) return
+    for (const tile of built) restyleTile(tile, style)
   }
   const removers = [
     tileset.tileLoad.addEventListener((tile: Cesium.Cesium3DTile) => pending.add(tile)),

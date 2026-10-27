@@ -1,5 +1,6 @@
 import * as Cesium from 'cesium'
 import { afterEach, describe, expect, it, vi } from 'vitest'
+import { BUILDING_LOOKUP_BUILD_BUDGET_MS } from '@/constants'
 import {
   attachBuildingLookup,
   BUILDING_LOOKUP_DEFINE,
@@ -16,9 +17,7 @@ import {
   lookupTexels,
   type PrimitiveGeometry,
 } from '@/utils/buildingBaseLookup'
-
-/** East-north-up at 0°N 0°E, where the geocentric and geodetic up agree: model z is up. */
-const ENU = Cesium.Transforms.eastNorthUpToFixedFrame(Cesium.Cartesian3.fromDegrees(0, 0, 0))
+import { BOX_TRIANGLES, ENU, type FakeContext, fakeContext, fakeModel } from '@/utils/buildingLookupFakes.test-support'
 
 interface Box {
   id: number
@@ -26,16 +25,6 @@ interface Box {
   y: [number, number]
   z: [number, number]
 }
-
-/** A closed box, faces counter-clockwise seen from outside. */
-const BOX_TRIANGLES = [
-  [0, 2, 1, 0, 3, 2],
-  [4, 5, 6, 4, 6, 7],
-  [0, 1, 5, 0, 5, 4],
-  [1, 2, 6, 1, 6, 5],
-  [2, 3, 7, 2, 7, 6],
-  [3, 0, 4, 3, 4, 7],
-].flat()
 
 function geometry(boxes: readonly Box[]): PrimitiveGeometry {
   const positions: number[] = []
@@ -255,70 +244,31 @@ describe('installBuildingLookupStage', () => {
   })
 })
 
-/** A WebGL2 context whose buffers are plain byte arrays, enough for the read-back. */
-function fakeContext() {
-  let bound: object | null = null
-  const store = new Map<object, ArrayBuffer>()
-  const gl = {
-    MAX_TEXTURE_SIZE: 0x0d33,
-    COPY_READ_BUFFER: 0x8f36,
-    getParameter: () => 4096,
-    bindBuffer: (_target: number, buffer: object | null) => {
-      bound = buffer
-    },
-    getBufferSubData: (_target: number, _offset: number, destination: Uint8Array) => {
-      destination.set(new Uint8Array(store.get(bound as object) as ArrayBuffer))
-    },
-  }
-  const upload = (view: ArrayBufferView) => {
-    const key = {}
-    store.set(key, view.buffer as ArrayBuffer)
-    return { _buffer: key, sizeInBytes: view.byteLength }
-  }
-  return { context: { webgl2: true, _gl: gl }, upload }
-}
-
-type FakeContext = ReturnType<typeof fakeContext>
-
-function fakeModel({ upload }: FakeContext, nodes: 'dense' | 'sparse' = 'dense') {
+/** A ready model drawing the terminal box. */
+function terminalModel(fake: FakeContext, nodes: 'dense' | 'sparse' = 'dense') {
   const { positions, featureIds, indices } = geometry([TERMINAL])
-  const runtimePrimitive = {
-    primitive: {
-      primitiveType: Cesium.PrimitiveType.TRIANGLES,
-      attributes: [
-        {
-          semantic: 'POSITION',
-          buffer: upload(positions),
-          count: 8,
-          componentDatatype: Cesium.ComponentDatatype.FLOAT,
-        },
-        {
-          semantic: '_FEATURE_ID',
-          setIndex: 0,
-          buffer: upload(featureIds as Float32Array),
-          count: 8,
-          componentDatatype: Cesium.ComponentDatatype.FLOAT,
-        },
-      ],
-      indices: {
-        buffer: upload(indices as Uint16Array),
-        count: indices.length,
-        indexDatatype: Cesium.IndexDatatype.UNSIGNED_SHORT,
-      },
-    },
-    drawCommand: { modelMatrix: ENU },
-  }
-  const node = { runtimePrimitives: [runtimePrimitive] }
-  return { ready: true, _sceneGraph: { _runtimeNodes: nodes === 'sparse' ? [undefined, node] : [node] } }
+  return fakeModel(fake, { positions, featureIds: featureIds as Float32Array, indices: indices as Uint16Array }, nodes)
 }
 
 function fakeTile(model: object, url: string, getFeature = () => properties({ elementId: url })) {
-  return { content: { _model: model, featuresLength: 1, url, getFeature } } as unknown as Cesium.Cesium3DTile
+  const content = { _model: model, featuresLength: 1, url, getFeature, applyStyle: vi.fn() }
+  return { content } as unknown as Cesium.Cesium3DTile
 }
 
-function attachFakes() {
+/** The `applyStyle` spy on a fake tile's content. */
+function applyStyleOf(tile: Cesium.Cesium3DTile) {
+  return (tile.content as unknown as { applyStyle: ReturnType<typeof vi.fn> }).applyStyle
+}
+
+/** Attaches the lookup to fakes; `restyleWhen` is the lookup's restyle predicate. */
+function attachFakes(restyleWhen: () => boolean = () => true) {
   const fake = fakeContext()
-  const tileset = { tileLoad: new Cesium.Event(), tileUnload: new Cesium.Event() }
+  const tileset = {
+    tileLoad: new Cesium.Event(),
+    tileUnload: new Cesium.Event(),
+    makeStyleDirty: vi.fn(),
+    style: { name: 'building style' },
+  }
   const scene = { postRender: new Cesium.Event(), context: fake.context }
   const textures: { destroy: ReturnType<typeof vi.fn> }[] = []
   const createTexture = vi.fn(() => {
@@ -330,6 +280,7 @@ function attachFakes() {
     tileset as unknown as Cesium.Cesium3DTileset,
     scene as unknown as Cesium.Scene,
     createTexture,
+    restyleWhen,
   )
   const render = () => scene.postRender.raiseEvent()
   return { fake, tileset, render, createTexture, textures, detach }
@@ -342,7 +293,7 @@ describe('attachBuildingLookup', () => {
 
   it("builds a loaded tile's one-row lookup at the next render, and releases it when the tile unloads", () => {
     const { fake, tileset, render, createTexture, textures } = attachFakes()
-    const tile = fakeTile(fakeModel(fake), 'a.glb')
+    const tile = fakeTile(terminalModel(fake), 'a.glb')
 
     tileset.tileLoad.raiseEvent(tile)
     expect(getTileFeatureStats(tile.content)).toBeUndefined()
@@ -359,11 +310,11 @@ describe('attachBuildingLookup', () => {
 
   it('releases every lookup on detach and stops listening', () => {
     const { fake, tileset, render, createTexture, textures, detach } = attachFakes()
-    tileset.tileLoad.raiseEvent(fakeTile(fakeModel(fake), 'a.glb'))
+    tileset.tileLoad.raiseEvent(fakeTile(terminalModel(fake), 'a.glb'))
     render()
 
     detach()
-    tileset.tileLoad.raiseEvent(fakeTile(fakeModel(fake), 'b.glb'))
+    tileset.tileLoad.raiseEvent(fakeTile(terminalModel(fake), 'b.glb'))
     render()
 
     expect(textures[0].destroy).toHaveBeenCalledTimes(1)
@@ -372,7 +323,7 @@ describe('attachBuildingLookup', () => {
 
   it('keeps a tile whose model is not ready queued until it is', () => {
     const { fake, tileset, render, createTexture } = attachFakes()
-    const model = { ...fakeModel(fake), ready: false }
+    const model = { ...terminalModel(fake), ready: false }
     const tile = fakeTile(model, 'a.glb')
 
     tileset.tileLoad.raiseEvent(tile)
@@ -387,12 +338,12 @@ describe('attachBuildingLookup', () => {
   it('drops a tile whose build throws, logs it once naming the tile, and builds the rest', () => {
     const error = vi.spyOn(console, 'error').mockImplementation(() => {})
     const { fake, tileset, render, createTexture } = attachFakes()
-    const broken = fakeTile(fakeModel(fake), 'broken.glb', () => {
+    const broken = fakeTile(terminalModel(fake), 'broken.glb', () => {
       throw new Error('no feature')
     })
 
     tileset.tileLoad.raiseEvent(broken)
-    tileset.tileLoad.raiseEvent(fakeTile(fakeModel(fake), 'good.glb'))
+    tileset.tileLoad.raiseEvent(fakeTile(terminalModel(fake), 'good.glb'))
     render()
     render()
 
@@ -402,11 +353,77 @@ describe('attachBuildingLookup', () => {
     expect(getTileFeatureStats(broken.content)).toBeUndefined()
   })
 
+  it('restyles each tile a pass built, and only those', () => {
+    const { fake, tileset, render, createTexture } = attachFakes(() => true)
+    const a = fakeTile(terminalModel(fake), 'a.glb')
+    const b = fakeTile(terminalModel(fake), 'b.glb')
+    const waiting = fakeTile({ ...terminalModel(fake), ready: false }, 'waiting.glb')
+    for (const tile of [a, b, waiting]) tileset.tileLoad.raiseEvent(tile)
+
+    render()
+
+    expect(createTexture).toHaveBeenCalledTimes(2)
+    for (const built of [a, b]) {
+      expect(applyStyleOf(built)).toHaveBeenCalledTimes(1)
+      expect(applyStyleOf(built)).toHaveBeenCalledWith(tileset.style)
+    }
+    expect(applyStyleOf(waiting)).not.toHaveBeenCalled()
+    expect(tileset.makeStyleDirty).not.toHaveBeenCalled()
+  })
+
+  it("keeps restyling the other built tiles when one tile's applyStyle throws", () => {
+    const error = vi.spyOn(console, 'error').mockImplementation(() => {})
+    const { fake, tileset, render } = attachFakes(() => true)
+    const first = fakeTile(terminalModel(fake), 'a.glb')
+    const second = fakeTile(terminalModel(fake), 'b.glb')
+    applyStyleOf(first).mockImplementation(() => {
+      throw new Error('no model')
+    })
+    tileset.tileLoad.raiseEvent(first)
+    tileset.tileLoad.raiseEvent(second)
+
+    expect(() => render()).not.toThrow()
+
+    expect(applyStyleOf(second)).toHaveBeenCalledTimes(1)
+    expect(error).toHaveBeenCalledTimes(1)
+  })
+
+  it('restyles nothing while the shape fallback is off', () => {
+    const { fake, tileset, render, createTexture } = attachFakes(() => false)
+    const tile = fakeTile(terminalModel(fake), 'a.glb')
+    tileset.tileLoad.raiseEvent(tile)
+
+    render()
+
+    expect(createTexture).toHaveBeenCalledTimes(1)
+    expect(applyStyleOf(tile)).not.toHaveBeenCalled()
+    expect(tileset.makeStyleDirty).not.toHaveBeenCalled()
+  })
+
+  it('restyles the tile it built when a pass runs out of budget', () => {
+    const { fake, tileset, render, createTexture } = attachFakes(() => true)
+    const first = fakeTile(terminalModel(fake), 'a.glb')
+    const second = fakeTile(terminalModel(fake), 'b.glb')
+    tileset.tileLoad.raiseEvent(first)
+    tileset.tileLoad.raiseEvent(second)
+    // The pass starts at 0 and checks the budget at 0 before the first tile, then past it.
+    vi.spyOn(performance, 'now')
+      .mockReturnValueOnce(0)
+      .mockReturnValueOnce(0)
+      .mockReturnValue(BUILDING_LOOKUP_BUILD_BUDGET_MS + 1)
+
+    render()
+
+    expect(createTexture).toHaveBeenCalledTimes(1)
+    expect(applyStyleOf(first)).toHaveBeenCalledTimes(1)
+    expect(applyStyleOf(second)).not.toHaveBeenCalled()
+  })
+
   it('skips the empty slots of a sparse runtime-node list', () => {
     const error = vi.spyOn(console, 'error').mockImplementation(() => {})
     const { fake, tileset, render, createTexture } = attachFakes()
 
-    tileset.tileLoad.raiseEvent(fakeTile(fakeModel(fake, 'sparse'), 'a.glb'))
+    tileset.tileLoad.raiseEvent(fakeTile(terminalModel(fake, 'sparse'), 'a.glb'))
     render()
 
     expect(error).not.toHaveBeenCalled()

@@ -1,17 +1,18 @@
 import * as Cesium from 'cesium'
-import { describe, expect, it } from 'vitest'
+import { afterEach, describe, expect, it } from 'vitest'
+import { attachBuildingLookup } from '@/utils/buildingBaseLookup'
+import { BOX_TRIANGLES, type FakeContext, fakeContext, fakeModel } from '@/utils/buildingLookupFakes.test-support'
 import {
   applyBuildingStyle,
   createBuildingStyle,
   decodePackedColour,
   FacadeClass,
-  isBuildingPart,
   PACK_CHANNEL_MIN,
   PACK_CODE_MAX,
   PACK_HASH_STATES,
   PACK_HEIGHT_STEP_M,
   type PackedBuilding,
-  tagValueNumber,
+  setShapeFallbackArea,
 } from '@/utils/buildingStyle'
 
 /** A batch-table cell: a column can hold null or '' where a building lacks the tag. */
@@ -278,27 +279,207 @@ describe('createBuildingStyle tag numbers', () => {
   })
 })
 
-describe('tagValueNumber', () => {
-  it('reads a number, metres and a decimal comma, and gives NaN for anything else', () => {
-    expect(tagValueNumber(12)).toBe(12)
-    expect(tagValueNumber('6 m')).toBe(6)
-    expect(tagValueNumber(' 4,5 ')).toBe(4.5)
-    expect(tagValueNumber('-2')).toBe(-2)
-    expect(tagValueNumber('10;12')).toBeNaN()
-    expect(tagValueNumber('30 ft')).toBeNaN()
-    expect(tagValueNumber('')).toBeNaN()
-    expect(tagValueNumber(null)).toBeNaN()
-    expect(tagValueNumber(undefined)).toBeNaN()
-    expect(tagValueNumber(Number.POSITIVE_INFINITY)).toBeNaN()
+/** A ready model drawing one feature: a 10 m tall box of `east` x `north` metres. */
+function boxModel(fake: FakeContext, east: number, north: number) {
+  const positions: number[] = []
+  for (const z of [0, 10]) positions.push(0, 0, z, east, 0, z, east, north, z, 0, north, z)
+  return fakeModel(fake, {
+    positions: new Float32Array(positions),
+    featureIds: new Float32Array(8),
+    indices: new Uint16Array(BOX_TRIANGLES),
   })
-})
+}
 
-describe('isBuildingPart', () => {
-  it('is a part exactly when the feature carries its own part#elementId', () => {
-    expect(isBuildingPart(stubFeature({ elementId: 'w1', 'part#elementId': 'w9' }))).toBe(true)
-    expect(isBuildingPart(stubFeature({ 'part#elementId': 0 }))).toBe(true)
-    expect(isBuildingPart(stubFeature({ elementId: 'w1', 'part#height': '12' }))).toBe(false)
-    expect(isBuildingPart(stubFeature({ elementId: 'w1', 'part#elementId': null }))).toBe(false)
+/** Inside the test aerodrome: a box around `AT_KSFO`. */
+const insideTestBox = (lon: number, lat: number) => lon > -122.4 && lon < -122.37 && lat > 37.6 && lat < 37.63
+
+describe('shape fallback', () => {
+  const detachers: (() => void)[] = []
+
+  afterEach(() => {
+    setShapeFallbackArea(null)
+    for (const detach of detachers.splice(0)) detach()
+  })
+
+  /** A one-feature tile content with `tags`; its footprint stats are built when `footprint` is given. */
+  function tileContent(tags: Tags, footprint?: { east: number; north: number }): Cesium.Cesium3DTileContent {
+    const fake = fakeContext()
+    const model = footprint === undefined ? {} : boxModel(fake, footprint.east, footprint.north)
+    const getFeature = () => ({ getProperty: (name: string) => tags[name] })
+    const content = { _model: model, featuresLength: 1, url: 'shape.glb', getFeature }
+    if (footprint !== undefined) {
+      const tileset = { tileLoad: new Cesium.Event(), tileUnload: new Cesium.Event(), makeStyleDirty: () => {} }
+      const scene = { postRender: new Cesium.Event(), context: fake.context }
+      detachers.push(
+        attachBuildingLookup(
+          tileset as unknown as Cesium.Cesium3DTileset,
+          scene as unknown as Cesium.Scene,
+          () => ({ destroy: () => {} }),
+          () => false,
+        ),
+      )
+      tileset.tileLoad.raiseEvent({ content })
+      scene.postRender.raiseEvent()
+    }
+    return content as unknown as Cesium.Cesium3DTileContent
+  }
+
+  /** The class the style gives the tile's one feature. */
+  function shapeClass(tags: Tags, footprint?: { east: number; north: number }): number {
+    const feature = { ...stubFeature(tags), content: tileContent(tags, footprint), featureId: 0 }
+    const colour = (style.color as Cesium.StyleExpression).evaluateColor(
+      feature as unknown as Cesium.Cesium3DTileFeature,
+      new Cesium.Color(),
+    )
+    const rgb: [number, number, number] = [
+      Math.round(colour.red * 255),
+      Math.round(colour.green * 255),
+      Math.round(colour.blue * 255),
+    ]
+    return decodePackedColour(rgb).facadeClass
+  }
+
+  const M2_1600 = { east: 40, north: 40 }
+  const M2_1400 = { east: 35, north: 40 }
+  const M2_1200 = { east: 30, north: 40 }
+  const M2_2000 = { east: 50, north: 40 }
+  const OUTSIDE = { 'cesium#latitude': 37.7, 'cesium#longitude': -122.2 }
+  const UNTYPED = { ...AT_KSFO, building: 'yes' }
+
+  it.each<[string, Tags, { east: number; north: number }, number]>([
+    [
+      'untyped, 1,600 m², estimated 10 m, untagged levels, inside → HANGAR',
+      { ...UNTYPED, 'cesium#estimatedHeight': 10 },
+      M2_1600,
+      FacadeClass.HANGAR,
+    ],
+    [
+      'untyped, 1,400 m², estimated 10 m, inside → GENERIC',
+      { ...UNTYPED, 'cesium#estimatedHeight': 10 },
+      M2_1400,
+      FacadeClass.GENERIC,
+    ],
+    [
+      'untyped, 1,600 m², estimated 25 m, inside → GENERIC',
+      { ...UNTYPED, 'cesium#estimatedHeight': 25 },
+      M2_1600,
+      FacadeClass.GENERIC,
+    ],
+    [
+      'untyped, 1,600 m², building:levels 3, inside → GENERIC',
+      { ...UNTYPED, 'building:levels': '3', 'cesium#estimatedHeight': 9 },
+      M2_1600,
+      FacadeClass.GENERIC,
+    ],
+    [
+      'untyped, 1,200 m², building:levels 5, inside → GARAGE',
+      { ...UNTYPED, 'building:levels': '5', 'cesium#estimatedHeight': 15 },
+      M2_1200,
+      FacadeClass.GARAGE,
+    ],
+    [
+      'untyped, 1,200 m², height 15 (no levels tag), inside → GARAGE',
+      { ...UNTYPED, height: '15', 'cesium#estimatedHeight': 15 },
+      M2_1200,
+      FacadeClass.GARAGE,
+    ],
+    [
+      'untyped, 2,000 m², height 15 (no levels tag), estimated 15 m, inside → HANGAR',
+      { ...UNTYPED, height: '15', 'cesium#estimatedHeight': 15 },
+      M2_2000,
+      FacadeClass.HANGAR,
+    ],
+    [
+      'untyped, 2,000 m², height 9 (no levels tag), estimated 9 m, inside → HANGAR',
+      { ...UNTYPED, height: '9', 'cesium#estimatedHeight': 9 },
+      M2_2000,
+      FacadeClass.HANGAR,
+    ],
+    [
+      'untyped, 1,200 m², building:levels 9, building:min_level 3, inside → GARAGE',
+      { ...UNTYPED, 'building:levels': '9', 'building:min_level': '3', 'cesium#estimatedHeight': 27 },
+      M2_1200,
+      FacadeClass.GARAGE,
+    ],
+    [
+      'untyped, 2,000 m², height 24 (no levels tag), estimated 24 m, inside → GARAGE',
+      { ...UNTYPED, height: '24', 'cesium#estimatedHeight': 24 },
+      M2_2000,
+      FacadeClass.GARAGE,
+    ],
+    [
+      'untyped, 1,200 m², building:min_level 1 (no levels), height 15, inside → GARAGE',
+      { ...UNTYPED, 'building:min_level': '1', height: '15', 'cesium#estimatedHeight': 15 },
+      M2_1200,
+      FacadeClass.GARAGE,
+    ],
+    [
+      'untyped part, 1,200 m², part#height 24, part#min_height 15, inside → GENERIC',
+      {
+        ...AT_KSFO,
+        'part#elementId': 'w9',
+        'part#height': '24',
+        'part#min_height': '15',
+        'cesium#estimatedHeight': 24,
+      },
+      M2_1200,
+      FacadeClass.GENERIC,
+    ],
+    [
+      'untyped, 1,200 m², building:levels 9, inside → GENERIC',
+      { ...UNTYPED, 'building:levels': '9', 'cesium#estimatedHeight': 27 },
+      M2_1200,
+      FacadeClass.GENERIC,
+    ],
+    [
+      'untyped, 1,200 m², no levels or height tag, estimated 15 m, inside → GENERIC',
+      { ...UNTYPED, 'cesium#estimatedHeight': 15 },
+      M2_1200,
+      FacadeClass.GENERIC,
+    ],
+    [
+      'part: part#building:levels 6, parent building:levels 1, 1,200 m², inside → GARAGE',
+      {
+        ...AT_KSFO,
+        'part#elementId': 'w9',
+        'part#building:levels': '6',
+        'building:levels': '1',
+        'cesium#estimatedHeight': 3,
+      },
+      M2_1200,
+      FacadeClass.GARAGE,
+    ],
+    [
+      'untyped, 1,600 m², outside → GENERIC',
+      { ...OUTSIDE, building: 'yes', 'cesium#estimatedHeight': 10 },
+      M2_1600,
+      FacadeClass.GENERIC,
+    ],
+    [
+      'building=house, 1,600 m², inside → HOUSE',
+      { ...AT_KSFO, building: 'house', 'cesium#estimatedHeight': 10 },
+      M2_1600,
+      FacadeClass.HOUSE,
+    ],
+    [
+      'grouping-relation part typed TERMINAL by the outline table, 1,600 m², inside → TERMINAL',
+      { ...AT_KSFO, type: 'building', elementId: 15730419, 'part#elementId': 1, 'cesium#estimatedHeight': 10 },
+      M2_1600,
+      FacadeClass.TERMINAL,
+    ],
+  ])('%s', (_name, tags, footprint, expected) => {
+    setShapeFallbackArea(insideTestBox)
+    expect(shapeClass(tags, footprint)).toBe(expected)
+  })
+
+  it('untyped, 1,600 m², area null (fallback off) → GENERIC', () => {
+    setShapeFallbackArea(null)
+    expect(shapeClass({ ...UNTYPED, 'cesium#estimatedHeight': 10 }, M2_1600)).toBe(FacadeClass.GENERIC)
+  })
+
+  it('untyped, inside, tile stats not built yet → GENERIC', () => {
+    setShapeFallbackArea(insideTestBox)
+    expect(shapeClass({ ...UNTYPED, 'cesium#estimatedHeight': 10 })).toBe(FacadeClass.GENERIC)
   })
 })
 

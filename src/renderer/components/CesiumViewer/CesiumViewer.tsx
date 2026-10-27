@@ -1,7 +1,8 @@
 import * as Cesium from 'cesium'
 import { useEffect, useMemo, useRef, useState } from 'react'
+import { aerodromeService } from '@/services/AerodromeService'
 import { attachBuildingLookup, createLookupTexture, installBuildingLookupStage } from '@/utils/buildingBaseLookup'
-import { applyBuildingStyle } from '@/utils/buildingStyle'
+import { applyBuildingStyle, isShapeFallbackOn, setShapeFallbackArea } from '@/utils/buildingStyle'
 import { createFacadeShader } from '@/utils/facadeShader'
 import { useAgentHarness } from '../../hooks/useAgentHarness'
 import { setInterpolationTerrainData, useAircraftInterpolation } from '../../hooks/useAircraftInterpolation'
@@ -733,7 +734,18 @@ function CesiumViewer({ viewportId = 'main', isInset = false, isActivated = true
 
           tileset.customShader = createFacadeShader()
           applyBuildingStyle(tileset)
-          detachLookup = attachBuildingLookup(tileset, viewer.scene, createLookupTexture)
+          aerodromeService
+            .load()
+            .then(() => {
+              if (!isCancelled && isShapeFallbackOn()) tileset.makeStyleDirty()
+            })
+            .catch((error: unknown) => {
+              console.error(
+                '[CesiumViewer] Aerodrome boundaries failed to load; buildings near the field keep their tag types',
+                error,
+              )
+            })
+          detachLookup = attachBuildingLookup(tileset, viewer.scene, createLookupTexture, isShapeFallbackOn)
 
           viewer.scene.primitives.add(tileset)
           currentTileset = tileset
@@ -761,6 +773,18 @@ function CesiumViewer({ viewportId = 'main', isInset = false, isActivated = true
     if (!buildingsTileset) return
     buildingsTileset.shadows = aircraftShadowsOnly ? Cesium.ShadowMode.DISABLED : Cesium.ShadowMode.ENABLED
   }, [buildingsTileset, aircraftShadowsOnly])
+
+  // The building style types untyped buildings by shape inside the selected airport's aerodrome
+  // boundary. Every viewer sets the same area and restyles its own tileset; only the main viewer
+  // clears it, so closing an inset leaves the main view's fallback on.
+  const currentIcao = currentAirport?.icao
+  useEffect(() => {
+    setShapeFallbackArea(currentIcao ? (lon, lat) => aerodromeService.contains(currentIcao, lon, lat) : null)
+    if (buildingsTileset && !buildingsTileset.isDestroyed()) buildingsTileset.makeStyleDirty()
+    return () => {
+      if (!isInset) setShapeFallbackArea(null)
+    }
+  }, [currentIcao, buildingsTileset, isInset])
 
   // Setup Babylon root node when airport changes OR when in orbit mode without airport
   // Also set reference position for VATSIM distance filtering

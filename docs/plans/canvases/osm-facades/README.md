@@ -8,7 +8,7 @@ The tileset's colour blend is MIX at amount 0, so the packed colour never tints 
 
 | File | Pose | What it shows |
 |------|------|---------------|
-| `ksfo-garage-noon.png` | KSFO tower eye, heading 235, pitch −14, FOV 35 | The curved central garage below the tower. The building under the tower is OSM element 15730419, the International Terminal Main Hall; the terminal behind it gets office bands. |
+| `ksfo-garage-noon.png` | KSFO tower eye, heading 235, pitch −14, FOV 35 | The curved central garage below the tower. The building under the tower is OSM relation 15730419, the International Terminal Main Hall (its outline relation is 14273628, `aeroway=terminal`); the curved garage is relation 2920181, "Domestic Garage". The terminal behind it gets office bands. |
 | `ksfo-garage-night.png` | same, 22:00 | Lit share 0.28 on the glass classes; garages tagged `amenity=parking` have no lit windows. |
 | `ksfo-tower-noon.png` | KSFO tower eye, heading 290, pitch −4, FOV 60 (wide) | Terminals and boarding areas (tagged `aeroway=terminal`, so the office grammar and the terminal palette) in front, the central garage's ring at the bottom, San Bruno 2–5 km behind. |
 | `ksfo-tower-night.png` | same, 22:00 | Night look of the wide view. |

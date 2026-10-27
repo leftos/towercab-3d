@@ -17,6 +17,8 @@
  */
 
 import * as Cesium from 'cesium'
+import { getTileFeatureStats } from '@/utils/buildingBaseLookup'
+import { isBuildingPart, tagValueNumber } from '@/utils/buildingTags'
 import buildingOutlines from '../data/buildingOutlines.json'
 
 /** Facade grammar a building gets, by its OSM tags. */
@@ -161,36 +163,9 @@ const PART_KEYS = heightKeys('part#')
 
 type Feature = Cesium.Cesium3DTileFeature
 
-/** A cell holding one number with an optional trailing `m`; a decimal comma is replaced first. */
-const TAG_NUMBER = /^(-?\d+(?:\.\d+)?)\s*m?$/
-
-/**
- * A tag cell's number, NaN when the cell holds anything else (absent, a multi-value, feet, empty).
- *
- * @param value - The cell, as `getProperty` returns it
- * @returns The number in metres, or NaN
- */
-export function tagValueNumber(value: unknown): number {
-  if (typeof value === 'number') return Number.isFinite(value) ? value : Number.NaN
-  if (typeof value !== 'string') return Number.NaN
-  const match = TAG_NUMBER.exec(value.trim().replace(',', '.'))
-  return match === null ? Number.NaN : Number(match[1])
-}
-
 /** A tag's number, NaN when the cell holds anything else (a multi-value, feet, empty). */
 function tagNumber(feature: Feature, name: string): number {
   return tagValueNumber(feature.getProperty(name))
-}
-
-/**
- * Whether a feature is a building part: it carries its own `part#elementId` (its unprefixed tags
- * are then its parent building's).
- *
- * @param feature - A tile feature, or anything that reads its properties
- */
-export function isBuildingPart(feature: { getProperty(name: string): unknown }): boolean {
-  const part = feature.getProperty('part#elementId')
-  return part !== undefined && part !== null
 }
 
 function orZero(value: number): number {
@@ -241,6 +216,104 @@ function classifyFeature(feature: Feature): FacadeClassCode {
   return outline === undefined ? FacadeClass.GENERIC : classify((key) => outline[key])
 }
 
+/** Smallest footprint a shape-typed hangar has, in m². */
+const SHAPE_HANGAR_MIN_AREA_M2 = 1500
+/** Tallest `cesium#estimatedHeight` a shape-typed hangar has, in metres. */
+const SHAPE_HANGAR_MAX_HEIGHT_M = 20
+/** Most storeys a shape-typed hangar has; 0 (none tagged) also passes. */
+const SHAPE_HANGAR_MAX_LEVELS = 2
+/** Smallest footprint a shape-typed garage has, in m². */
+const SHAPE_GARAGE_MIN_AREA_M2 = 1000
+/** Fewest storeys a shape-typed garage has. */
+const SHAPE_GARAGE_MIN_LEVELS = 4
+/** Most storeys a shape-typed garage has. */
+const SHAPE_GARAGE_MAX_LEVELS = 8
+/** Storey height that turns a tagged height without a levels tag into storeys. */
+const SHAPE_METRES_PER_LEVEL = 3
+
+/** Whether a position (degrees) lies where the shape fallback applies; null turns it off. */
+type ShapeFallbackArea = (lon: number, lat: number) => boolean
+
+let shapeFallbackArea: ShapeFallbackArea | null = null
+
+/**
+ * Sets where the shape fallback types untyped buildings, usually the selected airport's aerodrome
+ * boundary. The tileset must be restyled (`makeStyleDirty`) for a change to show.
+ *
+ * @param contains - Whether a longitude and latitude in degrees lie inside the area, or null for none
+ */
+export function setShapeFallbackArea(contains: ShapeFallbackArea | null): void {
+  shapeFallbackArea = contains
+}
+
+/** Whether the shape fallback has an area, so new footprint stats can change a building's class. */
+export function isShapeFallbackOn(): boolean {
+  return shapeFallbackArea !== null
+}
+
+/**
+ * The tile content a feature belongs to. Cesium marks the `content` getter `@private`
+ * (Source/Scene/Cesium3DTileFeature.js), so its declaration file leaves it out.
+ */
+function featureContent(feature: Feature): Cesium.Cesium3DTileContent {
+  return (feature as unknown as { readonly content: Cesium.Cesium3DTileContent }).content
+}
+
+/** What `storeysAndWall` read that the shape rules use. */
+interface TaggedSize {
+  /** Tagged levels less the tagged `building:min_level`; 0 when no levels are tagged. */
+  readonly storeys: number
+  /** `part#height` for a part, `height` for a building; NaN when untagged. */
+  readonly heightTagM: number
+  /** `part#min_height` for a part, `min_height` for a building; 0 when untagged. */
+  readonly minHeightM: number
+}
+
+/**
+ * The class a building's footprint suggests inside the fallback area: large and low is a hangar,
+ * large with 4 to 8 storeys a garage, anything else GENERIC. GENERIC too until the feature's tile
+ * has its footprint stats, so the building switches class when they arrive.
+ *
+ * A shape-typed hangar or garage is a guess: a fire station inside the fence gets hangar walls.
+ * The checks run cheapest first, the area test on the feature's position last.
+ */
+function classifyByShape(feature: Feature, area: ShapeFallbackArea, size: TaggedSize): FacadeClassCode {
+  const footprint = getTileFeatureStats(featureContent(feature))?.area[feature.featureId]
+  const smallest = Math.min(SHAPE_HANGAR_MIN_AREA_M2, SHAPE_GARAGE_MIN_AREA_M2)
+  if (footprint === undefined || !(footprint >= smallest)) return FacadeClass.GENERIC
+  const shaped = shapeClass(feature, footprint, size)
+  if (shaped === FacadeClass.GENERIC) return shaped
+  const inside = area(tagNumber(feature, 'cesium#longitude'), tagNumber(feature, 'cesium#latitude'))
+  return inside ? shaped : FacadeClass.GENERIC
+}
+
+/**
+ * The shape rules before the area test. Storeys below 0 count as none tagged. The hangar rule runs
+ * first; the garage rule then counts a tagged height above the tagged base in 3 m storeys when no
+ * storeys are tagged.
+ */
+function shapeClass(feature: Feature, footprint: number, size: TaggedSize): FacadeClassCode {
+  const storeys = Math.max(size.storeys, 0)
+  if (
+    footprint >= SHAPE_HANGAR_MIN_AREA_M2 &&
+    storeys <= SHAPE_HANGAR_MAX_LEVELS &&
+    tagNumber(feature, 'cesium#estimatedHeight') <= SHAPE_HANGAR_MAX_HEIGHT_M
+  ) {
+    return FacadeClass.HANGAR
+  }
+  const levels = storeys > 0 ? storeys : Math.round((size.heightTagM - size.minHeightM) / SHAPE_METRES_PER_LEVEL)
+  return footprint >= SHAPE_GARAGE_MIN_AREA_M2 && levels >= SHAPE_GARAGE_MIN_LEVELS && levels <= SHAPE_GARAGE_MAX_LEVELS
+    ? FacadeClass.GARAGE
+    : FacadeClass.GENERIC
+}
+
+/** A feature's class from its tags and the outline table, then, when still GENERIC, its shape. */
+function classifyWithFallback(feature: Feature, size: TaggedSize): FacadeClassCode {
+  const tagged = classifyFeature(feature)
+  const area = shapeFallbackArea
+  return tagged === FacadeClass.GENERIC && area !== null ? classifyByShape(feature, area, size) : tagged
+}
+
 /**
  * Storeys and wall height in metres (NaN when unknown) of the part, or of the building. Part-ness
  * is the feature's own `part#elementId`: a part reads only its own `part#` tags, never the parent
@@ -248,19 +321,21 @@ function classifyFeature(feature: Feature): FacadeClassCode {
  * `cesium#estimatedHeight`, so a part without its own height stays unknown and the shader keeps
  * the grammar's storey.
  */
-function storeysAndWall(feature: Feature): { storeys: number; wallM: number } {
+function storeysAndWall(feature: Feature): TaggedSize & { wallM: number } {
   const isPart = isBuildingPart(feature)
   const keys = isPart ? PART_KEYS : BUILDING_KEYS
   const levels = isPart ? tagNumber(feature, 'part#building:levels') : tagNumber(feature, 'building:levels')
   const height = isPart ? tagNumber(feature, 'part#height') : tagNumber(feature, 'height')
+  const minHeightM = orZero(tagNumber(feature, keys.minHeight))
 
   const storeys = orZero(levels) - orZero(tagNumber(feature, keys.minLevel))
-  if (isPart && Number.isNaN(height)) return { storeys, wallM: Number.NaN }
+  const size = { storeys, heightTagM: height, minHeightM }
+  if (isPart && Number.isNaN(height)) return { ...size, wallM: Number.NaN }
   const taggedHeight = !Number.isNaN(height)
   const topM = taggedHeight ? height : tagNumber(feature, 'cesium#estimatedHeight')
-  const totalM = Math.max(topM - orZero(tagNumber(feature, keys.minHeight)), 0)
+  const totalM = Math.max(topM - minHeightM, 0)
   const roofM = taggedHeight ? roofHeight(feature, keys, totalM, storeys) : 0
-  return { storeys, wallM: totalM - roofM }
+  return { ...size, wallM: totalM - roofM }
 }
 
 /** The wall keeps at least one storey below a tagged `roof:height`. */
@@ -305,8 +380,9 @@ class BuildingColour extends Cesium.StyleExpression {
   override evaluateColor(feature: Feature | undefined, result?: Cesium.Color): Cesium.Color {
     // Cesium evaluates the style with no feature for tile content that has none.
     if (feature === undefined) return Cesium.Color.clone(Cesium.Color.WHITE, result)
-    const { storeys, wallM } = storeysAndWall(feature)
-    const red = 255 - (classifyFeature(feature) * PACK_HASH_STATES + hashOf(feature))
+    const size = storeysAndWall(feature)
+    const { storeys, wallM } = size
+    const red = 255 - (classifyWithFallback(feature, size) * PACK_HASH_STATES + hashOf(feature))
     const green = 255 - clampCode(storeys)
     const blue = 255 - clampCode(wallM / PACK_HEIGHT_STEP_M)
     return Cesium.Color.fromBytes(red, green, blue, 255, result)
