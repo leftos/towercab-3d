@@ -1,0 +1,295 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>TC3D-386: facade art direction prototype</title>
+<style>
+  :root {
+    --bg: #f6f6f3;
+    --panel: #ffffff;
+    --text: #1d1f22;
+    --muted: #5d636b;
+    --rule: #d9dbdf;
+    --accent: #0b6bcb;
+    --note-bg: #fff6dc;
+    --note-rule: #e8c766;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --bg: #131518;
+      --panel: #1b1e22;
+      --text: #e7e9ec;
+      --muted: #9aa1aa;
+      --rule: #30353b;
+      --accent: #6cb4ff;
+      --note-bg: #2b2616;
+      --note-rule: #7a6420;
+    }
+  }
+  :root[data-theme="dark"] {
+    --bg: #131518;
+    --panel: #1b1e22;
+    --text: #e7e9ec;
+    --muted: #9aa1aa;
+    --rule: #30353b;
+    --accent: #6cb4ff;
+    --note-bg: #2b2616;
+    --note-rule: #7a6420;
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--text); font: 15px/1.5 system-ui, -apple-system, "Segoe UI", sans-serif; }
+  main { max-width: 1800px; margin: 0 auto; padding: 24px 16px 64px; }
+  h1 { font-size: 1.6rem; margin: 0 0 4px; }
+  h2 { font-size: 1.25rem; margin: 0 0 6px; }
+  h3 { font-size: 1rem; margin: 18px 0 2px; }
+  p, li { max-width: 1150px; }
+  .sub { color: var(--muted); margin: 0 0 16px; }
+  .note { background: var(--note-bg); border-left: 4px solid var(--note-rule); border-radius: 4px; padding: 10px 14px; margin: 0 0 16px; max-width: 1200px; }
+  a { color: var(--accent); }
+  .toc { display: flex; flex-wrap: wrap; gap: 6px 16px; margin: 0 0 24px; padding: 0; list-style: none; }
+  .toc a { text-decoration: none; }
+  section { background: var(--panel); border: 1px solid var(--rule); border-radius: 8px; padding: 16px; margin: 0 0 22px; }
+  .cap { color: var(--muted); margin: 0 0 8px; font-size: 0.92rem; }
+  .bld { font-size: 0.88rem; margin: 0 0 6px; }
+  .two, .three, .four { display: grid; gap: 12px; align-items: start; }
+  .two { grid-template-columns: repeat(2, minmax(0, 1fr)); max-width: 1300px; }
+  .three { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+  .four { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+  figure { margin: 0; }
+  figure img { display: block; width: 100%; height: auto; border-radius: 4px; border: 1px solid var(--rule); background: #000; }
+  figcaption { font-size: 0.88rem; margin: 6px 0 0; }
+  figcaption b { display: block; font-size: 0.95rem; }
+  table { border-collapse: collapse; font-size: 0.9rem; }
+  td, th { border: 1px solid var(--rule); padding: 4px 10px; text-align: left; }
+  code { font-family: ui-monospace, "Cascadia Code", Consolas, monospace; font-size: 0.9em; }
+  @media (max-width: 1100px) {
+    .three, .four { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  }
+  @media (max-width: 640px) {
+    .two, .three, .four { grid-template-columns: minmax(0, 1fr); }
+  }
+</style>
+</head>
+<body>
+<main>
+<h1>TC3D-386: the facade art direction, prototyped</h1>
+<p class="sub">OSM Buildings facades, branch <code>tc3d-386</code> from <code>feat/osm-facades</code> a36d2fd, with the TC3D-376 prototype applied under this one. Headless Edge, Vite dev server (<code>vite:headless</code>), 1596×800 canvas, building quality high, weather effects and clouds off. Day stills at 12:00, night stills at 22:00 local. The spec is the art-direction guide, <code>docs/plans/osm-facade-art-direction.md</code>.</p>
+
+<div class="note">
+<p><b>The question.</b> Does the guide's look answer "really basic, and not beautiful / detailed enough" and "windows cut off at the bottom or top of the building"? Every section shows the TC3D-376 buildings from the TC3D-376 cameras in three lanes:</p>
+<ul>
+<li><b>Today</b>: what the app draws now (the TC3D-376 still).</li>
+<li><b>TC3D-376 proposed</b>: that mock's look for the building (the TC3D-376 still).</li>
+<li><b>Art direction</b>: new. A throwaway shader (<code>prototype.patch</code> beside this page, not code that will land) draws the guide's section 5 items 1-6 for every class, then each class's one-glance read from section 3, forced on the shot's one building as in TC3D-376.</li>
+</ul>
+<p>What every Art-direction still carries: <b>vertical fitting</b> (a 0.45 m base band, a ground storey, whole storeys stretched to fit, a parapet of at least 1.2 m, so no window is cut by the roof line or the ground; 2.1), <b>clustered, varied lit windows</b> at night (2.6), <b>grime and contact darkening</b> at the foot (2.4), <b>glass as an interior behind a Fresnel sky reflection</b> with blinds (2.3), <b>tint jitter</b> per building (2.4), and <b>frames, recess shadows and sills</b>, with mullions, rain streaks and PTAC grilles only up close (2.2).</p>
+<p><b>The wall top is approximate.</b> The shader still reads the wall height from the packed 2 m bucket, so storeys are fitted under the bucket's lower bound with the guide's 1.2 m parapet, and the coping is drawn at the bucket's centre, up to 1 m off the true roof edge. The exact top from geometry is TC3D-388's work.</p>
+</div>
+
+<ul class="toc">
+<li><a href="#close">Close-ups</a></li>
+<li><a href="#canopy">1. Canopy and carport</a></li>
+<li><a href="#warehouse">2. Warehouse / industrial</a></li>
+<li><a href="#retail">3. Retail</a></li>
+<li><a href="#utility">4. Utility / service shed</a></li>
+<li><a href="#apartments">5. Apartments</a></li>
+<li><a href="#hotel">6. Hotel</a></li>
+<li><a href="#school">7. School / civic</a></li>
+<li><a href="#skybridge">8. Skybridge</a></li>
+<li><a href="#fire">9. Fire station / ARFF</a></li>
+<li><a href="#tank">10. Storage tank</a></li>
+<li><a href="#rules">Small rule additions</a></li>
+<li><a href="#perf">Frame time</a></li>
+<li><a href="#approx">What is approximate, and guide values not hit</a></li>
+</ul>
+
+<section id="close">
+<h2>Close-ups: near-tier detail (Tier A, about 16 px per metre)</h2>
+<p class="cap">Today against Art direction, day and night, so frames, recess shadows, sills, blinds, rain streaks and PTAC grilles can be judged.</p>
+<h3>Hotel: SFO Airport Marriott at 100 m</h3>
+<p class="cap">Today draws OFFICE ribbons on it; the art lane is HOTEL with frames, recesses, sills, rain streaks and PTAC grilles (Tier A at this range).</p>
+<div class="four"><figure><img src="close-hotel-sfo-12-today.jpg" alt="Today, 12:00"><figcaption>Today, 12:00</figcaption></figure><figure><img src="close-hotel-sfo-22-today.jpg" alt="Today, 22:00"><figcaption>Today, 22:00</figcaption></figure><figure><img src="close-hotel-sfo-12-art.jpg" alt="Art direction, 12:00"><figcaption>Art direction, 12:00</figcaption></figure><figure><img src="close-hotel-sfo-22-art.jpg" alt="Art direction, 22:00"><figcaption>Art direction, 22:00</figcaption></figure></div>
+<h3>Office: the Marriott forced OFFICE at 100 m</h3>
+<p class="cap">Today is OFFICE (the Marriott&#x27;s class today). Art direction: precast spandrels 0.42 of the storey, vision glass with mullions every 1.5 m, coated glass reflecting the ground and haze, whole floors lit or dark at night, cool-neutral.</p>
+<div class="four"><figure><img src="close-hotel-sfo-12-today.jpg" alt="Today, 12:00"><figcaption>Today, 12:00</figcaption></figure><figure><img src="close-hotel-sfo-22-today.jpg" alt="Today, 22:00"><figcaption>Today, 22:00</figcaption></figure><figure><img src="close-office-sfo-12-art.jpg" alt="Art direction, 12:00"><figcaption>Art direction, 12:00</figcaption></figure><figure><img src="close-office-sfo-22-art.jpg" alt="Art direction, 22:00"><figcaption>Art direction, 22:00</figcaption></figure></div>
+<h3>Fire station: LAFD 114 at 70 m (the TC3D-376 camera)</h3>
+<p class="cap">SFO Fire Station 1 is a 3 m box with no room for a door, so the KVNY station stands in. Today draws GARAGE by shape.</p>
+<div class="four"><figure><img src="fire-vny-12-today.jpg" alt="Today, 12:00"><figcaption>Today, 12:00</figcaption></figure><figure><img src="fire-vny-22-today.jpg" alt="Today, 22:00"><figcaption>Today, 22:00</figcaption></figure><figure><img src="fire-vny-12-art.jpg" alt="Art direction, 12:00"><figcaption>Art direction, 12:00</figcaption></figure><figure><img src="fire-vny-22-art.jpg" alt="Art direction, 22:00"><figcaption>Art direction, 22:00</figcaption></figure></div>
+</section>
+
+<section id="canopy">
+<h2>1. Canopy and carport</h2>
+<h3>Today</h3>
+<p class="cap">What the app draws now (TC3D-376 still).</p>
+<div class="two"><figure><img src="canopy-oak-12-today.jpg" alt="KOAK solar roof, 12:00"><figcaption>KOAK solar roof, 12:00</figcaption></figure><figure><img src="canopy-sjc-12-today.jpg" alt="Costco Gasoline, KSJC, 12:00"><figcaption>Costco Gasoline, KSJC, 12:00</figcaption></figure></div>
+<h3>TC3D-376 proposed (proposed)</h3>
+<p class="cap">The TC3D-376 look (TC3D-376 still).</p>
+<div class="two"><figure><img src="canopy-oak-12-proposed.jpg" alt="KOAK solar roof, 12:00"><figcaption>KOAK solar roof, 12:00</figcaption></figure><figure><img src="canopy-sjc-12-proposed.jpg" alt="Costco Gasoline, KSJC, 12:00"><figcaption>Costco Gasoline, KSJC, 12:00</figcaption></figure></div>
+<h3>Art direction: CARPORT 13 (solar roof) / CANOPY 7 (fuel)</h3>
+<p class="cap">Fuel canopy: a 0.9 m brand fascia (white, red, blue or yellow by hash) on a dark drip line, a light soffit in the top 15% and the far side seen through below, white posts every 8 m; the solar roof takes the carport look, a 0.3 m steel edge over a PV underside and thin galvanised posts (guide section 3, CANOPY; section 4, not a black box).</p>
+<div class="two"><figure><img src="canopy-oak-12-art.jpg" alt="KOAK solar roof, 12:00"><figcaption>KOAK solar roof, 12:00</figcaption></figure><figure><img src="canopy-sjc-12-art.jpg" alt="Costco Gasoline, KSJC, 12:00"><figcaption>Costco Gasoline, KSJC, 12:00</figcaption></figure></div>
+</section>
+
+<section id="warehouse">
+<h2>2. Warehouse / industrial</h2>
+<h3>Today</h3>
+<p class="cap">What the app draws now (TC3D-376 still).</p>
+<div class="two"><figure><img src="wh-vny1-12-today.jpg" alt="KVNY industrial block, 12:00"><figcaption>KVNY industrial block, 12:00</figcaption></figure><figure><img src="wh-vny2-12-today.jpg" alt="KVNY warehouse, 12:00"><figcaption>KVNY warehouse, 12:00</figcaption></figure></div>
+<h3>TC3D-376 proposed (proposed)</h3>
+<p class="cap">The TC3D-376 look (TC3D-376 still).</p>
+<div class="two"><figure><img src="wh-vny1-12-proposed.jpg" alt="KVNY industrial block, 12:00"><figcaption>KVNY industrial block, 12:00</figcaption></figure><figure><img src="wh-vny2-12-proposed.jpg" alt="KVNY warehouse, 12:00"><figcaption>KVNY warehouse, 12:00</figcaption></figure></div>
+<h3>Art direction: WAREHOUSE 9</h3>
+<p class="cap">Tilt-up panels with joints and reveals at 1/3 and 2/3, or ribbed metal (hash 1); dock doors 2.7 by 3.0 m at a 1.2 m sill in black shelters wider at the sides and top than the foot, a lamp over each, on walls of 6.1 m or more (section 3, WAREHOUSE; section 4, dock doors).</p>
+<div class="two"><figure><img src="wh-vny1-12-art.jpg" alt="KVNY industrial block, 12:00"><figcaption>KVNY industrial block, 12:00</figcaption></figure><figure><img src="wh-vny2-12-art.jpg" alt="KVNY warehouse, 12:00"><figcaption>KVNY warehouse, 12:00</figcaption></figure></div>
+</section>
+
+<section id="retail">
+<h2>3. Retail</h2>
+<h3>Today</h3>
+<p class="cap">What the app draws now (TC3D-376 still).</p>
+<div class="four"><figure><img src="retail-sjc-12-today.jpg" alt="Lexus of Stevens Creek, KSJC, 12:00"><figcaption>Lexus of Stevens Creek, KSJC, 12:00</figcaption></figure><figure><img src="retail-sjc-22-today.jpg" alt="Lexus of Stevens Creek, KSJC, 22:00"><figcaption>Lexus of Stevens Creek, KSJC, 22:00</figcaption></figure><figure><img src="retail-sjc2-12-today.jpg" alt="KSJC retail, 12:00"><figcaption>KSJC retail, 12:00</figcaption></figure><figure><img src="retail-sjc2-22-today.jpg" alt="KSJC retail, 22:00"><figcaption>KSJC retail, 22:00</figcaption></figure></div>
+<h3>TC3D-376 proposed (proposed)</h3>
+<p class="cap">The TC3D-376 look (TC3D-376 still).</p>
+<div class="four"><figure><img src="retail-sjc-12-proposed.jpg" alt="Lexus of Stevens Creek, KSJC, 12:00"><figcaption>Lexus of Stevens Creek, KSJC, 12:00</figcaption></figure><figure><img src="retail-sjc-22-proposed.jpg" alt="Lexus of Stevens Creek, KSJC, 22:00"><figcaption>Lexus of Stevens Creek, KSJC, 22:00</figcaption></figure><figure><img src="retail-sjc2-12-proposed.jpg" alt="KSJC retail, 12:00"><figcaption>KSJC retail, 12:00</figcaption></figure><figure><img src="retail-sjc2-22-proposed.jpg" alt="KSJC retail, 22:00"><figcaption>KSJC retail, 22:00</figcaption></figure></div>
+<h3>Art direction: RETAIL 8</h3>
+<p class="cap">Storefront on the ground storey only: split-face bulkhead, glass to 3.0 m with mullions and a transom at 2.4 m, 0.6 m tenant piers, one muted sign per tenant in a 1.2 m band, blank wall above; at night 70% of tenants lit warm-white at their own intensity and the signs glow (section 3, RETAIL; 2.6).</p>
+<div class="four"><figure><img src="retail-sjc-12-art.jpg" alt="Lexus of Stevens Creek, KSJC, 12:00"><figcaption>Lexus of Stevens Creek, KSJC, 12:00</figcaption></figure><figure><img src="retail-sjc-22-art.jpg" alt="Lexus of Stevens Creek, KSJC, 22:00"><figcaption>Lexus of Stevens Creek, KSJC, 22:00</figcaption></figure><figure><img src="retail-sjc2-12-art.jpg" alt="KSJC retail, 12:00"><figcaption>KSJC retail, 12:00</figcaption></figure><figure><img src="retail-sjc2-22-art.jpg" alt="KSJC retail, 22:00"><figcaption>KSJC retail, 22:00</figcaption></figure></div>
+</section>
+
+<section id="utility">
+<h2>4. Utility / service shed</h2>
+<h3>Today</h3>
+<p class="cap">What the app draws now (TC3D-376 still).</p>
+<div class="two"><figure><img src="util-sfo-12-today.jpg" alt="KSFO service building, 12:00"><figcaption>KSFO service building, 12:00</figcaption></figure><figure><img src="util-sfo2-12-today.jpg" alt="KSFO service building 2, 12:00"><figcaption>KSFO service building 2, 12:00</figcaption></figure></div>
+<h3>TC3D-376 proposed (proposed)</h3>
+<p class="cap">The TC3D-376 look (TC3D-376 still).</p>
+<div class="two"><figure><img src="util-sfo-12-proposed.jpg" alt="KSFO service building, 12:00"><figcaption>KSFO service building, 12:00</figcaption></figure><figure><img src="util-sfo2-12-proposed.jpg" alt="KSFO service building 2, 12:00"><figcaption>KSFO service building 2, 12:00</figcaption></figure></div>
+<h3>Art direction: PLAIN 6</h3>
+<p class="cap">Split-face block or painted metal with only a base band, coping and grime: a small blank structure (section 3, PLAIN; 2.4).</p>
+<div class="two"><figure><img src="util-sfo-12-art.jpg" alt="KSFO service building, 12:00"><figcaption>KSFO service building, 12:00</figcaption></figure><figure><img src="util-sfo2-12-art.jpg" alt="KSFO service building 2, 12:00"><figcaption>KSFO service building 2, 12:00</figcaption></figure></div>
+</section>
+
+<section id="apartments">
+<h2>5. Apartments</h2>
+<h3>Today</h3>
+<p class="cap">What the app draws now (TC3D-376 still).</p>
+<div class="four"><figure><img src="apt-sjc-12-today.jpg" alt="Orlo Apartments, KSJC, 12:00"><figcaption>Orlo Apartments, KSJC, 12:00</figcaption></figure><figure><img src="apt-sjc-22-today.jpg" alt="Orlo Apartments, KSJC, 22:00"><figcaption>Orlo Apartments, KSJC, 22:00</figcaption></figure><figure><img src="apt-sfo-12-today.jpg" alt="Station 16, KSFO, 12:00"><figcaption>Station 16, KSFO, 12:00</figcaption></figure><figure><img src="apt-sfo-22-today.jpg" alt="Station 16, KSFO, 22:00"><figcaption>Station 16, KSFO, 22:00</figcaption></figure></div>
+<h3>TC3D-376 proposed (generic)</h3>
+<p class="cap">The TC3D-376 look (TC3D-376 still).</p>
+<div class="four"><figure><img src="apt-sjc-12-generic.jpg" alt="Orlo Apartments, KSJC, 12:00"><figcaption>Orlo Apartments, KSJC, 12:00</figcaption></figure><figure><img src="apt-sjc-22-generic.jpg" alt="Orlo Apartments, KSJC, 22:00"><figcaption>Orlo Apartments, KSJC, 22:00</figcaption></figure><figure><img src="apt-sfo-12-generic.jpg" alt="Station 16, KSFO, 12:00"><figcaption>Station 16, KSFO, 12:00</figcaption></figure><figure><img src="apt-sfo-22-generic.jpg" alt="Station 16, KSFO, 22:00"><figcaption>Station 16, KSFO, 22:00</figcaption></figure></div>
+<h3>Art direction: GENERIC 0</h3>
+<p class="cap">The GENERIC grammar: 3.0 m bays, panes 0.45 of the bay by half a storey on a 0.3-storey sill, paired on hash 2, storeys fitted under a parapet (2.1, section 3, GENERIC).</p>
+<div class="four"><figure><img src="apt-sjc-12-art.jpg" alt="Orlo Apartments, KSJC, 12:00"><figcaption>Orlo Apartments, KSJC, 12:00</figcaption></figure><figure><img src="apt-sjc-22-art.jpg" alt="Orlo Apartments, KSJC, 22:00"><figcaption>Orlo Apartments, KSJC, 22:00</figcaption></figure><figure><img src="apt-sfo-12-art.jpg" alt="Station 16, KSFO, 12:00"><figcaption>Station 16, KSFO, 12:00</figcaption></figure><figure><img src="apt-sfo-22-art.jpg" alt="Station 16, KSFO, 22:00"><figcaption>Station 16, KSFO, 22:00</figcaption></figure></div>
+</section>
+
+<section id="hotel">
+<h2>6. Hotel</h2>
+<h3>Today</h3>
+<p class="cap">What the app draws now (TC3D-376 still).</p>
+<div class="four"><figure><img src="hotel-sjc-12-today.jpg" alt="KSJC airport hotel, 12:00"><figcaption>KSJC airport hotel, 12:00</figcaption></figure><figure><img src="hotel-sjc-22-today.jpg" alt="KSJC airport hotel, 22:00"><figcaption>KSJC airport hotel, 22:00</figcaption></figure><figure><img src="hotel-sfo-12-today.jpg" alt="SFO Airport Marriott, 12:00"><figcaption>SFO Airport Marriott, 12:00</figcaption></figure><figure><img src="hotel-sfo-22-today.jpg" alt="SFO Airport Marriott, 22:00"><figcaption>SFO Airport Marriott, 22:00</figcaption></figure></div>
+<h3>TC3D-376 proposed (hotel)</h3>
+<p class="cap">The TC3D-376 look (TC3D-376 still).</p>
+<div class="four"><figure><img src="hotel-sjc-12-hotel.jpg" alt="KSJC airport hotel, 12:00"><figcaption>KSJC airport hotel, 12:00</figcaption></figure><figure><img src="hotel-sjc-22-hotel.jpg" alt="KSJC airport hotel, 22:00"><figcaption>KSJC airport hotel, 22:00</figcaption></figure><figure><img src="hotel-sfo-12-hotel.jpg" alt="SFO Airport Marriott, 12:00"><figcaption>SFO Airport Marriott, 12:00</figcaption></figure><figure><img src="hotel-sfo-22-hotel.jpg" alt="SFO Airport Marriott, 22:00"><figcaption>SFO Airport Marriott, 22:00</figcaption></figure></div>
+<h3>Art direction: HOTEL 11</h3>
+<p class="cap">One 1.5 m window per 3.8 m room, mirrored in pairs across the party walls, on a fitted storey grid; brick on the lower two storeys, a 4.8 m ground storey with lobby glass on a third of its bays, a lighter cornice; at night 50% lit in clusters, warm, 30% curtained (section 3, HOTEL; 2.1; 2.6).</p>
+<div class="four"><figure><img src="hotel-sjc-12-art.jpg" alt="KSJC airport hotel, 12:00"><figcaption>KSJC airport hotel, 12:00</figcaption></figure><figure><img src="hotel-sjc-22-art.jpg" alt="KSJC airport hotel, 22:00"><figcaption>KSJC airport hotel, 22:00</figcaption></figure><figure><img src="hotel-sfo-12-art.jpg" alt="SFO Airport Marriott, 12:00"><figcaption>SFO Airport Marriott, 12:00</figcaption></figure><figure><img src="hotel-sfo-22-art.jpg" alt="SFO Airport Marriott, 22:00"><figcaption>SFO Airport Marriott, 22:00</figcaption></figure></div>
+</section>
+
+<section id="school">
+<h2>7. School / civic</h2>
+<h3>Today</h3>
+<p class="cap">What the app draws now (TC3D-376 still).</p>
+<div class="four"><figure><img src="school-oak-12-today.jpg" alt="KOAK school, 12:00"><figcaption>KOAK school, 12:00</figcaption></figure><figure><img src="school-oak-22-today.jpg" alt="KOAK school, 22:00"><figcaption>KOAK school, 22:00</figcaption></figure><figure><img src="school-vny-12-today.jpg" alt="NVOC school, KVNY, 12:00"><figcaption>NVOC school, KVNY, 12:00</figcaption></figure><figure><img src="school-vny-22-today.jpg" alt="NVOC school, KVNY, 22:00"><figcaption>NVOC school, KVNY, 22:00</figcaption></figure></div>
+<h3>TC3D-376 proposed (proposed)</h3>
+<p class="cap">The TC3D-376 look (TC3D-376 still).</p>
+<div class="four"><figure><img src="school-oak-12-proposed.jpg" alt="KOAK school, 12:00"><figcaption>KOAK school, 12:00</figcaption></figure><figure><img src="school-oak-22-proposed.jpg" alt="KOAK school, 22:00"><figcaption>KOAK school, 22:00</figcaption></figure><figure><img src="school-vny-12-proposed.jpg" alt="NVOC school, KVNY, 12:00"><figcaption>NVOC school, KVNY, 12:00</figcaption></figure><figure><img src="school-vny-22-proposed.jpg" alt="NVOC school, KVNY, 22:00"><figcaption>NVOC school, KVNY, 22:00</figcaption></figure></div>
+<h3>Art direction: GENERIC 0</h3>
+<p class="cap">GENERIC as above with a glazed entry in one ground bay in ten; schools are mostly one or two storeys, so the 3.4 m ground storey and 1.2 m parapet often leave one row (2.1, section 3, GENERIC).</p>
+<div class="four"><figure><img src="school-oak-12-art.jpg" alt="KOAK school, 12:00"><figcaption>KOAK school, 12:00</figcaption></figure><figure><img src="school-oak-22-art.jpg" alt="KOAK school, 22:00"><figcaption>KOAK school, 22:00</figcaption></figure><figure><img src="school-vny-12-art.jpg" alt="NVOC school, KVNY, 12:00"><figcaption>NVOC school, KVNY, 12:00</figcaption></figure><figure><img src="school-vny-22-art.jpg" alt="NVOC school, KVNY, 22:00"><figcaption>NVOC school, KVNY, 22:00</figcaption></figure></div>
+</section>
+
+<section id="skybridge">
+<h2>8. Skybridge</h2>
+<h3>Today</h3>
+<p class="cap">What the app draws now (TC3D-376 still).</p>
+<div class="two"><figure><img src="bridge-sfo-12-today.jpg" alt="KSFO skybridge, 12:00"><figcaption>KSFO skybridge, 12:00</figcaption></figure><figure><img src="bridge-sfo2-12-today.jpg" alt="KSFO skybridge 2, 12:00"><figcaption>KSFO skybridge 2, 12:00</figcaption></figure></div>
+<h3>TC3D-376 proposed (proposed)</h3>
+<p class="cap">The TC3D-376 look (TC3D-376 still).</p>
+<div class="two"><figure><img src="bridge-sfo-12-proposed.jpg" alt="KSFO skybridge, 12:00"><figcaption>KSFO skybridge, 12:00</figcaption></figure><figure><img src="bridge-sfo2-12-proposed.jpg" alt="KSFO skybridge 2, 12:00"><figcaption>KSFO skybridge 2, 12:00</figcaption></figure></div>
+<h3>Art direction: TERMINAL 5</h3>
+<p class="cap">A low box takes the skybridge form of TERMINAL: a glass band between two white 0.7 m beams, mullions every 1.5 m, coated glass with a Fresnel reflection (section 3, TERMINAL; 2.3).</p>
+<div class="two"><figure><img src="bridge-sfo-12-art.jpg" alt="KSFO skybridge, 12:00"><figcaption>KSFO skybridge, 12:00</figcaption></figure><figure><img src="bridge-sfo2-12-art.jpg" alt="KSFO skybridge 2, 12:00"><figcaption>KSFO skybridge 2, 12:00</figcaption></figure></div>
+</section>
+
+<section id="fire">
+<h2>9. Fire station / ARFF</h2>
+<h3>Today</h3>
+<p class="cap">What the app draws now (TC3D-376 still).</p>
+<div class="four"><figure><img src="fire-vny-12-today.jpg" alt="LAFD Fire Station 114, KVNY, 12:00"><figcaption>LAFD Fire Station 114, KVNY, 12:00</figcaption></figure><figure><img src="fire-vny-22-today.jpg" alt="LAFD Fire Station 114, KVNY, 22:00"><figcaption>LAFD Fire Station 114, KVNY, 22:00</figcaption></figure><figure><img src="fire-sfo-12-today.jpg" alt="SFO Fire Station 1, 12:00"><figcaption>SFO Fire Station 1, 12:00</figcaption></figure><figure><img src="fire-sfo-22-today.jpg" alt="SFO Fire Station 1, 22:00"><figcaption>SFO Fire Station 1, 22:00</figcaption></figure></div>
+<h3>TC3D-376 proposed (proposed)</h3>
+<p class="cap">The TC3D-376 look (TC3D-376 still).</p>
+<div class="four"><figure><img src="fire-vny-12-proposed.jpg" alt="LAFD Fire Station 114, KVNY, 12:00"><figcaption>LAFD Fire Station 114, KVNY, 12:00</figcaption></figure><figure><img src="fire-vny-22-proposed.jpg" alt="LAFD Fire Station 114, KVNY, 22:00"><figcaption>LAFD Fire Station 114, KVNY, 22:00</figcaption></figure><figure><img src="fire-sfo-12-proposed.jpg" alt="SFO Fire Station 1, 12:00"><figcaption>SFO Fire Station 1, 12:00</figcaption></figure><figure><img src="fire-sfo-22-proposed.jpg" alt="SFO Fire Station 1, 22:00"><figcaption>SFO Fire Station 1, 22:00</figcaption></figure></div>
+<h3>Art direction: FIRE_STATION 10</h3>
+<p class="cap">4.3 m bay doors in a 0.25 m red surround between 0.8 m piers on the ground storey only, glazed sectional with a glass band (or solid red on hash 1), a header band above; a wall under 6.25 m has no room for a door and stays plain (section 3, FIRE_STATION).</p>
+<div class="four"><figure><img src="fire-vny-12-art.jpg" alt="LAFD Fire Station 114, KVNY, 12:00"><figcaption>LAFD Fire Station 114, KVNY, 12:00</figcaption></figure><figure><img src="fire-vny-22-art.jpg" alt="LAFD Fire Station 114, KVNY, 22:00"><figcaption>LAFD Fire Station 114, KVNY, 22:00</figcaption></figure><figure><img src="fire-sfo-12-art.jpg" alt="SFO Fire Station 1, 12:00"><figcaption>SFO Fire Station 1, 12:00</figcaption></figure><figure><img src="fire-sfo-22-art.jpg" alt="SFO Fire Station 1, 22:00"><figcaption>SFO Fire Station 1, 22:00</figcaption></figure></div>
+</section>
+
+<section id="tank">
+<h2>10. Storage tank</h2>
+<h3>Today</h3>
+<p class="cap">What the app draws now (TC3D-376 still).</p>
+<div class="two"><figure><img src="tank-oak-12-today.jpg" alt="KOAK storage tank, 12:00"><figcaption>KOAK storage tank, 12:00</figcaption></figure><figure><img src="tank-sjc-12-today.jpg" alt="KSJC storage tank, 12:00"><figcaption>KSJC storage tank, 12:00</figcaption></figure></div>
+<h3>TC3D-376 proposed (proposed)</h3>
+<p class="cap">The TC3D-376 look (TC3D-376 still).</p>
+<div class="two"><figure><img src="tank-oak-12-proposed.jpg" alt="KOAK storage tank, 12:00"><figcaption>KOAK storage tank, 12:00</figcaption></figure><figure><img src="tank-sjc-12-proposed.jpg" alt="KSJC storage tank, 12:00"><figcaption>KSJC storage tank, 12:00</figcaption></figure></div>
+<h3>Art direction: TANK 12</h3>
+<p class="cap">Shell-course lines every 2.4 m, a wind girder 0.6 m under the top over a shadow line, a darker rim, faint grime streaks from the top up close (section 3, TANK).</p>
+<div class="two"><figure><img src="tank-oak-12-art.jpg" alt="KOAK storage tank, 12:00"><figcaption>KOAK storage tank, 12:00</figcaption></figure><figure><img src="tank-sjc-12-art.jpg" alt="KSJC storage tank, 12:00"><figcaption>KSJC storage tank, 12:00</figcaption></figure></div>
+</section>
+
+<section id="rules">
+<h2>Small rule additions</h2>
+<h3>Today</h3>
+<p class="cap">What the app draws now (TC3D-376 still).</p>
+<div class="three"><figure><img src="caravan-vny-12-today.jpg" alt="KVNY static caravans, 12:00"><figcaption>KVNY static caravans, 12:00</figcaption></figure><figure><img src="carport-sjc-12-today.jpg" alt="KSJC carport, 12:00"><figcaption>KSJC carport, 12:00</figcaption></figure><figure><img src="stair-smf-12-today.jpg" alt="KSMF stair tower, 12:00"><figcaption>KSMF stair tower, 12:00</figcaption></figure></div>
+<h3>TC3D-376 proposed (proposed)</h3>
+<p class="cap">The TC3D-376 look (TC3D-376 still).</p>
+<div class="three"><figure><img src="caravan-vny-12-proposed.jpg" alt="KVNY static caravans, 12:00"><figcaption>KVNY static caravans, 12:00</figcaption></figure><figure><img src="carport-sjc-12-proposed.jpg" alt="KSJC carport, 12:00"><figcaption>KSJC carport, 12:00</figcaption></figure><figure><img src="stair-smf-12-proposed.jpg" alt="KSMF stair tower, 12:00"><figcaption>KSMF stair tower, 12:00</figcaption></figure></div>
+<h3>Art direction: HOUSE 3 hash 3, CARPORT 13, GARAGE 1</h3>
+<p class="cap">The static-caravan variant on HOUSE hash 3 (white lap siding, a 0.1 m trim stripe at 1.6 m, a 0.6 m dark skirting), the carport look, and GARAGE decks fitted to the stair tower (section 3, HOUSE, CANOPY, GARAGE).</p>
+<div class="three"><figure><img src="caravan-vny-12-art.jpg" alt="KVNY static caravans, 12:00"><figcaption>KVNY static caravans, 12:00</figcaption></figure><figure><img src="carport-sjc-12-art.jpg" alt="KSJC carport, 12:00"><figcaption>KSJC carport, 12:00</figcaption></figure><figure><img src="stair-smf-12-art.jpg" alt="KSMF stair tower, 12:00"><figcaption>KSMF stair tower, 12:00</figcaption></figure></div>
+</section>
+
+<section id="perf">
+<h2>Frame time (CPU-side, not a GPU measurement)</h2>
+<p class="cap">The GPU timer reads 0 on this desktop, so these are <code>__tc3d.perf().window</code> medians and p95 over 300 frames of <code>totalFrame</code> and <code>cesiumDraw</code>, in ms, at the KSFO tower's default view after the tiles settled, in headless Edge with the frame interval capped at 16.7 ms. They time the CPU side of each frame (command submission), not the fragment work this prototype adds; one reading each, so treat a 1 ms difference as noise until the harness in <code>osm-buildings.md</code> measures it on a GPU timer.</p>
+<table>
+<tr><th>Build</th><th>Hour</th><th>totalFrame median / p95</th><th>cesiumDraw median / p95</th></tr>
+<tr><td>Without the prototype (feat/osm-facades a36d2fd)</td><td>12:00</td><td>6.5 / 8.0</td><td>6.2 / 7.7</td></tr>
+<tr><td>Without the prototype</td><td>22:00</td><td>7.1 / 8.3</td><td>6.8 / 7.9</td></tr>
+<tr><td>With the prototype (TC3D-376 + art direction)</td><td>12:00</td><td>7.9 / 9.0</td><td>7.6 / 8.7</td></tr>
+<tr><td>With the prototype</td><td>22:00</td><td>7.6 / 8.5</td><td>7.3 / 8.2</td></tr>
+</table>
+</section>
+
+<section id="approx">
+<h2>What is approximate, and guide values not hit</h2>
+<ul>
+<li><b>Face ends are not known</b> (2.1, 2.5, section 5 item 8, TC3D-385). Windows, bays and doors still run along each face from an arbitrary origin, so a face end can show a partial bay at a corner or a part seam, the fire-station doors run round every face including narrow returns, and there are no corner piers, no crew wing at one end, no hangar door, no docks on one face only, no house porch light per face.</li>
+<li><b>Short walls lose rows.</b> With the bucket's lower bound, a 0.45 m base, the class's ground storey and a 1.2 m parapet, a two-storey school or office often fits only its ground storey; a wall under 4.2 m (most 3 m boxes) shows no windows at all, and a fire station under 6.25 m no doors (SFO Fire Station 1).</li>
+<li><b>Darker walls are the guide's palette.</b> Split-face block <code>#A39A8C</code> and brick read far darker than the TC3D-376 tones; the walls in these cameras also face away from the noon sun.</li>
+<li><b>Glass targets are not measured</b> (2.3: L* 45-62 at 1 km, 15-32 within 300 m): the cameras are 30-220 m away and no L* was read from the stills.</li>
+<li><b>Tint jitter</b> is drawn from a hash of the lookup's ground point, so it changes when a tile reloads at another level of detail, and the parts of one building jitter apart.</li>
+<li><b>The far tint</b> folds base band, grime and coping in as one constant (0.95); lit-window clustering lowers the near lit share below the far tint's, so a tier change at night is not yet mean-preserving. The far path is unchanged otherwise.</li>
+<li><b>Left out:</b> the skybridge's ribbed-panel variant (hash 2), the hangar's small windows on other faces, the tank's obstruction lamp, the hotel's brick-panel variant and core tower, the garage stair core, generic schools' near-dark night share, and the low-sun warm haze is only sketched.</li>
+<li><b>Canopy undersides by day</b> add a small emissive for the lit ground seen through and the soffit's bounce, a value the guide does not give.</li>
+<li><b>No rule exists yet.</b> Each lane forces its class on the shot's one element; the cameras are 30-220 m from each building, not the tower view; geometry is the tileset's (canopies and skybridges are solid boxes); at 22:00 the imagery stays bright.</li>
+<li><b>Flat walls with no lookup.</b> A tile without the base lookup draws the far tint (Orlo Apartments in these cameras), as today.</li>
+</ul>
+</section>
+
+<p class="sub">Rebuild: <code>RECIPE.md</code> beside this page. The stills live only in the review copy.</p>
+</main>
+</body>
+</html>

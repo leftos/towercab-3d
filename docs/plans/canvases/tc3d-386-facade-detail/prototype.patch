@@ -1,0 +1,774 @@
+diff --git a/src/renderer/utils/buildingStyle.ts b/src/renderer/utils/buildingStyle.ts
+index ee73851..8ee8d8a 100644
+--- a/src/renderer/utils/buildingStyle.ts
++++ b/src/renderer/utils/buildingStyle.ts
+@@ -30,6 +30,13 @@ export const FacadeClass = {
+   OFFICE: 4,
+   TERMINAL: 5,
+   PLAIN: 6,
++  CANOPY: 7,
++  RETAIL: 8,
++  WAREHOUSE: 9,
++  FIRE_STATION: 10,
++  HOTEL: 11,
++  TANK: 12,
++  CARPORT: 13,
+ } as const
+ 
+ export type FacadeClassCode = (typeof FacadeClass)[keyof typeof FacadeClass]
+diff --git a/src/renderer/utils/facadeShader.ts b/src/renderer/utils/facadeShader.ts
+index 8927907..ed7ef6f 100644
+--- a/src/renderer/utils/facadeShader.ts
++++ b/src/renderer/utils/facadeShader.ts
+@@ -50,8 +50,8 @@ const GAP_ROUGHNESS = 0.95
+ /** Lit-window emissive colour, already scaled by its intensity. */
+ const LIT_WINDOW_EMISSIVE: Vec3 = [1.4, 1.4 * 0.78, 1.4 * 0.48]
+ 
+-/** Hangar cladding ribs per metre, and the wall shade at the trough and crest of a rib. */
+-const RIBS_PER_M = 1.2
++/** Ribbed-metal cladding ribs per metre (0.3 m pitch), and the wall shade at the trough and crest of a rib. */
++const RIBS_PER_M = 1 / 0.3
+ const RIB_SHADE_LOW = 0.92
+ const RIB_SHADE_HIGH = 1.0
+ 
+@@ -205,6 +205,90 @@ export const FACADE_GRAMMARS: Readonly<Record<FacadeClassCode, FacadeGrammar>> =
+     hi: [0, 0],
+     relief: 'flat',
+   },
++  [FacadeClass.CANOPY]: {
++    bayM: 7.0,
++    floorM: 3.0,
++    storeysFromLevels: false,
++    opening: 'gap',
++    lo: [0.05, -0.1],
++    hi: [0.95, 0.75],
++    relief: 'flat',
++  },
++  [FacadeClass.RETAIL]: {
++    bayM: 3.0,
++    floorM: 5.0,
++    storeysFromLevels: false,
++    opening: 'glass',
++    lo: [0.03, 0.08],
++    hi: [0.97, 0.45],
++    relief: 'flat',
++  },
++  [FacadeClass.WAREHOUSE]: {
++    bayM: 4.2,
++    floorM: 12.0,
++    storeysFromLevels: false,
++    opening: 'none',
++    lo: [0, 0],
++    hi: [0, 0],
++    relief: 'panels',
++  },
++  [FacadeClass.FIRE_STATION]: {
++    bayM: 6.0,
++    floorM: 4.0,
++    storeysFromLevels: false,
++    opening: 'none',
++    lo: [0, 0],
++    hi: [0, 0],
++    relief: 'flat',
++  },
++  [FacadeClass.HOTEL]: {
++    bayM: 3.8,
++    floorM: 3.0,
++    storeysFromLevels: true,
++    opening: 'glass',
++    lo: [0.22, 0.3],
++    hi: [0.78, 0.85],
++    relief: 'slabs',
++  },
++  [FacadeClass.TANK]: {
++    bayM: 3.0,
++    floorM: 2.4,
++    storeysFromLevels: false,
++    opening: 'none',
++    lo: [0, 0],
++    hi: [0, 0],
++    relief: 'slabs',
++  },
++  [FacadeClass.CARPORT]: {
++    bayM: 8.0,
++    floorM: 3.0,
++    storeysFromLevels: false,
++    opening: 'gap',
++    lo: [0.05, -0.1],
++    hi: [0.95, 0.85],
++    relief: 'flat',
++  },
++}
++
++/** Share of glazed cells lit at night per class (art direction 2.6); classes not listed use FACADE_LIT_SHARE. */
++const LIT_SHARES: Partial<Record<FacadeClassCode, number>> = {
++  [FacadeClass.GENERIC]: 0.25,
++  [FacadeClass.HOUSE]: 0.35,
++  [FacadeClass.OFFICE]: 0.15,
++  [FacadeClass.TERMINAL]: 0.85,
++  [FacadeClass.HOTEL]: 0.5,
++  [FacadeClass.RETAIL]: 0.7,
++  [FacadeClass.FIRE_STATION]: 0.4,
++}
++
++/** An sRGB hex colour as 0-1 channels. */
++function hexSrgb(hex: string): Vec3 {
++  const n = Number.parseInt(hex.slice(1), 16)
++  return [((n >> 16) & 255) / 255, ((n >> 8) & 255) / 255, (n & 255) / 255]
++}
++
++function hexes(...values: string[]): Vec3[] {
++  return values.map(hexSrgb)
+ }
+ 
+ /**
+@@ -212,48 +296,21 @@ export const FACADE_GRAMMARS: Readonly<Record<FacadeClassCode, FacadeGrammar>> =
+  * differ in tone. The tiles' own base colour is white, so these are the walls' colours.
+  */
+ export const FACADE_PALETTES: Readonly<Record<FacadeClassCode, readonly Vec3[]>> = {
+-  [FacadeClass.GENERIC]: [
+-    [0.82, 0.8, 0.76],
+-    [0.74, 0.75, 0.76],
+-    [0.86, 0.84, 0.8],
+-    [0.78, 0.72, 0.64],
+-  ],
+-  [FacadeClass.GARAGE]: [
+-    [0.72, 0.72, 0.7],
+-    [0.66, 0.66, 0.65],
+-    [0.78, 0.77, 0.74],
+-    [0.7, 0.68, 0.64],
+-  ],
+-  [FacadeClass.HANGAR]: [
+-    [0.84, 0.85, 0.86],
+-    [0.76, 0.78, 0.8],
+-    [0.88, 0.87, 0.83],
+-    [0.7, 0.73, 0.74],
+-  ],
+-  [FacadeClass.HOUSE]: [
+-    [0.9, 0.88, 0.84],
+-    [0.66, 0.44, 0.36],
+-    [0.8, 0.76, 0.66],
+-    [0.7, 0.7, 0.7],
+-  ],
+-  [FacadeClass.OFFICE]: [
+-    [0.8, 0.8, 0.78],
+-    [0.68, 0.72, 0.76],
+-    [0.86, 0.84, 0.8],
+-    [0.72, 0.7, 0.66],
+-  ],
+-  [FacadeClass.TERMINAL]: [
+-    [0.88, 0.89, 0.9],
+-    [0.8, 0.82, 0.84],
+-    [0.9, 0.88, 0.84],
+-    [0.76, 0.78, 0.8],
+-  ],
+-  [FacadeClass.PLAIN]: [
+-    [0.84, 0.82, 0.78],
+-    [0.72, 0.7, 0.66],
+-    [0.78, 0.74, 0.68],
+-    [0.66, 0.65, 0.63],
+-  ],
++  // Art direction 2.4 material families, one per hash state; section 3 picks the family per class.
++  [FacadeClass.GENERIC]: hexes('#D9CDB8', '#C9C5BC', '#A39A8C', '#E3DCCD'),
++  [FacadeClass.GARAGE]: hexes('#BDB8AE', '#C9C5BC', '#B7B4AC', '#D4CFC4'),
++  [FacadeClass.HANGAR]: hexes('#D8DADB', '#BFC4C8', '#9EA6AD', '#C9C2B3'),
++  [FacadeClass.HOUSE]: hexes('#E3DCCD', '#D9CDB8', '#C8B79C', '#E6E4DE'),
++  [FacadeClass.OFFICE]: hexes('#C9C5BC', '#BDB8AE', '#D4CFC4', '#CFC6B6'),
++  [FacadeClass.TERMINAL]: hexes('#D8DADB', '#C9CDD0', '#E3DCCD', '#BFC4C8'),
++  [FacadeClass.PLAIN]: hexes('#A39A8C', '#C9C2B3', '#B7B4AC', '#BFC4C8'),
++  [FacadeClass.CANOPY]: hexes('#E9E7E1', '#B5251D', '#1F4E9A', '#E8B520'),
++  [FacadeClass.RETAIL]: hexes('#E3DCCD', '#D9CDB8', '#CFC6B6', '#C8B79C'),
++  [FacadeClass.WAREHOUSE]: hexes('#D2CBBE', '#BFC4C8', '#C4BDB0', '#B7B4AC'),
++  [FacadeClass.FIRE_STATION]: hexes('#8C5442', '#9A6A55', '#C9C5BC', '#7A4B3E'),
++  [FacadeClass.HOTEL]: hexes('#E3DCCD', '#D9CDB8', '#CFC6B6', '#E3DCCD'),
++  [FacadeClass.TANK]: hexes('#EDEDE9', '#D9DBD7', '#EDEDE9', '#B9B79F'),
++  [FacadeClass.CARPORT]: hexes('#9EA3A6', '#9EA3A6', '#8F9497', '#A9ACAE'),
+ }
+ 
+ /**
+@@ -389,6 +446,480 @@ const OPENING_RECT_GLSL = glslPerClass('facadeOpeningRect', 'vec4', 'float facad
+ 
+ const COVER_GLSL = glslPerClass('facadeCover', 'float', 'float facadeClass', (code) => glslFloat(grammarCoverage(code)))
+ 
++const LIT_GLSL = glslPerClass('facadeLitShare', 'float', 'float facadeClass', (code) =>
++  glslFloat(LIT_SHARES[code] ?? FACADE_LIT_SHARE),
++)
++
++/** An sRGB hex colour as a GLSL linear-light vec3 literal. */
++function lin(hex: string): string {
++  return glslVec3(srgbToLinear(hexSrgb(hex)))
++}
++
++/**
++ * The art-direction near looks (docs/plans/osm-facade-art-direction.md), drawn in metres along the wall (`p.x`)
++ * and up from the ground (`p.y`), with `c.m` the pixel footprint in metres. Vertical fitting (2.1) places a base
++ * band, a ground storey and whole storeys stretched to fit under a parapet of at least `pmin`, so no window is
++ * ever cut by the roof line or the ground. Windows are framed, recessed and sill-hung (2.2), glazed as an
++ * interior behind a Fresnel sky reflection (2.3) and lit at night in clustered, varied tones (2.6).
++ */
++const ART_GLSL = /* glsl */ `
++struct ArtCtx {
++  vec3 wall;
++  vec3 refl;
++  vec3 frame;
++  vec2 m;
++  float F;
++  float night;
++  float tierA;
++  float sunSide;
++  float seed;
++};
++struct ArtRows {
++  float n;
++  float storey;
++  float groundH;
++  float top;
++};
++float artBand(float y, float lo, float hi, float my) {
++  return smoothstep(lo - my, lo + my, y) * (1.0 - smoothstep(hi - my, hi + my, y));
++}
++// Vertical fitting (2.1): base band 0.45 m, a ground storey of G (shrunk to 0.8 G at most), n whole storeys
++// stretched to fit, and at least pmin of parapet; the rounding left over goes to the parapet.
++ArtRows artFit(float T, float G, float nominal, float maxS, float pmin) {
++  ArtRows r;
++  float room = T - 0.45 - pmin;
++  float groundOn = step(0.8 * G, room);
++  r.groundH = groundOn * min(G, room);
++  float s0 = clamp(nominal, 2.7, maxS);
++  float avail = room - G;
++  r.n = groundOn * max(floor(avail / s0), 0.0);
++  r.storey = r.n > 0.5 ? min(avail / r.n, maxS) : s0;
++  r.top = 0.45 + r.groundH + r.n * r.storey;
++  return r;
++}
++// The storey row at height h: (row, metres up from the row's floor, row height); 0 is the ground storey,
++// 1..n the upper storeys, -1 anywhere else (base band, parapet).
++vec3 artRow(float h, ArtRows r) {
++  float yG = h - 0.45;
++  if (r.groundH > 0.0 && yG >= 0.0 && yG < r.groundH) return vec3(0.0, yG, r.groundH);
++  float yU = yG - r.groundH;
++  float k = floor(yU / r.storey);
++  if (r.groundH > 0.0 && yU >= 0.0 && k < r.n) return vec3(k + 1.0, yU - k * r.storey, r.storey);
++  return vec3(-1.0, 0.0, 1.0);
++}
++// A parapet taller than 3 m becomes a plain attic with a 0.15 m reveal line, never another row of windows.
++float artAttic(float h, float T, ArtRows r, float my) {
++  return 1.0 - 0.28 * step(3.0, T - r.top) * artBand(h, T - 3.15, T - 3.0, my);
++}
++// Lit colour by hash (2.6): mode 0 warm 55 / neutral 30 / cool 15, 1 office 20/40/40, 2 warm only, 3 neutral only.
++vec3 artLitColour(float hc, float mode) {
++  float warmTo = mode > 2.5 ? 0.0 : (mode > 1.5 ? 1.0 : (mode > 0.5 ? 0.2 : 0.55));
++  float neutralTo = mode > 2.5 ? 1.0 : (mode > 0.5 ? 0.6 : 0.85);
++  return hc < warmTo ? vec3(1.0, 0.7, 0.4) : (hc < neutralTo ? vec3(1.0, 0.84, 0.64) : vec3(0.82, 0.88, 1.0));
++}
++// Clustering (2.6): a group is first lit or dark by the class share, then 80% of a lit group's windows glow
++// and 8% of a dark group's.
++float artLit(vec2 win, vec2 group, float share, float seed) {
++  float groupOn = step(facadeHash12(group * 1.13 + vec2(seed, 7.0)), share);
++  return step(facadeHash12(win * 1.37 + vec2(3.0, seed)), mix(0.08, 0.8, groupOn));
++}
++// One framed, recessed window (2.2, 2.3, 2.6): opening lo..hi in local metres q, bay width b, window id wid,
++// lit 0 or 1. kind: (blinds allowed, curtains allowed, lit colour mode, intensity scale). sillTier: -1 no sill,
++// 0 Tier A, 1 Tier B.
++void artPane(vec2 q, vec2 lo, vec2 hi, float b, float storey, vec2 wid, float lit, vec4 kind, vec3 tint,
++             float sillTier, ArtCtx c, inout vec3 col, inout vec3 emi, inout float rough) {
++  float fw = 0.035 * b;
++  float wW = hi.x - lo.x;
++  float wH = hi.y - lo.y;
++  float sillOn = step(-0.5, sillTier);
++  float sillLo = lo.y - 0.05 * storey;
++  float sill = facadeBox(q, vec2(lo.x - 0.04 * b, sillLo), vec2(hi.x + 0.04 * b, lo.y), c.m) * mix(c.tierA, 1.0, max(sillTier, 0.0)) * sillOn;
++  float streak = facadeBox(q, vec2(lo.x + 0.1 * wW, sillLo - 0.6), vec2(hi.x - 0.1 * wW, sillLo), c.m) * c.tierA * sillOn;
++  col *= mix(1.0, mix(0.92, 1.0, clamp((sillLo - q.y) / 0.6, 0.0, 1.0)), streak);
++  col = mix(col, c.wall * 1.12, sill);
++  float opening = facadeBox(q, lo, hi, c.m);
++  float pane = facadeBox(q, lo + fw, hi - fw, c.m);
++  float h1 = facadeHash12(wid + vec2(c.seed, 1.7));
++  float h2 = facadeHash12(wid * 1.91 + vec2(4.3, c.seed));
++  float h3 = facadeHash12(wid * 0.73 + vec2(c.seed, 8.9));
++  float fy = clamp((q.y - lo.y - fw) / max(wH - 2.0 * fw, 0.01), 0.0, 1.0);
++  vec3 interior = mix(vec3(0.008, 0.009, 0.01), vec3(0.025, 0.026, 0.027), h1) * tint;
++  float blind = step(h2, 0.25 * kind.x) * step(mix(0.2, 0.6, h3), fy) * step(fy, 0.95);
++  interior = mix(interior, ${lin('#B4AEA2')} * 0.6, blind);
++  vec3 glass = interior * (1.0 - c.F);
++  float topSh = facadeBox(q, vec2(lo.x + fw, hi.y - fw - 0.06 * wH), hi - fw, c.m);
++  float sx = c.sunSide > 0.0 ? hi.x - fw - 0.04 * b : lo.x + fw;
++  float sideSh = facadeBox(q, vec2(sx, lo.y + fw), vec2(sx + 0.04 * b, hi.y - fw), c.m) * (1.0 - topSh);
++  float midX = 0.5 * (lo.x + hi.x);
++  float mull = step(1.3, wW) * c.tierA * facadeBox(q, vec2(midX - 0.011 * b, lo.y), vec2(midX + 0.011 * b, hi.y), c.m);
++  vec3 frameB = mix(c.wall, glass + c.refl * c.F, 0.5) * 0.85;
++  col = mix(col, mix(frameB, c.frame, c.tierA), opening);
++  col = mix(col, glass, pane);
++  col = mix(col, c.wall * 0.55, topSh * pane);
++  col = mix(col, c.wall * 0.7, sideSh * pane);
++  col = mix(col, c.frame, mull);
++  float show = pane * (1.0 - topSh) * (1.0 - sideSh) * (1.0 - mull);
++  rough = mix(rough, 0.6, opening);
++  emi += show * c.refl * c.F;
++  float curtain = step(facadeHash12(wid * 4.7 + vec2(c.seed, 2.2)), 0.3 * kind.y);
++  vec3 litColour = mix(artLitColour(facadeHash12(wid * 2.37 + vec2(c.seed, 5.5)), kind.z), vec3(1.0, 0.6, 0.3), curtain);
++  float intensity = 1.3 * mix(0.5, 1.3, facadeHash12(wid * 3.11 + vec2(9.1, c.seed))) * mix(1.0, 0.3, curtain) * kind.w;
++  emi += show * c.night * (lit * intensity * mix(0.65, 1.0, fy) * litColour + (1.0 - lit) * ${lin('#0B0E14')});
++}
++void artGeneric(vec2 p, float T, float tagS, float hash, ArtCtx c, inout vec3 col, inout vec3 emi, inout float rough) {
++  if (hash > 2.5) {
++    // Brick wainscot 1.0 m with a soldier course at its head, stucco above (schools, civic).
++    col = mix(col, ${lin('#8C5442')}, 1.0 - smoothstep(1.0 - c.m.y, 1.0 + c.m.y, p.y));
++    col *= 1.0 - 0.1 * artBand(p.y, 0.8, 1.0, c.m.y);
++  }
++  ArtRows r = artFit(T, 3.4, tagS > 0.0 ? tagS : 3.0, 4.2, 1.2);
++  col *= artAttic(p.y, T, r, c.m.y);
++  vec3 row = artRow(p.y, r);
++  if (row.x < 0.0) return;
++  col *= 1.0 - 0.15 * c.tierA * step(0.5, row.x) * artBand(row.y, 0.0, 0.03, c.m.y);
++  float b = 3.0;
++  float bi = floor(p.x / b);
++  vec2 q = vec2(p.x - bi * b, row.y);
++  float S = row.z;
++  vec4 kind = vec4(1.0, 0.0, 0.0, 1.0);
++  float lit = artLit(vec2(bi, row.x), vec2(floor(bi / 4.0), row.x), 0.25, c.seed);
++  if (row.x < 0.5 && S >= 3.0 && facadeHash12(vec2(bi, c.seed + 11.0)) < 0.1) {
++    // A glazed entry 2.4 m tall under a 0.3 m canopy line.
++    col *= 1.0 - 0.28 * facadeBox(q, vec2(0.2 * b, 2.55), vec2(0.8 * b, 2.85), c.m);
++    artPane(q, vec2(0.3 * b, 0.0), vec2(0.7 * b, 2.4), b, S, vec2(bi, 0.0), lit, kind, vec3(1.6), -1.0, c, col, emi, rough);
++    return;
++  }
++  if (hash > 1.5 && hash < 2.5) {
++    artPane(q, vec2(0.125 * b, 0.3 * S), vec2(0.425 * b, 0.8 * S), b, S, vec2(2.0 * bi, row.x), lit, kind, vec3(1.0), 1.0, c, col, emi, rough);
++    artPane(q, vec2(0.575 * b, 0.3 * S), vec2(0.875 * b, 0.8 * S), b, S, vec2(2.0 * bi + 1.0, row.x), lit, kind, vec3(1.0), 1.0, c, col, emi, rough);
++  } else {
++    artPane(q, vec2(0.275 * b, 0.3 * S), vec2(0.725 * b, 0.8 * S), b, S, vec2(bi, row.x), lit, kind, vec3(1.0), 1.0, c, col, emi, rough);
++  }
++}
++void artOffice(vec2 p, float T, float tagS, float hash, ArtCtx c, inout vec3 col, inout vec3 emi, inout float rough) {
++  ArtRows r = artFit(T, 4.5, tagS > 0.0 ? tagS : 3.6, 5.0, 1.2);
++  col *= artAttic(p.y, T, r, c.m.y);
++  vec3 row = artRow(p.y, r);
++  if (row.x < 0.0) return;
++  float b = 1.5;
++  float bi = floor(p.x / b);
++  vec2 q = vec2(p.x - bi * b, row.y);
++  float S = row.z;
++  vec3 tint = hash < 0.5 ? vec3(1.0) : (hash < 1.5 ? vec3(0.45, 1.35, 1.55) : (hash < 2.5 ? vec3(1.45, 0.95, 0.6) : vec3(1.0)));
++  vec4 kind = vec4(0.0, 0.0, 1.0, 1.0);
++  float lit = artLit(vec2(bi, row.x), vec2(0.0, row.x), 0.15, c.seed);
++  if (row.x < 0.5) {
++    artPane(q, vec2(0.0, 0.0), vec2(b, S - 0.45), b, S, vec2(bi, 0.0), lit, kind, tint, -1.0, c, col, emi, rough);
++    return;
++  }
++  float curtainWall = step(0.5, hash) * step(hash, 1.5);
++  float visLo = mix(0.42, 0.25, curtainWall) * S;
++  float spandrelGlass = curtainWall * artBand(row.y, -1.0, visLo, c.m.y);
++  col = mix(col, ${lin('#2B3138')} * (1.0 - c.F), spandrelGlass);
++  emi += spandrelGlass * c.refl * c.F;
++  rough = mix(rough, 0.6, spandrelGlass);
++  artPane(q, vec2(0.0, visLo), vec2(b, S), b, S, vec2(bi, row.x), lit, kind, tint, -1.0, c, col, emi, rough);
++}
++void artTerminal(vec2 p, float T, ArtCtx c, inout vec3 col, inout vec3 emi, inout float rough, inout float baseOn) {
++  // Full-height curtain wall between the base band and a 2 m metal fascia; a skybridge (a low box) gets a
++  // glass band between two white 0.7 m beams.
++  float tall = step(6.0, T);
++  float bot = mix(0.7, 0.45, tall);
++  float top = T - mix(0.7, 2.0, tall);
++  vec3 beam = mix(${lin('#E9E7E1')}, ${lin('#C9CDD0')}, tall);
++  float below = 1.0 - smoothstep(bot - c.m.y, bot + c.m.y, p.y);
++  col = mix(col, beam, (1.0 - artBand(p.y, bot, top, c.m.y)) * (1.0 - below * tall));
++  baseOn = tall;
++  float H = top - bot;
++  if (H < 1.0 || p.y < bot || p.y > top) return;
++  float rows = max(floor(H / 2.0 + 0.5), 1.0);
++  float tr = H / rows;
++  float y = p.y - bot;
++  float k = floor(y / tr);
++  float b = 1.5;
++  float bi = floor(p.x / b);
++  float lit = artLit(vec2(bi, k), vec2(floor(bi / 8.0), k), 0.85, c.seed);
++  artPane(vec2(p.x - bi * b, y - k * tr), vec2(0.0), vec2(b, tr), b, tr, vec2(bi, k), lit, vec4(0.0, 0.0, 1.0, 0.55), vec3(1.0), -1.0, c, col, emi, rough);
++  float fx = p.x - floor(p.x / 10.5) * 10.5;
++  float fin = facadeBox(vec2(fx, p.y), vec2(0.0, bot), vec2(0.5, top), c.m) * tall;
++  col = mix(col, ${lin('#E9E7E1')}, fin);
++  emi *= 1.0 - fin;
++  rough = mix(rough, 0.5, fin);
++}
++void artHangar(vec2 p, float T, float ribShade, ArtCtx c, inout vec3 col, inout vec3 emi) {
++  // Ribbed metal at a 0.3 m pitch over a 1.0 m concrete wainscot, and a flat header band under the parapet;
++  // no door, which belongs on one face only (needs face extents).
++  col *= ribShade;
++  col = mix(col, ${lin('#BDB8AE')}, 1.0 - smoothstep(1.0 - c.m.y, 1.0 + c.m.y, p.y));
++  float hdrLo = T - 1.2 - 3.0;
++  if (hdrLo > 2.5) {
++    col = mix(col, c.wall * 0.95, smoothstep(hdrLo - c.m.y, hdrLo + c.m.y, p.y));
++    col *= 1.0 - 0.28 * artBand(p.y, hdrLo - 0.08, hdrLo, c.m.y);
++  }
++  emi += 0.06 * c.wall * c.night * (1.0 - smoothstep(0.0, 6.0, p.y));
++}
++void artHouse(vec2 p, float T, float tagS, float hash, ArtCtx c, inout vec3 col, inout vec3 emi, inout float rough, inout float baseOn) {
++  float lap = c.tierA * artBand(p.y - floor(p.y / 0.2) * 0.2, 0.08, 0.1, c.m.y);
++  if (hash > 2.5) {
++    // Static caravan: white lap siding, a 0.1 m trim stripe at 1.6 m and a 0.6 m dark skirting.
++    baseOn = 0.0;
++    col *= 1.0 - 0.12 * lap;
++    col = mix(col, ${lin('#7A8088')}, artBand(p.y, 1.6, 1.7, c.m.y));
++    col = mix(col, ${lin('#6D6A63')}, 1.0 - smoothstep(0.6 - c.m.y, 0.6 + c.m.y, p.y));
++    return;
++  }
++  if (hash > 1.5) col *= 1.0 - 0.1 * lap;
++  ArtRows r = artFit(T, 2.8, tagS > 0.0 ? tagS : 2.8, 4.2, 1.2);
++  col *= artAttic(p.y, T, r, c.m.y);
++  vec3 row = artRow(p.y, r);
++  if (row.x < 0.0) return;
++  float b = 3.4;
++  float bi = floor(p.x / b);
++  if (facadeHash12(vec2(bi, row.x) + vec2(c.seed, 6.0)) < 0.4) return;
++  float S = row.z;
++  ArtCtx cw = c;
++  cw.frame = ${lin('#E9E7E1')};
++  float lit = artLit(vec2(bi, row.x), vec2(floor(bi / 4.0), row.x), 0.35, c.seed);
++  artPane(vec2(p.x - bi * b, row.y), vec2(1.1, 0.32 * S), vec2(2.3, 0.32 * S + 1.2), b, S, vec2(bi, row.x), lit, vec4(1.0, 1.0, 2.0, 1.0), vec3(1.0), 0.0, cw, col, emi, rough);
++}
++void artGarage(vec2 p, float T, float tagS, float hash, ArtCtx c, inout vec3 col, inout vec3 emi, inout float rough) {
++  // Concrete upstands 1.05 m over dark open decks, the slab underside lighter at the top, 0.6 m columns every 8.5 m.
++  ArtRows r = artFit(T, 3.0, tagS > 0.0 ? tagS : 3.0, 4.2, 1.2);
++  vec3 row = artRow(p.y, r);
++  if (row.x < 0.0) return;
++  float S = row.z;
++  float y = row.y;
++  float cx = p.x - floor(p.x / 8.5) * 8.5;
++  float opening = facadeBox(vec2(cx, y), vec2(0.6, 1.05), vec2(8.5 + c.m.x, S + 1.0), c.m);
++  float depth = clamp((y - 1.05) / max(S - 1.05, 0.1), 0.0, 1.0);
++  vec3 inside = mix(${lin('#121212')}, ${lin('#5A5A57')} * 0.7, smoothstep(0.72, 0.86, depth));
++  col = mix(col, inside, opening);
++  rough = mix(rough, 0.95, opening);
++  float cable = artBand(y, 1.3, 1.32, c.m.y) + artBand(y, 1.55, 1.57, c.m.y) + artBand(y, 1.8, 1.82, c.m.y);
++  col = mix(col, ${lin('#9EA3A6')}, cable * opening * c.tierA);
++  vec3 ledColour = hash < 0.5 ? vec3(1.0, 0.62, 0.25) : vec3(0.9, 0.95, 1.0);
++  float led = opening * artBand(y, S - 0.08 * (S - 1.05), S + 0.2, c.m.y);
++  emi += c.night * ledColour * (1.2 * led + 0.05 * opening);
++}
++void artCanopy(vec2 p, float T, float carport, float hash, ArtCtx c, inout vec3 col, inout vec3 emi, inout float rough) {
++  // A roof on posts: a fuel canopy's 0.9 m brand fascia on a dark drip line, or a carport's 0.3 m steel edge;
++  // under it a light (fuel) or PV (carport) underside in the top 15%, then the far side seen through.
++  float edgeLo = T - mix(0.9, 0.3, carport);
++  float underTop = edgeLo - 0.08 * (1.0 - carport);
++  col = mix(col, ${lin('#2A2A28')}, artBand(p.y, underTop, edgeLo, c.m.y) * (1.0 - carport));
++  float under = 1.0 - smoothstep(underTop - c.m.y, underTop + c.m.y, p.y);
++  float soffitLo = 0.85 * underTop;
++  float soffitZone = smoothstep(soffitLo - c.m.y, soffitLo + c.m.y, p.y);
++  vec3 soffit = mix(${lin('#9A9B98')} * 0.55, ${lin('#2C3440')}, carport);
++  vec3 inside = mix(${lin('#3E3F3C')}, soffit, soffitZone);
++  float px = p.x - floor(p.x / 8.0) * 8.0;
++  float pw = mix(0.45, 0.25, carport);
++  float post = facadeBox(vec2(px, p.y), vec2(4.0 - 0.5 * pw, -1.0), vec2(4.0 + 0.5 * pw, underTop), c.m);
++  inside = mix(inside, mix(${lin('#E9E7E1')}, ${lin('#9EA3A6')}, carport), post);
++  col = mix(col, inside, under);
++  rough = mix(rough, 0.95, under * (1.0 - post));
++  float spot = facadeBox(vec2(px, p.y), vec2(1.7, underTop - 0.1), vec2(2.1, underTop), c.m)
++    * step(0.5, facadeHash12(vec2(floor(p.x / 8.0), c.seed)));
++  vec3 fuelNight = vec3(1.0, 0.89, 0.8) * (2.0 * soffitZone + 0.12 * (1.0 - soffitZone) * (1.0 - post)) * under
++    + 0.6 * c.wall * smoothstep(edgeLo - c.m.y, edgeLo + c.m.y, p.y);
++  vec3 carportNight = vec3(1.0, 0.85, 0.6) * (0.8 * spot + 0.015 * under * soffitZone);
++  emi += c.night * mix(fuelNight, carportNight, carport);
++  // By day the open side shows the lit ground beyond and the soffit catches its bounce, so the space under the
++  // roof reads as open, never as a black box (art direction section 4).
++  vec3 seenThrough = mix(vec3(0.05, 0.05, 0.048), vec3(0.09, 0.09, 0.088) * mix(1.0, 0.35, carport), soffitZone);
++  emi += (1.0 - c.night) * under * (1.0 - post) * seenThrough;
++}
++void artRetail(vec2 p, float T, float hash, ArtCtx c, inout vec3 col, inout vec3 emi, inout float rough, inout float baseOn) {
++  // Storefront on the ground storey only: a 0.5 m split-face bulkhead, glass to 3.0 m with mullions every
++  // ~1.5 m and a transom at 2.4 m, 0.6 m tenant piers, a 1.2 m sign band with one sign per tenant, blank above.
++  float W = hash < 0.5 ? 6.0 : (hash < 1.5 ? 7.5 : (hash < 2.5 ? 9.0 : 12.0));
++  float glassTop = min(3.0, T - 1.2 - 1.3);
++  if (glassTop < 2.0) return;
++  baseOn = 0.0;
++  float ti = floor(p.x / W);
++  float tx = p.x - ti * W;
++  col = mix(col, ${lin('#A39A8C')}, 1.0 - smoothstep(0.5 - c.m.y, 0.5 + c.m.y, p.y));
++  float tenantOpen = step(0.3, facadeHash12(vec2(ti, c.seed + 4.0)));
++  float tenantI = mix(0.6, 1.0, facadeHash12(vec2(ti, c.seed + 9.0)));
++  float span = W - 0.6;
++  float panes = max(floor(span / 1.5 + 0.5), 1.0);
++  float pw = span / panes;
++  float lx = tx - 0.6;
++  float pj = floor(lx / pw);
++  vec2 q = vec2(lx - pj * pw, p.y);
++  vec2 wid = vec2(ti * 16.0 + pj, 0.0);
++  vec4 kind = vec4(0.0, 0.0, 3.0, 0.7 * tenantI);
++  float transom = step(2.7, glassTop);
++  float lowTop = mix(glassTop, 2.4, transom);
++  if (tx > 0.6) {
++    artPane(q, vec2(0.0, 0.5), vec2(pw, lowTop), pw, 3.0, wid, tenantOpen, kind, vec3(2.2), -1.0, c, col, emi, rough);
++    if (transom > 0.5) {
++      artPane(q, vec2(0.0, 2.4), vec2(pw, glassTop), pw, 3.0, wid + vec2(0.0, 1.0), tenantOpen, kind, vec3(2.2), -1.0, c, col, emi, rough);
++    }
++  }
++  float pier = facadeBox(vec2(tx, p.y), vec2(-1.0, -1.0), vec2(0.6, glassTop + 0.1), c.m);
++  col = mix(col, c.wall, pier);
++  emi *= 1.0 - pier;
++  float sLo = glassTop + 0.1;
++  float signBox = facadeBox(vec2(tx, p.y), vec2(0.6 + 0.2 * span, sLo + 0.3), vec2(0.6 + 0.8 * span, sLo + 0.9), c.m);
++  float hs = facadeHash12(vec2(ti, c.seed + 13.0));
++  vec3 signColour = hs < 0.25 ? ${lin('#7A3B32')} : (hs < 0.5 ? ${lin('#34506B')} : (hs < 0.75 ? ${lin('#5C6A3A')} : ${lin('#8A7650')}));
++  col = mix(col, signColour, signBox);
++  emi += c.night * 0.8 * signColour * signBox * tenantOpen;
++}
++void artWarehouse(vec2 p, float T, float hash, float ribShade, ArtCtx c, inout vec3 col, inout vec3 emi, inout float rough) {
++  // Tilt-up panels 8.4 m wide with joints and reveals at 1/3 and 2/3, or (hash 1) ribbed metal with a joint at
++  // 2/3; hash 2 a 0.8 m clerestory at 0.75 of the wall. Dock doors 2.7 by 3.0 m at a 1.2 m sill every 4 m in runs,
++  // in black shelters wider at the sides and top than at the foot, yellow guides and a lamp over each.
++  if (hash > 0.5 && hash < 1.5) {
++    col *= ribShade;
++    col *= 1.0 - 0.15 * artBand(p.y, 2.0 / 3.0 * T, 2.0 / 3.0 * T + 0.04, c.m.y);
++  } else {
++    float jx = p.x - floor(p.x / 8.4) * 8.4;
++    col *= 1.0 - 0.15 * c.tierA * facadeBox(vec2(jx, 0.5), vec2(-1.0), vec2(0.03, 2.0), c.m);
++    col *= 1.0 - 0.2 * (artBand(p.y, T / 3.0, T / 3.0 + 0.05, c.m.y) + artBand(p.y, 2.0 * T / 3.0, 2.0 * T / 3.0 + 0.05, c.m.y));
++  }
++  if (hash > 1.5 && hash < 2.5 && T > 6.4) {
++    float clere = artBand(p.y, 0.75 * T - 0.4, 0.75 * T + 0.4, c.m.y);
++    col = mix(col, vec3(0.02) * (1.0 - c.F), clere);
++    emi += clere * c.refl * c.F;
++    rough = mix(rough, 0.6, clere);
++  }
++  if (T >= 6.1) {
++    float dw = 4.0;
++    float di = floor(p.x / dw);
++    vec2 d = vec2(p.x - di * dw, p.y);
++    float run = step(0.45, facadeHash12(vec2(floor(di / 10.0), c.seed + 5.0)));
++    float shelter = facadeBox(d, vec2(0.3, 1.15), vec2(3.7, 4.55), c.m) * run;
++    float door = facadeBox(d, vec2(0.65, 1.2), vec2(3.35, 4.2), c.m) * run;
++    float slat = 1.0 - 0.15 * c.tierA * artBand(p.y - floor(p.y / 0.15) * 0.15, 0.12, 0.14, c.m.y);
++    float guides = (facadeBox(d, vec2(0.2, -1.0), vec2(0.32, 1.2), c.m) + facadeBox(d, vec2(3.68, -1.0), vec2(3.8, 1.2), c.m)) * run * c.tierA;
++    float lamp = facadeBox(d, vec2(1.8, 4.75), vec2(2.2, 4.9), c.m) * run;
++    col = mix(col, ${lin('#1C1C1C')}, shelter);
++    col = mix(col, ${lin('#B7BCC0')} * slat, door);
++    col = mix(col, ${lin('#E3B320')}, guides);
++    col = mix(col, vec3(0.3), lamp);
++    emi += c.night * vec3(1.0, 0.75, 0.45) * (2.4 * lamp + 0.05 * door);
++  }
++  if (T > 7.5) {
++    float wx = p.x - floor(p.x / 15.0) * 15.0;
++    float pack = facadeBox(vec2(wx, p.y), vec2(7.35, 5.9), vec2(7.65, 6.15), c.m);
++    col = mix(col, vec3(0.1), pack);
++    emi += c.night * pack * vec3(1.0, 0.8, 0.55) * 2.0;
++  }
++}
++void artFire(vec2 p, float T, float hash, ArtCtx c, inout vec3 col, inout vec3 emi, inout float rough, inout float baseOn) {
++  // Apparatus bays on the ground storey only: 4.3 m doors between 0.8 m piers in a 0.25 m red surround, glazed
++  // sectional (a glass band at 0.55-0.70) or (hash 1) solid red, a header band above; crew storeys punched.
++  ArtRows r = artFit(T, 5.2, 3.2, 4.2, 1.2);
++  col *= artAttic(p.y, T, r, c.m.y);
++  if (r.groundH >= 4.6) {
++    float pitch = 5.1;
++    float bi = floor(p.x / pitch);
++    vec2 d = vec2(p.x - bi * pitch, p.y);
++    float surround = facadeBox(d, vec2(0.15, -1.0), vec2(4.95, 4.55), c.m);
++    float door = facadeBox(d, vec2(0.4, -1.0), vec2(4.7, 4.3), c.m);
++    baseOn = 1.0 - surround;
++    col = mix(col, ${lin('#B22222')}, surround);
++    float sect = 1.0 - 0.14 * artBand(p.y - floor(p.y / 0.61) * 0.61, 0.0, 0.04, c.m.y);
++    if (hash > 0.5 && hash < 1.5) {
++      col = mix(col, ${lin('#B22222')} * 0.85 * sect, door);
++    } else {
++      col = mix(col, ${lin('#C9CCCE')} * sect, door);
++      float glz = facadeBox(d, vec2(0.55, 4.3 * 0.55), vec2(4.55, 4.3 * 0.7), c.m) * door;
++      col = mix(col, vec3(0.015) * (1.0 - c.F), glz);
++      emi += glz * (c.refl * c.F + c.night * vec3(0.85, 0.92, 1.0) * 1.6);
++      rough = mix(rough, 0.6, glz);
++    }
++  }
++  vec3 row = artRow(p.y, r);
++  if (row.x < 0.5) return;
++  float b = 3.0;
++  float bi = floor(p.x / b);
++  float S = row.z;
++  float lit = artLit(vec2(bi, row.x), vec2(floor(bi / 4.0), row.x), 0.4, c.seed);
++  artPane(vec2(p.x - bi * b, row.y), vec2(0.275 * b, 0.3 * S), vec2(0.725 * b, 0.8 * S), b, S, vec2(bi, row.x), lit, vec4(1.0, 0.0, 0.0, 1.0), vec3(1.0), 0.0, c, col, emi, rough);
++}
++void artHotel(vec2 p, float T, float tagS, float hash, ArtCtx c, inout vec3 col, inout vec3 emi, inout float rough) {
++  // A strict room grid: 3.8 m bays, one 1.5 m window per room mirrored across the party walls, sills at 0.3 storey,
++  // a PTAC grille under each (Tier A only), brick on the lower two storeys, a 4.8 m ground storey with lobby glass
++  // on a third of its bays, and a lighter cornice in the parapet.
++  ArtRows r = artFit(T, 4.8, tagS > 0.0 ? tagS : 3.0, 4.2, 1.5);
++  float brickTop = 0.45 + r.groundH + min(r.n, 1.0) * r.storey;
++  vec3 brick = mod(hash, 2.0) < 0.5 ? ${lin('#9A6A55')} : ${lin('#8C5442')};
++  float brickZone = 1.0 - smoothstep(brickTop - c.m.y, brickTop + c.m.y, p.y);
++  col = mix(col, brick, brickZone);
++  col *= mix(1.0, 1.1, smoothstep(r.top + 0.3 - c.m.y, r.top + 0.3 + c.m.y, p.y));
++  col *= artAttic(p.y, T, r, c.m.y);
++  vec3 row = artRow(p.y, r);
++  if (row.x < 0.0) return;
++  ArtCtx cc = c;
++  cc.wall = mix(c.wall, brick, brickZone);
++  float b = 3.8;
++  float bi = floor(p.x / b);
++  vec2 q = vec2(p.x - bi * b, row.y);
++  float S = row.z;
++  if (row.x < 0.5 && facadeHash12(vec2(bi, c.seed + 2.0)) < 0.33) {
++    artPane(q, vec2(0.3, 0.0), vec2(b - 0.3, S - 0.6), b, S, vec2(bi, 0.0), 1.0, vec4(0.0, 0.0, 3.0, 1.25), vec3(2.0), -1.0, cc, col, emi, rough);
++    return;
++  }
++  float x0 = mod(bi, 2.0) > 0.5 ? 0.6 : b - 2.1;
++  float y0 = row.x < 0.5 ? 1.2 : 0.3 * S;
++  float lit = artLit(vec2(bi, row.x), vec2(floor(bi / 4.0), row.x), 0.5, c.seed);
++  float ptac = facadeBox(q, vec2(x0 + 0.25, y0 - 0.05 * S - 0.5), vec2(x0 + 1.25, y0 - 0.05 * S - 0.1), c.m) * c.tierA * step(0.5, row.x);
++  artPane(q, vec2(x0, y0), vec2(x0 + 1.5, y0 + 1.5), b, S, vec2(bi, row.x), lit, vec4(1.0, 1.0, 0.0, 1.0), vec3(1.0), 1.0, cc, col, emi, rough);
++  col = mix(col, cc.wall * 0.75, ptac);
++}
++void artTank(vec2 p, float T, ArtCtx c, inout vec3 col) {
++  // Shell-course lines every 2.4 m, a wind girder 0.6 m under the top over a shadow line, a 0.1 m rim, and
++  // faint grime streaks from the top (Tier A).
++  float course = p.y - floor(p.y / 2.4) * 2.4;
++  col *= 1.0 - 0.05 * artBand(course, 1.2, 1.25, c.m.y);
++  col *= 1.0 + 0.08 * artBand(p.y, T - 0.75, T - 0.6, c.m.y);
++  col *= 1.0 - 0.25 * artBand(p.y, T - 0.85, T - 0.75, c.m.y);
++  col *= 1.0 - 0.2 * smoothstep(T - 0.1 - c.m.y, T - 0.1 + c.m.y, p.y);
++  float streak = step(0.7, facadeHash12(vec2(floor(p.x / 0.7), c.seed)));
++  col *= 1.0 - 0.05 * c.tierA * streak * smoothstep(T - 4.0, T - 0.9, p.y);
++}
++// The near look per class; returns (base band on, coping on, grime on) through inout flags.
++void facadeArt(float cls, float hash, vec2 p, float T, float tagS, float ribShade, ArtCtx c,
++               inout vec3 col, inout vec3 emi, inout float rough, inout vec3 flags) {
++  float baseOn = 1.0;
++  if (cls < 0.5) {
++    artGeneric(p, T, tagS, hash, c, col, emi, rough);
++  } else if (cls < 1.5) {
++    artGarage(p, T, tagS, hash, c, col, emi, rough);
++  } else if (cls < 2.5) {
++    artHangar(p, T, ribShade, c, col, emi);
++  } else if (cls < 3.5) {
++    artHouse(p, T, tagS, hash, c, col, emi, rough, baseOn);
++  } else if (cls < 4.5) {
++    artOffice(p, T, tagS, hash, c, col, emi, rough);
++  } else if (cls < 5.5) {
++    artTerminal(p, T, c, col, emi, rough, baseOn);
++  } else if (cls < 6.5) {
++    // PLAIN: base band and coping only.
++  } else if (cls < 7.5 || cls > 12.5) {
++    artCanopy(p, T, step(12.5, cls), hash, c, col, emi, rough);
++    flags = vec3(0.0);
++    return;
++  } else if (cls < 8.5) {
++    artRetail(p, T, hash, c, col, emi, rough, baseOn);
++  } else if (cls < 9.5) {
++    artWarehouse(p, T, hash, ribShade, c, col, emi, rough);
++  } else if (cls < 10.5) {
++    artFire(p, T, hash, c, col, emi, rough, baseOn);
++  } else if (cls < 11.5) {
++    artHotel(p, T, tagS, hash, c, col, emi, rough);
++  } else {
++    artTank(p, T, c, col);
++    flags = vec3(0.0, 0.0, 1.0);
++    return;
++  }
++  flags = vec3(baseOn, 1.0, 1.0);
++}
++`
++
+ /** Packed heights at or above this are saturated and say nothing about the storey height. */
+ const SATURATED_HEIGHT_M = PACK_CODE_MAX * PACK_HEIGHT_STEP_M
+ 
+@@ -451,6 +982,8 @@ ${OPENING_RECT_GLSL}
+ ${COVER_GLSL}
+ ${RELIEF_GLSL}
+ ${WALL_GLSL}
++${LIT_GLSL}
++${ART_GLSL}
+ 
+ void fragmentMain(FragmentInput fsInput, inout czm_modelMaterial material) {
+   vec4 building = vec4(0.0);
+@@ -493,6 +1026,9 @@ void fragmentMain(FragmentInput fsInput, inout czm_modelMaterial material) {
+   float fadeDetail = 1.0 - smoothstep(u_fadeStart, u_fadeEnd, max(aa.x, aa.y));
+   float detail = mix(1.0, fadeDetail, u_fade) * step(0.0, ground.w);
+   float ribDetail = 1.0 - smoothstep(0.25, 0.6, ribAa);
++  vec2 metresAa = max(fwidth(vec2(s, h)), vec2(1e-4));
++  // A 3 m untagged box packs as a 4 m bucket, so short walls read as 3 m.
++  float wallTop = building.z < 4.5 ? 3.0 : building.z - 1.0;
+ 
+   if (dot(normalWC, upWC) > 0.6) {
+     return;
+@@ -507,13 +1043,18 @@ void fragmentMain(FragmentInput fsInput, inout czm_modelMaterial material) {
+   vec3 gap = ${glslVec3(srgbToLinear(GAP_SRGB))};
+   float openingRoughness = mix(${glslFloat(GLASS_ROUGHNESS)}, ${glslFloat(GAP_ROUGHNESS)}, gappy);
+ 
+-  vec3 wall = material.diffuse * facadeWallLinear(building.x, building.w);
++  // Tint jitter per building (2.4): L* +-4 and b* +-3 from a hash of the lookup's ground point.
++  float jitL = (facadeHash12(ground.xz * 0.37 + ground.y * 0.11) * 2.0 - 1.0) * step(0.0, ground.w);
++  float jitB = (facadeHash12(ground.zy * 0.53 + ground.x * 0.07) * 2.0 - 1.0) * step(0.0, ground.w);
++  vec3 wall = material.diffuse * facadeWallLinear(building.x, building.w)
++    * (1.0 + 0.12 * jitL) * vec3(1.0 + 0.015 * jitB, 1.0 + 0.005 * jitB, 1.0 - 0.045 * jitB);
+   float wallRoughness = material.roughness;
+   float night = facadeNight(fsInput.attributes.positionWC);
+   vec3 litEmissive = ${glslVec3(LIT_WINDOW_EMISSIVE)} * night;
+-  float litShare = ${glslFloat(FACADE_LIT_SHARE)} * glassy;
++  float litShare = facadeLitShare(building.x) * glassy;
+ 
+-  vec3 farWall = wall * mix(1.0, ${glslFloat(RIB_SHADE_MEAN)}, panels);
++  // The far tint folds the base band, grime and coping in as one constant (2.4, Tier C).
++  vec3 farWall = wall * mix(1.0, ${glslFloat(RIB_SHADE_MEAN)}, panels) * 0.95;
+   vec3 farColour = mix(farWall, mix(u_glassMean, gap, gappy), cover);
+   float farRoughness = mix(wallRoughness, openingRoughness, cover);
+   vec3 farEmissive = litEmissive * cover * litShare;
+@@ -524,21 +1065,50 @@ void fragmentMain(FragmentInput fsInput, inout czm_modelMaterial material) {
+     return;
+   }
+ 
+-  vec4 rect = facadeOpeningRect(building.x);
+-  vec2 id = floor(cell);
+-  vec2 f = fract(cell);
+-  float slab = 1.0 - 0.12 * relief.x * detail * (1.0 - smoothstep(0.0, 0.06 + aa.y, f.y));
+-  float seam = mix(1.0, facadeSeam(f.x, aa.x), panels * detail);
+   float rib = mix(${glslFloat(RIB_SHADE_LOW)}, ${glslFloat(RIB_SHADE_HIGH)}, facadeRibCrest(ribCoord, ribAa));
+   float ribShade = mix(${glslFloat(RIB_SHADE_MEAN)}, rib, ribDetail);
+-  float shade = slab * seam * mix(1.0, ribShade, panels);
+-  float opening = facadeBox(f, rect.xy, rect.zw, aa) * hasOpening;
+-  vec3 glass = mix(${glslVec3(srgbToLinear(GLASS_DARK_SRGB))}, ${glslVec3(srgbToLinear(GLASS_LIGHT_SRGB))}, facadeHash12(id));
+-  float lit = step(1.0 - litShare, facadeHash12(id * 1.37)) * glassy;
+-
+-  vec3 nearColour = mix(wall * shade, mix(glass, gap, gappy), opening);
+-  float nearRoughness = mix(wallRoughness, openingRoughness, opening);
+-  vec3 nearEmissive = litEmissive * opening * lit;
++
++  // Glass reflection (2.3): Schlick Fresnel over an analytic sky by the reflected ray's elevation.
++  vec3 viewEC = normalize(-fsInput.attributes.positionEC);
++  vec3 nEC = normalize(fsInput.attributes.normalEC);
++  float cosV = clamp(dot(nEC, viewEC), 0.0, 1.0);
++  float elev = dot(czm_inverseViewRotation * reflect(-viewEC, nEC), upWC);
++  vec3 sky = mix(${lin('#5C5D58')}, ${lin('#C6D1DB')}, smoothstep(-0.08, 0.0, elev));
++  sky = mix(sky, ${lin('#7FA2C6')}, smoothstep(0.0, 0.25, elev));
++  vec3 sunWC = normalize(czm_inverseViewRotation * czm_sunDirectionEC);
++  float lowSun = (1.0 - smoothstep(0.0, 0.14, dot(sunWC, upWC))) * max(dot(sunWC, normalWC), 0.0);
++  sky = mix(sky, ${lin('#E3B48C')}, 0.6 * lowSun * (1.0 - smoothstep(0.0, 0.25, abs(elev))));
++  float coated = step(3.5, building.x) * step(building.x, 5.5);
++  float f0 = mix(0.08, 0.22, coated);
++  ArtCtx art;
++  art.wall = wall;
++  art.refl = mix(sky, ${lin('#0E1219')}, night);
++  art.F = f0 + (1.0 - f0) * pow(1.0 - cosV, 5.0);
++  art.night = night;
++  art.m = metresAa;
++  art.tierA = smoothstep(6.0, 10.0, 1.0 / max(metresAa.x, metresAa.y));
++  vec3 sunMC = (czm_inverseModel * vec4(sunWC, 0.0)).xyz;
++  art.sunSide = dot(sunMC, tangentMC);
++  art.frame = building.w < 0.5 ? ${lin('#3B3631')} : (building.w < 1.5 ? ${lin('#A9ACAE')} : (building.w < 2.5 ? ${lin('#E9E7E1')} : ${lin('#1E1F21')}));
++  art.seed = building.w * 17.0 + jitL * 31.0 + jitB * 7.0;
++
++  vec3 nearColour = wall;
++  float nearRoughness = wallRoughness;
++  vec3 nearEmissive = vec3(0.0);
++  vec3 flags = vec3(1.0);
++  facadeArt(building.x, building.w, vec2(s, h), wallTop, levelsKnown * levelStorey, ribShade, art,
++    nearColour, nearEmissive, nearRoughness, flags);
++  float my = metresAa.y;
++  // Base band 0.45 m at 0.78 (2.1), coping: 0.12 m at 1.12 over a 0.08 m line at 0.72 (2.4), drawn from the
++  // packed bucket's centre, and grime toward the base with contact darkening in the bottom 0.15 m (2.4).
++  nearColour *= mix(1.0, mix(0.78, 1.0, smoothstep(0.45 - my, 0.45 + my, h)), flags.x);
++  float copeLo = building.z < 4.5 ? 2.88 : building.z - 0.12;
++  nearColour *= mix(1.0, 1.0 + 0.12 * smoothstep(copeLo - my, copeLo + my, h) - 0.28 * artBand(h, copeLo - 0.08, copeLo, my), flags.y);
++  nearColour *= mix(1.0, mix(0.84, 1.0, smoothstep(0.0, 1.4, h)) * mix(0.7, 1.0, smoothstep(0.15 - my, 0.15 + my, h)), flags.z);
++  // A warm street and entrance wash at the base of retail, hotel, terminal and fire-station walls (2.6).
++  float washed = step(4.5, building.x) * step(building.x, 5.5) + step(7.5, building.x) * step(building.x, 8.5)
++    + step(9.5, building.x) * step(building.x, 11.5);
++  nearEmissive += washed * 0.04 * wall * night * (1.0 - smoothstep(0.0, 3.0, h));
+ 
+   material.diffuse = mix(farColour, nearColour, detail);
+   material.roughness = mix(farRoughness, nearRoughness, detail);
