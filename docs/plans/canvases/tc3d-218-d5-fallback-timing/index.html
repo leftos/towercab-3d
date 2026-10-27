@@ -1,0 +1,220 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Fallback Timing</title>
+<style>
+  :root {
+    --bg: #f6f6f3;
+    --panel: #ffffff;
+    --text: #1d1f22;
+    --muted: #5d636b;
+    --rule: #d9dbdf;
+    --accent: #0b6bcb;
+    --note-bg: #fff6dc;
+    --note-rule: #e8c766;
+    --rec-bg: #e6f3ea;
+    --rec-rule: #4f9d69;
+    --chg-bg: #fde8e4;
+    --chg-text: #9b2c1c;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --bg: #131518;
+      --panel: #1b1e22;
+      --text: #e7e9ec;
+      --muted: #9aa1aa;
+      --rule: #30353b;
+      --accent: #6cb4ff;
+      --note-bg: #2b2616;
+      --note-rule: #7a6420;
+      --rec-bg: #17291d;
+      --rec-rule: #3f7d54;
+      --chg-bg: #3a1d18;
+      --chg-text: #f3a493;
+    }
+  }
+  :root[data-theme="dark"] {
+    --bg: #131518;
+    --panel: #1b1e22;
+    --text: #e7e9ec;
+    --muted: #9aa1aa;
+    --rule: #30353b;
+    --accent: #6cb4ff;
+    --note-bg: #2b2616;
+    --note-rule: #7a6420;
+    --rec-bg: #17291d;
+    --rec-rule: #3f7d54;
+    --chg-bg: #3a1d18;
+    --chg-text: #f3a493;
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--text); font: 15px/1.5 system-ui, -apple-system, "Segoe UI", sans-serif; }
+  main { max-width: 1800px; margin: 0 auto; padding: 24px 16px 64px; }
+  h1 { font-size: 1.6rem; margin: 0 0 4px; }
+  h2 { font-size: 1.2rem; margin: 0 0 6px; }
+  h3 { font-size: 1rem; margin: 18px 0 8px; }
+  p, li { max-width: 1150px; }
+  .sub { color: var(--muted); margin: 0 0 16px; }
+  .note, .rec { border-radius: 4px; padding: 10px 14px; margin: 0 0 16px; max-width: 1200px; }
+  .note { background: var(--note-bg); border-left: 4px solid var(--note-rule); }
+  .rec { background: var(--rec-bg); border-left: 4px solid var(--rec-rule); }
+  .worst { background: var(--chg-bg); color: var(--chg-text); border-radius: 4px; padding: 8px 12px; margin: 0 0 12px; font-weight: 600; max-width: 1200px; }
+  a { color: var(--accent); }
+  .toc { display: flex; flex-wrap: wrap; gap: 6px 16px; margin: 0 0 24px; padding: 0; list-style: none; }
+  .toc a { text-decoration: none; }
+  section { background: var(--panel); border: 1px solid var(--rule); border-radius: 8px; padding: 16px; margin: 0 0 22px; }
+  .cap { color: var(--muted); margin: 0 0 12px; font-size: 0.92rem; }
+  .two { display: grid; gap: 12px; grid-template-columns: repeat(2, minmax(0, 1fr)); align-items: start; }
+  .four { display: grid; gap: 12px; grid-template-columns: repeat(4, minmax(0, 1fr)); align-items: start; }
+  figure { margin: 0; }
+  figure img, figure video { display: block; width: 100%; height: auto; border-radius: 4px; border: 1px solid var(--rule); background: #000; }
+  figcaption { font-size: 0.88rem; margin: 6px 0 0; }
+  figcaption b { display: block; font-size: 0.95rem; }
+  .scroll { overflow-x: auto; margin: 12px 0 0; }
+  table { border-collapse: collapse; font-size: 0.84rem; min-width: 760px; }
+  th, td { border: 1px solid var(--rule); padding: 4px 7px; text-align: left; vertical-align: top; white-space: nowrap; }
+  th { background: var(--bg); font-weight: 600; }
+  td.num { text-align: right; font-variant-numeric: tabular-nums; }
+  code { font-family: ui-monospace, "Cascadia Code", Consolas, monospace; font-size: 0.9em; }
+  @media (max-width: 900px) {
+    .two, .four { grid-template-columns: minmax(0, 1fr); }
+  }
+</style>
+</head>
+<body>
+<main>
+<h1>TC3D-218 D5: what an untyped airport building shows before its shape class arrives</h1>
+<p class="sub">OSM Buildings facades, <code>feat/osm-facades</code> at e479e3d. Headless Edge, Vite dev server (<code>vite:headless</code>), 1596×800 canvas, building quality high. Delays measured at KSFO and KOAK; frames shot at KSFO from the tower eye, heading 313.9, pitch −1.9, FOV 9, at 12:00 and 22:00 local.</p>
+
+<div class="note">
+<p><b>The question.</b> Step 3 types an untagged building inside the aerodrome boundary from its shape (set B: footprint ≥ 1,500 m² and ≤ 20 m → HANGAR; GARAGE from 4-8 levels only when tagged). The footprint area comes from <code>getTileFeatureStats</code>, which <code>attachBuildingLookup</code> builds in its <code>postRender</code> drain after the tile loads. Until then the style can only say GENERIC; once the stats exist, <code>tileset.makeStyleDirty()</code> (once per drain pass) restyles and the next frame draws the typed facade. What should the controller see in between?</p>
+<ul>
+<li><b>A, swap on arrival:</b> GENERIC from the first frame, then the typed facade the frame after the stats arrive.</li>
+<li><b>B, plain until typed:</b> no facade grammar (a plain wall) until the stats arrive, then the typed facade.</li>
+<li><b>C, fade:</b> GENERIC first, then a 0.5 s crossfade to the typed facade.</li>
+</ul>
+</div>
+
+<div class="rec">
+<p><b>Read.</b> A. While panning, the stats are built in the same frame the tile is first drawn for 106 of 112 tiles (KSFO and KOAK together), so in A or B the controller sees the stand-in for one frame (17 ms). At that length C makes the change more visible, not less: a 0.5 s animation instead of one frame. B is worse than A at both lengths, since before the stats exist no rule knows which untyped buildings will become hangars. Every GENERIC building inside the boundary must start plain: 83 at KSFO and 104 at KOAK in the tower view's tiles, where only 12 and 10 become HANGAR. The rest pop from plain back to GENERIC. Long waits (up to 664 ms) happen only during the airport switch, when the whole scene is still streaming in and the frames themselves stall.</p>
+</div>
+
+<ul class="toc">
+<li><a href="#measure">Measured delay</a></li>
+<li><a href="#states">The four states</a></li>
+<li><a href="#lane-a">A: Swap on arrival</a></li>
+<li><a href="#lane-b">B: Plain until typed</a></li>
+<li><a href="#lane-c">C: Fade</a></li>
+<li><a href="#approx">What is approximate</a></li>
+</ul>
+
+<section id="measure">
+<h2>Measured delay: tile first drawn → its lookup stats exist</h2>
+<p class="cap">For each building tile that loaded after the listeners were attached: the time from its first <code>tileVisible</code> event (the frame it is first drawn) to the <code>postRender</code> in which <code>getTileFeatureStats(tile.content)</code> first returns stats. That listener runs after the lookup drain in the same <code>postRender</code>. "Airport switch" covers the tiles that loaded during the 12 s after <code>selectAirport</code> from the tower view. "Panning" covers 24 heading steps of 30° at the tower eye, 2.5 s apart, at FOV 60 and then FOV 25. All 158 tiles were built; none was skipped. The typed facade is drawn one frame after the stats (the restyle runs on the next frame).</p>
+<div class="scroll">
+<table>
+<thead><tr><th>Airport</th><th>Phase</th><th>Tiles</th><th>Median</th><th>p95</th><th>Max</th><th>Over 100 ms</th><th>Stats in the tile's first frame</th><th>Next frame</th><th>2+ frames later</th></tr></thead>
+<tbody>
+<tr><td>KSFO</td><td>All</td><td class="num">80</td><td class="num">13.2 ms</td><td class="num">264.1 ms</td><td class="num">664.1 ms</td><td class="num">6 (7.5 %)</td><td class="num">62</td><td class="num">12</td><td class="num">6</td></tr>
+<tr><td>KSFO</td><td>Airport switch</td><td class="num">25</td><td class="num">50.1 ms</td><td class="num">662.0 ms</td><td class="num">664.1 ms</td><td class="num">6 (24 %)</td><td class="num">9</td><td class="num">10</td><td class="num">6</td></tr>
+<tr><td>KSFO</td><td>Panning</td><td class="num">55</td><td class="num">11.5 ms</td><td class="num">20.8 ms</td><td class="num">46.3 ms</td><td class="num">0</td><td class="num">53</td><td class="num">2</td><td class="num">0</td></tr>
+<tr><td>KOAK</td><td>All</td><td class="num">78</td><td class="num">11.2 ms</td><td class="num">85.9 ms</td><td class="num">419.0 ms</td><td class="num">3 (3.8 %)</td><td class="num">61</td><td class="num">11</td><td class="num">6</td></tr>
+<tr><td>KOAK</td><td>Airport switch</td><td class="num">21</td><td class="num">37.3 ms</td><td class="num">348.7 ms</td><td class="num">419.0 ms</td><td class="num">3 (14 %)</td><td class="num">8</td><td class="num">7</td><td class="num">6</td></tr>
+<tr><td>KOAK</td><td>Panning</td><td class="num">57</td><td class="num">10.6 ms</td><td class="num">39.3 ms</td><td class="num">60.8 ms</td><td class="num">0</td><td class="num">53</td><td class="num">4</td><td class="num">0</td></tr>
+</tbody>
+</table>
+</div>
+<p class="cap">Frame interval over the run: median 16.7 ms at both airports, p95 20.6 ms (KSFO) and 20.0 ms (KOAK). A median under one frame means the stats exist by the end of the tile's first frame. The long waits are made of slow frames: the KSFO p95 of 662 ms is at most 3 drawn frames, so it is the airport switch stalling the page, not the 4 ms-per-frame drain queue.</p>
+</section>
+
+<section id="states">
+<h2>The four states, as rendered</h2>
+<p class="cap">KSFO way 25373264: <code>building=yes</code>, <code>building:levels</code> 2, no height tag (estimate 6 m; the mesh stands 7.6 m), 3,891 m² footprint, inside the KSFO aerodrome boundary, 1.1 km from the tower at bearing 314. Set B types it HANGAR. Each state is forced through the tileset style on this one element; the pose and the rest of the scene are the same.</p>
+<h3>12:00</h3>
+<div class="four">
+<figure><img src="state-noon-absent.webp" alt="Noon, building not yet drawn"><figcaption><b>Before the tile renders</b>Only this building is hidden.</figcaption></figure>
+<figure><img src="state-noon-generic.webp" alt="Noon, GENERIC facade"><figcaption><b>GENERIC</b>Window grid, 2 storeys from the level tag.</figcaption></figure>
+<figure><img src="state-noon-plain.webp" alt="Noon, plain wall"><figcaption><b>Plain</b>The PLAIN class: flat wall, no openings.</figcaption></figure>
+<figure><img src="state-noon-hangar.webp" alt="Noon, HANGAR facade"><figcaption><b>HANGAR</b>Ribbed cladding, no windows.</figcaption></figure>
+</div>
+<h3>22:00</h3>
+<div class="four">
+<figure><img src="state-night-absent.webp" alt="Night, building not yet drawn"><figcaption><b>Before the tile renders</b></figcaption></figure>
+<figure><img src="state-night-generic.webp" alt="Night, GENERIC facade"><figcaption><b>GENERIC</b>Lit windows.</figcaption></figure>
+<figure><img src="state-night-plain.webp" alt="Night, plain wall"><figcaption><b>Plain</b></figcaption></figure>
+<figure><img src="state-night-hangar.webp" alt="Night, HANGAR facade"><figcaption><b>HANGAR</b>Dark, no windows.</figcaption></figure>
+</div>
+</section>
+
+<section id="lane-a">
+<h2>A: Swap on arrival</h2>
+<div class="worst">Worst case: a visible pop on every newly loaded tile while panning. Measured, that is one frame (17 ms) of GENERIC for 106 of 112 panning tiles, and at most 61 ms. At the airport switch it lasts up to 664 ms, as the lit windows at night go dark.</div>
+<p class="cap">Only buildings that set B types change: 12 of the 83 GENERIC buildings inside the KSFO boundary in the tower view's tiles, 10 of 104 at KOAK. The others stay GENERIC from their first frame.</p>
+<h3>Key frames at the median delay</h3>
+<div class="two">
+<figure><img src="lane-a-noon-frames.webp" alt="Lane A key frames, noon"><figcaption><b>12:00</b>t = 0: GENERIC; t = +17 ms: HANGAR.</figcaption></figure>
+<figure><img src="lane-a-night-frames.webp" alt="Lane A key frames, night"><figcaption><b>22:00</b>t = 0: GENERIC with lit windows; t = +17 ms: HANGAR.</figcaption></figure>
+</div>
+<h3>Real time, 60 fps (0.5 s before the tile renders, then 2 s)</h3>
+<div class="four">
+<figure><video src="lane-a-noon-median.mp4" autoplay loop muted playsinline controls></video><figcaption><b>Median, 12:00</b>GENERIC for one frame.</figcaption></figure>
+<figure><video src="lane-a-night-median.mp4" autoplay loop muted playsinline controls></video><figcaption><b>Median, 22:00</b></figcaption></figure>
+<figure><video src="lane-a-noon-worst.mp4" autoplay loop muted playsinline controls></video><figcaption><b>Worst, 12:00</b>GENERIC for 662 ms.</figcaption></figure>
+<figure><video src="lane-a-night-worst.mp4" autoplay loop muted playsinline controls></video><figcaption><b>Worst, 22:00</b></figcaption></figure>
+</div>
+</section>
+
+<section id="lane-b">
+<h2>B: Plain until typed</h2>
+<div class="worst">Worst case: a plain building for the delay, then a pop to its facade. Until the stats exist no rule knows which untyped buildings will become hangars, so all of them start plain: 83 at KSFO and 104 at KOAK in the tower view's tiles. 71 and 94 of those pop back to GENERIC.</div>
+<p class="cap">The same timings as A: one frame (17 ms) while panning, up to 664 ms at the airport switch. At night the plain wall is dark, so the windows switch on when the stats arrive.</p>
+<h3>Key frames at the median delay</h3>
+<div class="two">
+<figure><img src="lane-b-noon-frames.webp" alt="Lane B key frames, noon"><figcaption><b>12:00</b>t = 0: plain wall; t = +17 ms: HANGAR.</figcaption></figure>
+<figure><img src="lane-b-night-frames.webp" alt="Lane B key frames, night"><figcaption><b>22:00</b></figcaption></figure>
+</div>
+<h3>Real time, 60 fps</h3>
+<div class="four">
+<figure><video src="lane-b-noon-median.mp4" autoplay loop muted playsinline controls></video><figcaption><b>Median, 12:00</b></figcaption></figure>
+<figure><video src="lane-b-night-median.mp4" autoplay loop muted playsinline controls></video><figcaption><b>Median, 22:00</b></figcaption></figure>
+<figure><video src="lane-b-noon-worst.mp4" autoplay loop muted playsinline controls></video><figcaption><b>Worst, 12:00</b>Plain for 662 ms.</figcaption></figure>
+<figure><video src="lane-b-night-worst.mp4" autoplay loop muted playsinline controls></video><figcaption><b>Worst, 22:00</b></figcaption></figure>
+</div>
+</section>
+
+<section id="lane-c">
+<h2>C: Fade</h2>
+<div class="worst">Worst case: it costs a style animation per tile. Each typed building in a newly built tile needs its old and new class and a fade clock for 0.5 s. The packed colour's red channel is full (7 classes × 4 hash states = code 27 of 27), so the old class needs a new channel or a per-tile uniform, and the style or shader runs on every frame of the fade. At the median it turns a one-frame change into a visible 0.5 s one.</div>
+<p class="cap">The fade starts the frame after the stats arrive (+17 ms at the median) and is complete at +500 ms; in the worst case it starts at +662 ms.</p>
+<h3>Key frames at the median delay</h3>
+<div class="two">
+<figure><img src="lane-c-noon-frames.webp" alt="Lane C key frames, noon"><figcaption><b>12:00</b>t = 0 GENERIC; +17 ms fade 3 %; +250 ms fade 50 %; +500 ms HANGAR.</figcaption></figure>
+<figure><img src="lane-c-night-frames.webp" alt="Lane C key frames, night"><figcaption><b>22:00</b>The lit windows dim over the fade.</figcaption></figure>
+</div>
+<h3>Real time, 60 fps</h3>
+<div class="four">
+<figure><video src="lane-c-noon-median.mp4" autoplay loop muted playsinline controls></video><figcaption><b>Median, 12:00</b></figcaption></figure>
+<figure><video src="lane-c-night-median.mp4" autoplay loop muted playsinline controls></video><figcaption><b>Median, 22:00</b></figcaption></figure>
+<figure><video src="lane-c-noon-worst.mp4" autoplay loop muted playsinline controls></video><figcaption><b>Worst, 12:00</b>GENERIC for 662 ms, then the fade.</figcaption></figure>
+<figure><video src="lane-c-night-worst.mp4" autoplay loop muted playsinline controls></video><figcaption><b>Worst, 22:00</b></figcaption></figure>
+</div>
+</section>
+
+<section id="approx">
+<h2>What is approximate</h2>
+<ul>
+<li><b>The clips are assembled from rendered stills</b> on a fixed 60 fps timeline at the measured timings; they are not a screen recording of the step 3 code, which does not exist yet. Each state is a real render. In the worst case the app draws only 1-3 slow frames in those 662 ms; the clip shows 40 smooth ones.</li>
+<li><b>Plain (B) is the PLAIN class</b> (the domestic-garage grammar: flat wall, no openings, its own palette entry for the building's hash), not the tiles without the facade shader. The wall's tone differs from GENERIC's for that reason.</li>
+<li><b>The fade (C) is an image blend</b> of the GENERIC and HANGAR renders. The shader cannot blend two classes today (see C's worst case); an in-shader fade would match the blend everywhere except where the two grammars light differently.</li>
+<li><b>"Before the tile renders" hides only this building</b> (<code>feature.show = false</code>). A real tile brings its neighbours in on the same frame.</li>
+<li><b>Measured in a dev build</b> (unbundled Vite, headless Edge with a GPU, one machine, about 16.7 ms frames). A slower device (an iPad, a phone) was not measured.</li>
+<li><b>The building is at KSFO, not KOAK.</b> Every set B candidate inside the KOAK boundary has the 3 m estimated height of an untagged building, so from the tower only its roof shows.</li>
+</ul>
+</section>
+
+<p class="sub">Rebuild: <code>RECIPE.md</code> beside this page. The delay JSONs and scripts are in the review copy's <code>recipe/</code>.</p>
+</main>
+</body>
+</html>
