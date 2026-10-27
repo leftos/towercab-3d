@@ -15,7 +15,12 @@ vi.mock('../src/renderer/stores/airportStore', () => ({
   useAirportStore: { getState: () => ({ currentAirport: null }) },
 }))
 
-import { AIRCRAFT_TIMEOUT } from '../src/renderer/constants/aircraft-timeline'
+import {
+  AIRCRAFT_TIMEOUT,
+  DYNAMIC_DELAY_MAX_MS,
+  DYNAMIC_DELAY_MIN_MS,
+  SOURCE_DISPLAY_DELAYS,
+} from '../src/renderer/constants/aircraft-timeline'
 import type { AircraftDataSource, AircraftMetadata, AircraftObservation } from '../src/renderer/types/aircraft-timeline'
 import type { PilotData } from '../src/renderer/types/vatsim'
 import { useAircraftTimelineStore } from '../src/renderer/stores/aircraftTimelineStore'
@@ -194,6 +199,43 @@ describe('vNAS session end', () => {
     expect(observations[0].latitude).toBe(10)
     expect(observations[1].latitude).toBe(pilot('BOTH1').latitude)
     expect(observations[1].receivedAt).toBe(batchReceivedAt)
+  })
+
+  it("keeps a surviving timeline's delay state in dynamicDelays after dropping a source", () => {
+    const now = Date.now()
+    const { addObservation } = useAircraftTimelineStore.getState()
+    const vatsimDelay = SOURCE_DISPLAY_DELAYS.vatsim
+    addObservation('BOTH1', { ...observation('vatsim', now - 16000, now - 15900), displayDelay: vatsimDelay }, METADATA)
+    addObservation('BOTH1', observation('vnas', now - 1000, now - 900), METADATA)
+    const before = useAircraftTimelineStore.getState().dynamicDelays.get('BOTH1')
+    expect(before).toBeDefined()
+
+    useAircraftTimelineStore.getState().dropSourceObservations('vnas')
+
+    // One surviving observation: no interval to measure, so the target falls back to its
+    // display delay, while the eased fields carry over from the state it had.
+    const { timelines, dynamicDelays } = useAircraftTimelineStore.getState()
+    expect(dynamicDelays.get('BOTH1')).toEqual({
+      ...before,
+      targetDelayMs: Math.max(DYNAMIC_DELAY_MIN_MS, Math.min(DYNAMIC_DELAY_MAX_MS, vatsimDelay)),
+      intervalHistory: [],
+    })
+    expect(timelines.get('BOTH1')).not.toHaveProperty('dynamicDelay')
+  })
+
+  it("puts a dropped-out timeline's delay state in the graveyard", () => {
+    const now = Date.now()
+    const { addObservation } = useAircraftTimelineStore.getState()
+    addObservation('VNAS1', observation('vnas', now - 2000, now - 1900), METADATA)
+    addObservation('VNAS1', observation('vnas', now - 1000, now - 900), METADATA)
+    const before = useAircraftTimelineStore.getState().dynamicDelays.get('VNAS1')
+    expect(before).toBeDefined()
+
+    useAircraftTimelineStore.getState().dropSourceObservations('vnas')
+
+    const { recentlyRemoved, dynamicDelays } = useAircraftTimelineStore.getState()
+    expect(recentlyRemoved.get('VNAS1')?.dynamicDelay).toBe(before)
+    expect(dynamicDelays.has('VNAS1')).toBe(false)
   })
 
   it('leaves unlisted callsigns untouched when the drop is scoped', () => {

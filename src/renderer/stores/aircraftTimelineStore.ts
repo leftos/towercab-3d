@@ -548,8 +548,8 @@ function updateDynamicDelayState(
  *     batch's receive time instead of timing out on older points.
  *
  * Returns:
- *   The stripped timeline with lastSource, lastReceivedAt and dynamicDelay re-derived
- *   from its newest observation, or null when no observation remains.
+ *   The stripped timeline with lastSource and lastReceivedAt re-derived from its newest
+ *   observation, or null when no observation remains.
  */
 function withoutSource(
   timeline: AircraftTimeline,
@@ -572,7 +572,6 @@ function withoutSource(
     metadata,
     lastSource: newest.source,
     lastReceivedAt: newest.receivedAt,
-    dynamicDelay: updateDynamicDelayState(timeline.dynamicDelay, observations, newest.receivedAt),
   }
 }
 
@@ -1661,20 +1660,28 @@ export const useAircraftTimelineStore = create<AircraftTimelineStore>((set, get)
    * batch, provided VATSIM is polling and that batch is younger than AIRCRAFT_TIMEOUT.
    * Otherwise a timeline left with no observations is removed exactly as
    * removeAircraft removes it, and one that still holds other sources keeps them,
-   * with lastSource/lastReceivedAt/dynamicDelay re-derived from the newest survivor.
+   * with lastSource/lastReceivedAt and its dynamicDelays entry re-derived from the newest survivor.
    * Removals are announced to insets and listeners in one batch. Only live playback
    * is touched: replay and imported timelines keep their recorded sources.
    */
   dropSourceObservations: (source, callsigns) => {
     if (useReplayStore.getState().playbackMode !== 'live') return
 
-    const { timelines, recentlyRemoved, lastKnownHeadings, lastRenderedPositions, reconciliationStates } = get()
+    const {
+      timelines,
+      recentlyRemoved,
+      lastKnownHeadings,
+      lastRenderedPositions,
+      dynamicDelays,
+      reconciliationStates,
+    } = get()
     const findVatsimEntry = vatsimEntryLookup(source)
 
     const updatedTimelines = new Map(timelines)
     const updatedGraveyard = new Map(recentlyRemoved)
     const updatedHeadings = new Map(lastKnownHeadings)
     const updatedPositions = new Map(lastRenderedPositions)
+    const updatedDelays = new Map(dynamicDelays)
     const updatedReconciliations = new Map(reconciliationStates)
     const removedCallsigns: string[] = []
     let changed = false
@@ -1686,14 +1693,20 @@ export const useAircraftTimelineStore = create<AircraftTimelineStore>((set, get)
 
       const stripped = withoutSource(timeline, source, findVatsimEntry(callsign))
       if (stripped) {
+        const newest = stripped.observations[stripped.observations.length - 1]
         updatedTimelines.set(callsign, stripped)
+        updatedDelays.set(
+          callsign,
+          updateDynamicDelayState(dynamicDelays.get(callsign), stripped.observations, newest.receivedAt),
+        )
         continue
       }
 
       updatedTimelines.delete(callsign)
-      updatedGraveyard.set(callsign, { timeline, removedAt: Date.now() })
+      updatedGraveyard.set(callsign, { timeline, dynamicDelay: dynamicDelays.get(callsign), removedAt: Date.now() })
       updatedHeadings.delete(callsign)
       updatedPositions.delete(callsign)
+      updatedDelays.delete(callsign)
       updatedReconciliations.delete(callsign)
       removedCallsigns.push(callsign)
     }
@@ -1707,6 +1720,7 @@ export const useAircraftTimelineStore = create<AircraftTimelineStore>((set, get)
       recentlyRemoved: updatedGraveyard,
       lastKnownHeadings: updatedHeadings,
       lastRenderedPositions: updatedPositions,
+      dynamicDelays: updatedDelays,
       reconciliationStates: updatedReconciliations,
     })
 
