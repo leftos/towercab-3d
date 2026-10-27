@@ -258,7 +258,9 @@ Measured in headless checks driven over raw CDP (or `playwright-headless`):
 - Do not restart Vite while the page is open: its client threw "send was called before connect" about 295,000 times in seven minutes. Close the page first.
 - `npm i` in a driver folder fails without a `package.json`; add one first.
 - The sun direction is `viewer.scene.context.uniformState.sunDirectionWC`, not `scene.light.direction`.
-Source: headless checks of TC3D-244's session. Seen: once.
+- A fresh Edge profile opens an `edge://sync-confirmation-dialog` tab. Closing it stalled CDP on the debugging port, and the `tauri-app` calls attached there hung to their timeout. Leave the tab alone and drive the page's own tab, or use `playwright-headless`.
+- A Node driver script ends with an explicit `process.exit()`: after printing that it was done, `ft-run.cjs` stayed alive until the gate killed it as stalled.
+Source: headless checks of TC3D-244's session; the TC3D-376 mock runs. Seen: twice.
 
 ### Reset one-time UI flags through persisted state, then reload
 <!-- rule: reset-flags-via-storage scope: project -->
