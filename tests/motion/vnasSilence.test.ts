@@ -196,7 +196,7 @@ it('a stopped vNAS aircraft whose windowed groundspeed still reads 3 kt is held 
   expectHeldAt(frames, last)
 })
 
-it('a 15 kt vNAS taxi whose last sample repeats the position before it still extrapolates through a 3 s gap, with no jump on resuming (TC3D-51)', () => {
+it('a 15 kt vNAS taxi repeating its last position extrapolates through a 3 s gap, with no jump on resuming (TC3D-51)', () => {
   const samples = thenSteps(steadyVnas(18, 15), [0], [15])
   const last = samples[samples.length - 1]
   const resumed = [22, 23, 24, 25].map((t) => sample('vnas', t, 15 * KTS * t, 15))
@@ -236,7 +236,7 @@ it('the same stop is held once a second stationary step follows (TC3D-51)', () =
   expectHeldAt(run(samples, last.receivedAt - T0 + PARKED_SILENCE_MS), last)
 })
 
-it('control: a VATSIM aircraft whose last report is 1.5 kt still extrapolates and keeps its 15 s intervals', () => {
+it('control: a VATSIM aircraft whose last report is 1.5 kt still extrapolates; its 15 s intervals at 1.5 kt carry no cadence', () => {
   const samples = [0, 15, 30, 45].map((t) => sample('vatsim', t, 1.5 * KTS * t, 1.5))
   const last = samples[samples.length - 1]
   const frames = run(samples, last.receivedAt - T0 + PARKED_SILENCE_MS)
@@ -246,7 +246,7 @@ it('control: a VATSIM aircraft whose last report is 1.5 kt still extrapolates an
   const lastFrame = past[past.length - 1]
   expect(lastFrame.result.groundspeed).toBe(1.5)
   expect(metresBetween(lastFrame.result, last), 'distance extrapolated past the last report').toBeGreaterThan(1)
-  expect(Math.max(...(lastFrame.delay?.intervalHistory ?? [])), 'longest interval kept in the statistics').toBe(15000)
+  expect(lastFrame.delay?.intervalHistory, 'intervals kept in the statistics').toEqual([])
 })
 
 it('a held vNAS-only aircraft is still there at 29 s of silence and pruned at 35 s, as before the hold', () => {
@@ -398,11 +398,11 @@ it('an isolated vNAS sample reporting 1 kt, with no sample in the 6 s before it,
   expect(past.filter((f) => !f.result.isExtrapolating).length, 'frames past the last sample not extrapolating').toBe(0)
 })
 
-it('in a list that mixes sources, the interval from a stopped vNAS sample to a VATSIM report counts (TC3D-51)', () => {
+it('in a list that mixes sources, the interval from a stopped vNAS sample to a VATSIM report does not count (TC3D-51)', () => {
   const vnasSample = sample('vnas', 20, 0, 0)
   const samples = [sample('vatsim', 0, 0, 0), sample('vatsim', 15, 0, 0), vnasSample, sample('vatsim', 30, 0, 0)]
   const last = samples[samples.length - 1]
   const frames = run(samples, last.receivedAt - T0 + 100)
   const history = frames[frames.length - 1].delay?.intervalHistory ?? []
-  expect(history, 'intervals kept in the statistics').toContain(last.receivedAt - vnasSample.receivedAt)
+  expect(history, 'intervals kept in the statistics').not.toContain(last.receivedAt - vnasSample.receivedAt)
 })

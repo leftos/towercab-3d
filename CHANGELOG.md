@@ -48,7 +48,7 @@ All notable changes to TowerCab 3D will be documented in this file.
 - An overcast now reaches the horizon and meets the distant haze in one grey, and broken layers beneath it no longer show bright horizon streaks.
 - vNAS no longer writes your sign-in tokens or sign-in code into the log file or into connection error messages.
 - vNAS: aircraft no longer linger in Nearby Aircraft after your CRC session ends, each update arrives once, and the connection status stays right through bursts of updates.
-- vNAS aircraft holding short or lined up no longer creep forward while vNAS is quiet, and their takeoff roll no longer plays in fast motion.
+- Stopped vNAS aircraft no longer creep forward while vNAS is quiet, show their next movement up to 20 s late, or play takeoff rolls fast.
 
 ### Removed
 - The experimental VR mode and its VR button in the controls bar.

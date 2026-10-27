@@ -27,6 +27,7 @@
 import { create } from 'zustand'
 import {
   AIRCRAFT_TIMEOUT,
+  CADENCE_ANY_MOTION_MAX_MS,
   CONTACT_EXIT_HEIGHT_METERS,
   DYNAMIC_DELAY_EXTRAPOLATION_BUMP_MS,
   DYNAMIC_DELAY_EXTRAPOLATION_DECAY_RATE,
@@ -47,7 +48,7 @@ import {
   PRUNE_INTERVAL,
   SOURCE_DISPLAY_DELAYS,
   STOPPED_SPEED_KTS,
-  VNAS_PARKED_GAP_MS,
+  VATSIM_MOVING_MIN_SPEED_KTS,
   VNAS_PREFERENCE_THRESHOLD_MS,
   VNAS_STOP_WINDOW_MS,
 } from '@/constants'
@@ -417,41 +418,44 @@ function pruneObservations(
 // ============================================================================
 
 /**
- * Calculate observation intervals from a list of observations.
- * Returns intervals between consecutive observations based on receivedAt timestamps.
+ * The receive intervals between consecutive observations among the last `maxIntervals` that carry the source's
+ * cadence (`carriesCadence`).
  *
- * @param observations - Array of observations (oldest first), should already be
- *                       filtered to the preferred source (e.g., vNAS-only when vNAS is active)
- * @param maxIntervals - Maximum number of intervals to return
- * @param callsign - The aircraft's callsign, whose resting height decides which silences are parking
- * @param aircraftType - The aircraft's type, whose resting height stands in until the aircraft learns its own
+ * @param observations - Array of observations (oldest first), the list the aircraft is drawn from
+ *                       (`filterObservationsForSource`)
+ * @param maxIntervals - Number of consecutive pairs, newest last, to look at
  * @returns Array of intervals in milliseconds (most recent last)
  */
-function calculateObservationIntervals(
-  observations: AircraftObservation[],
-  maxIntervals: number,
-  callsign: string,
-  aircraftType: string | null,
-): number[] {
+function calculateObservationIntervals(observations: AircraftObservation[], maxIntervals: number): number[] {
   if (observations.length < 2) return []
 
   const intervals: number[] = []
-  // Start from the end (most recent) and work backwards
   const startIdx = Math.max(0, observations.length - maxIntervals - 1)
 
   for (let i = startIdx; i < observations.length - 1; i++) {
+    const previous = observations[i]
     const next = observations[i + 1]
-    const interval = next.receivedAt - observations[i].receivedAt
-    const isParkedSilence =
-      interval > VNAS_PARKED_GAP_MS &&
-      next.source === 'vnas' &&
-      isStoppedVnasSample(observations, i, callsign, aircraftType)
-    if (interval > 0 && !isParkedSilence) {
+    const interval = next.receivedAt - previous.receivedAt
+    if (interval > 0 && carriesCadence(previous, next, interval)) {
       intervals.push(interval)
     }
   }
 
   return intervals
+}
+
+/**
+ * Whether the interval between two consecutive observations is the source's cadence: both are from the same source,
+ * it is at most VNAS_PREFERENCE_THRESHOLD_MS, and it is at most CADENCE_ANY_MOTION_MAX_MS or the aircraft moved
+ * across it. Moved is measured from the two positions, never from a groundspeed field: VATSIM_MOVING_MIN_SPEED_KTS for two VATSIM
+ * reports, STOPPED_SPEED_KTS for any other source. A still aircraft's silence, a change of source and a dropout past
+ * the source fallback are not cadence.
+ */
+function carriesCadence(previous: AircraftObservation, next: AircraftObservation, interval: number): boolean {
+  if (previous.source !== next.source || interval > VNAS_PREFERENCE_THRESHOLD_MS) return false
+  if (interval <= CADENCE_ANY_MOTION_MAX_MS) return true
+  const movingKts = next.source === 'vatsim' ? VATSIM_MOVING_MIN_SPEED_KTS : STOPPED_SPEED_KTS
+  return stepSpeedKts(previous, next) >= movingKts
 }
 
 /**
@@ -686,14 +690,23 @@ function drawingGroundFlag(flagSource: AircraftObservation, heightAboveGround: n
  * Uses the maximum recent interval plus a jitter buffer to ensure
  * we always have enough time for interpolation.
  *
- * Until there are enough observations to measure, the source's display delay is the target.
+ * Until there are enough observations to measure, the source's display delay is the target. When no interval in the
+ * window carries cadence (a still aircraft, a change of source), the current target stays; a new aircraft takes the
+ * source's delay.
  *
- * @param observations - Observations the intervals were measured from (vNAS-filtered)
- * @param intervals - Recent observation intervals in ms
+ * @param observations - Observations the intervals were measured from (the drawn list)
+ * @param intervals - Recent observation intervals in ms that carry cadence
+ * @param currentTarget - The aircraft's target delay so far, or null for a new aircraft
  * @returns Target delay in milliseconds
  */
-function calculateTargetDelay(observations: AircraftObservation[], intervals: number[]): number {
-  if (observations.length < DYNAMIC_DELAY_MIN_OBSERVATIONS || intervals.length === 0) {
+function calculateTargetDelay(
+  observations: AircraftObservation[],
+  intervals: number[],
+  currentTarget: number | null,
+): number {
+  const tooFew = observations.length < DYNAMIC_DELAY_MIN_OBSERVATIONS
+  if (!tooFew && intervals.length === 0 && currentTarget !== null) return currentTarget
+  if (tooFew || intervals.length === 0) {
     const newest = observations[observations.length - 1]
     const sourceDelay = newest.displayDelay ?? SOURCE_DISPLAY_DELAYS[newest.source]
     return Math.max(DYNAMIC_DELAY_MIN_MS, Math.min(DYNAMIC_DELAY_MAX_MS, sourceDelay))
@@ -716,25 +729,21 @@ function calculateTargetDelay(observations: AircraftObservation[], intervals: nu
  * @param existingState - Current dynamic delay state (or undefined for new aircraft)
  * @param observations - Current observation array (after adding new observation)
  * @param now - Current timestamp
- * @param callsign - The aircraft's callsign, whose resting height decides which silences are parking
- * @param aircraftType - The aircraft's type, whose resting height stands in until the aircraft learns its own
  * @returns Updated dynamic delay state
  */
 function updateDynamicDelayState(
   existingState: DynamicDelayState | undefined,
   observations: AircraftObservation[],
   now: number,
-  callsign: string,
-  aircraftType: string | null,
 ): DynamicDelayState {
   // Filter observations to prefer vNAS when active (same logic as interpolation)
   const filteredObs = filterObservationsForSource(observations, now)
 
   // Calculate intervals from filtered observations
-  const intervals = calculateObservationIntervals(filteredObs, DYNAMIC_DELAY_INTERVAL_WINDOW, callsign, aircraftType)
+  const intervals = calculateObservationIntervals(filteredObs, DYNAMIC_DELAY_INTERVAL_WINDOW)
 
   // Calculate target delay
-  const targetDelayMs = calculateTargetDelay(filteredObs, intervals)
+  const targetDelayMs = calculateTargetDelay(filteredObs, intervals, existingState?.targetDelayMs ?? null)
 
   if (!existingState) {
     // New aircraft - start at the target (the source's display delay until intervals can be measured),
@@ -1659,13 +1668,7 @@ export const useAircraftTimelineStore = create<AircraftTimelineStore>((set, get)
 
     // Update dynamic delay state
     const { dynamicDelays } = get()
-    const dynamicDelay = updateDynamicDelayState(
-      dynamicDelays.get(callsign),
-      observations,
-      observation.receivedAt,
-      callsign,
-      mergedMetadata.aircraftType,
-    )
+    const dynamicDelay = updateDynamicDelayState(dynamicDelays.get(callsign), observations, observation.receivedAt)
 
     // Debug: Log observation additions for tracked aircraft
     if (import.meta.env.DEV) {
@@ -1791,13 +1794,7 @@ export const useAircraftTimelineStore = create<AircraftTimelineStore>((set, get)
       recordObservationRest(callsign, observation, mergedMetadata.aircraftType)
 
       // Update dynamic delay state
-      const dynamicDelay = updateDynamicDelayState(
-        updatedDelays.get(callsign),
-        observations,
-        observation.receivedAt,
-        callsign,
-        mergedMetadata.aircraftType,
-      )
+      const dynamicDelay = updateDynamicDelayState(updatedDelays.get(callsign), observations, observation.receivedAt)
       updatedDelays.set(callsign, dynamicDelay)
 
       // Debug: Log observation additions for tracked aircraft
@@ -1950,13 +1947,7 @@ export const useAircraftTimelineStore = create<AircraftTimelineStore>((set, get)
         updatedTimelines.set(callsign, stripped)
         updatedDelays.set(
           callsign,
-          updateDynamicDelayState(
-            dynamicDelays.get(callsign),
-            stripped.observations,
-            newest.receivedAt,
-            callsign,
-            stripped.metadata.aircraftType,
-          ),
+          updateDynamicDelayState(dynamicDelays.get(callsign), stripped.observations, newest.receivedAt),
         )
         continue
       }

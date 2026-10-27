@@ -145,11 +145,20 @@ export const RESTING_HEIGHT_EASE_MS = 250
 export const VNAS_STOP_WINDOW_MS = 3000 // 3 seconds
 
 /**
- * Receive interval after a stopped vNAS sample beyond which it is parking silence, not a late sample (ms).
+ * An interval between two samples of one source up to this long (ms) counts toward the display-delay statistics
+ * whether or not the aircraft moved across it.
  *
- * Such an interval is left out of the display-delay statistics, so a hold does not raise the delay.
+ * A longer interval counts only when the aircraft moved across it (STOPPED_SPEED_KTS for vNAS and the other sources,
+ * VATSIM_MOVING_MIN_SPEED_KTS for VATSIM), so a hold does not raise the delay.
  */
-export const VNAS_PARKED_GAP_MS = 3000 // 3 seconds
+export const CADENCE_ANY_MOTION_MAX_MS = 3000 // 3 seconds
+
+/**
+ * Speed (kt), measured from the two reports' positions, at or over which an interval between two VATSIM reports longer
+ * than CADENCE_ANY_MOTION_MAX_MS counts toward the display-delay statistics. Higher than STOPPED_SPEED_KTS because a VATSIM
+ * snapshot taken during a stop can sit short of where the aircraft came to rest.
+ */
+export const VATSIM_MOVING_MIN_SPEED_KTS = 5
 
 /**
  * Minimum time between observations to consider them distinct (ms).

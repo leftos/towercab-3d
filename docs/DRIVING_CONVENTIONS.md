@@ -281,6 +281,14 @@ CRC, the controller client vNAS work checks against, is not ours: driven through
 CRC can reach the live VATSIM network, so the hook checks before each input, in the same UI-thread operation, that CRC is connected only to a local test server (a local YAAT server), and refuses otherwise, so a driver can never type into a live session; if the check ever finds otherwise it breaches loudly (every window brought forward, every call refused). A local server port only one process can hold is checked before a server is started for a run, and another session's server is left alone.
 Source: the yaat-client-driver MCP (`yaat/docs/client-driver-mcp.md`); .claude/skills/towercab-3d-nextup/SKILL.md "App checks". Seen: 0 here (seeded from yaat).
 
+### Log a live sampler's observations and delay state, and save them to disk before the app closes
+<!-- rule: sampler-saves-before-close -->
+
+A live check of the display delay (a parked aircraft, a vNAS silence) needs each observation's latitude, longitude, observed and received timestamps and source, plus the delay state (intervals, target and current delay) at every sample, or the rounds cannot be compared with a replay.
+
+The sampler writes that log to a file under `.tmp/` as it runs and flushes it before the app or its window closes; samples held only in the page were lost with the window in the TC3D-373 round-3 run.
+Source: the TC3D-373 root-cause note (`.tmp/tc3d-373-371-rootcause.md`, "Lessons for the project's docs"). Seen: 1 here.
+
 ## App-side hook
 
 ### Gate the whole hook behind the bundler's dev flag
