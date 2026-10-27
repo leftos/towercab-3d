@@ -381,7 +381,7 @@ scripts/
 **Shipping scripts** are used for building, development, and data generation:
 - `shipping/build/` - Build tools: check.js, build_converter.py, dev-wrapper.js
 - `shipping/conversion/` - Runtime conversion: convert_fsltl_batch.py, and its tests test_convert_fsltl_batch.py
-- `shipping/data-generation/` - One-off scripts: convert-aircraft-data.py, extract-airport-surfaces.py, scrape-tower-positions.py
+- `shipping/data-generation/` - One-off scripts: convert-aircraft-data.py, extract-airport-surfaces.py, scrape-tower-positions.py, and generate-rotorcraft-types.py (writes `src/renderer/constants/rotorcraftTypes.ts` from yaat's `tests/Yaat.Sim.Tests/TestData/AircraftSpecs.json`: `python scripts/shipping/data-generation/generate-rotorcraft-types.py <path to AircraftSpecs.json>`)
 
 **Debugging scripts** are utilities for development and troubleshooting:
 - `analyze_animations.py` - GLB animation analysis

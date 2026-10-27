@@ -16,7 +16,7 @@ import {
   RESTING_HEIGHT_MIN_SAMPLES,
   VNAS_PREFERENCE_THRESHOLD_MS,
 } from '@/constants'
-import type { AircraftObservation } from '@/types/aircraft-timeline'
+import type { AircraftObservation, SettleRun } from '@/types/aircraft-timeline'
 
 vi.mock('react', () => {
   const api = {
@@ -35,6 +35,16 @@ const { updateContact, useAircraftInterpolation } = await import('@/hooks/useAir
 const { useReplayStore } = await import('@/stores/replayStore')
 const { useVatsimStore } = await import('@/stores/vatsimStore')
 const { recordRestingSample } = await import('@/utils/aircraft/restingHeight')
+
+/** What `updateContact` reads of a frame, with no bracket step, as these cases drive it. */
+const frameOf = (heightAboveGround: number, aircraftType: string, displayTime: number, settleRun: SettleRun | undefined) => ({
+  heightAboveGround,
+  aircraftType,
+  displayTime,
+  settleRun,
+  bracketStartStopped: false,
+  displayAnchorOffsetMs: 0,
+})
 
 // The interpolation loop re-arms itself through requestAnimationFrame; each drawn frame runs the armed callback once
 let rafCallback: ((t: number) => void) | null = null
@@ -105,7 +115,7 @@ function replay(callsign: string, samplesFt: number[], spacingMs = 1000, backSte
     const k = Math.max(0, Math.ceil(time / spacingMs) - 1)
     const ft = samplesFt[k] + ((samplesFt[k + 1] - samplesFt[k]) * (time - k * spacingMs)) / spacingMs
     const run = settleRunEndingAt(samples.slice(0, k + 2), samples[k + 1])
-    return { time, ft, inContact: updateContact(callsign, ft * FT, UNLEARNED_TYPE, T0 + time, run) }
+    return { time, ft, inContact: updateContact(callsign, frameOf(ft * FT, UNLEARNED_TYPE, T0 + time, run)) }
   }
   const recs: Rec[] = []
   let stepped = false
@@ -692,14 +702,14 @@ it.each([
 ])('drawn time that %s drops the provisional resting height and restarts as at first sight', (_name, jumpMs) => {
   const callsign = `SEEK${jumpMs}`
   const enterAt = T0 + 10_000
-  expect(updateContact(callsign, 4 * FT, UNLEARNED_TYPE, enterAt, settledRunAt(10_000)), 'entered').toBe(true)
-  expect(updateContact(callsign, 5 * FT, UNLEARNED_TYPE, enterAt + 1000, undefined), '1 s later, 1 ft up').toBe(true)
+  expect(updateContact(callsign, frameOf(4 * FT, UNLEARNED_TYPE, enterAt, settledRunAt(10_000))), 'entered').toBe(true)
+  expect(updateContact(callsign, frameOf(5 * FT, UNLEARNED_TYPE, enterAt + 1000, undefined)), '1 s later, 1 ft up').toBe(true)
   const seekAt = enterAt + 1000 + jumpMs
   // 1 ft over the dropped 4 ft would keep contact; at first sight there is no run to enter on
-  expect(updateContact(callsign, 5 * FT, UNLEARNED_TYPE, seekAt, undefined), 'the frame after the seek').toBe(false)
-  expect(updateContact(callsign, 5 * FT, UNLEARNED_TYPE, seekAt + 16, undefined), 'still no run').toBe(false)
+  expect(updateContact(callsign, frameOf(5 * FT, UNLEARNED_TYPE, seekAt, undefined)), 'the frame after the seek').toBe(false)
+  expect(updateContact(callsign, frameOf(5 * FT, UNLEARNED_TYPE, seekAt + 16, undefined)), 'still no run').toBe(false)
   expect(
-    updateContact(callsign, 4 * FT, UNLEARNED_TYPE, seekAt + 32, settledRunAt(seekAt - T0 + 32)),
+    updateContact(callsign, frameOf(4 * FT, UNLEARNED_TYPE, seekAt + 32, settledRunAt(seekAt - T0 + 32))),
     'a run to enter on',
   ).toBe(true)
 })
@@ -710,8 +720,8 @@ it.each([
 ])('drawn time stepping %s 2 s or less keeps the provisional resting height and contact', (_way, stepMs) => {
   const callsign = `NOSEEK${stepMs}`
   const enterAt = T0 + 10_000
-  expect(updateContact(callsign, 4 * FT, UNLEARNED_TYPE, enterAt, settledRunAt(10_000)), 'entered').toBe(true)
-  expect(updateContact(callsign, 5 * FT, UNLEARNED_TYPE, enterAt + stepMs, undefined), 'after the step').toBe(true)
+  expect(updateContact(callsign, frameOf(4 * FT, UNLEARNED_TYPE, enterAt, settledRunAt(10_000))), 'entered').toBe(true)
+  expect(updateContact(callsign, frameOf(5 * FT, UNLEARNED_TYPE, enterAt + stepMs, undefined)), 'after the step').toBe(true)
 })
 
 it('the provisional resting height follows the rest down in contact, so a later bounce to 10 ft leaves contact (N3368K)', () => {

@@ -6,6 +6,7 @@ import {
   AOA_OFFSET_LOW_SPEED_DEGREES,
   CONTACT_ENTER_HEIGHT_METERS,
   CONTACT_EXIT_HEIGHT_METERS,
+  CONTACT_HOLD_MS,
   DEPARTURE_BLEND_END_AGL,
   DEPARTURE_BLEND_START_AGL,
   DROP_CONTACT_EASE_MS,
@@ -17,6 +18,7 @@ import {
   FLARE_START_ALTITUDE_METERS,
   GROUND_AIRCRAFT_TERRAIN_OFFSET,
   HEIGHT_TRANSITION_LERP_FACTOR,
+  isRotorcraftType,
   LANDING_BLEND_DESCENT_RATE,
   LANDING_BLEND_END_AGL,
   LANDING_BLEND_START_AGL,
@@ -152,6 +154,26 @@ interface RestOffsetState {
 /** Per aircraft, what is taken off its drawn reported height */
 const sharedRestOffsetStateRef = { current: new Map<string, RestOffsetState>() }
 
+/**
+ * What the contact hold remembers of an aircraft: whether it was in contact at its last height, and the hold
+ * itself (CONTACT_HOLD_MS).
+ */
+interface ContactHoldState {
+  /** Display time the held exit started (t_e), or null while not held */
+  heldSince: number | null
+  /** Whether the aircraft was in contact on its last frame with a height; a null height keeps it */
+  inContactAtLastHeight: boolean
+  /** False on the frame the state starts (first sight, or after a seek), on which no hold arms */
+  armable: boolean
+  /** Display time of the last frame, to see it go back or jump */
+  lastTime: number
+  /** The last frame's `displayAnchorOffsetMs`, to tell a move of the anchor from a seek */
+  lastAnchorOffset: number
+}
+
+/** Per aircraft whose type is not a rotorcraft's, its contact hold */
+const sharedContactHoldStateRef = { current: new Map<string, ContactHoldState>() }
+
 // The 3 ft span test compares with this tolerance (m), so a run that moves exactly 3 ft passes
 const SETTLE_RANGE_TOLERANCE_METERS = 1e-6 * 0.3048
 
@@ -263,47 +285,187 @@ function provisionalRestShare(height: number): number {
   return Math.min(1, Math.max(0, (DROP_CONTACT_REST_DROP_HEIGHT_METERS - height) / span))
 }
 
-/** An aircraft's provisional resting height (m), or null while lane B has none for it. */
-function provisionalRestFor(callsign: string): number | null {
+/** An aircraft's provisional resting height (m), or null while lane B has none for it. Exported for tests. */
+export function provisionalRestFor(callsign: string): number | null {
   return sharedLaneBStateRef.current.get(callsign)?.provisionalRest ?? null
+}
+
+/**
+ * An aircraft's contact hold at this frame. Display time moving more than DROP_CONTACT_SEEK_MS either way from the
+ * last frame, beyond what its anchor's offset moved (`displayAnchorOffsetMs`, as when the drawn list switches source),
+ * is a seek: the hold restarts as at first sight, not armable on its first frame. A move of the anchor alone keeps it.
+ */
+function contactHoldAt(callsign: string, frame: ContactFrame): ContactHoldState {
+  const time = frame.displayTime
+  const anchorOffset = frame.displayAnchorOffsetMs
+  const previous = sharedContactHoldStateRef.current.get(callsign)
+  if (previous !== undefined) {
+    const seekMs = time - previous.lastTime - (anchorOffset - previous.lastAnchorOffset)
+    if (Math.abs(seekMs) <= DROP_CONTACT_SEEK_MS) {
+      previous.lastTime = time
+      previous.lastAnchorOffset = anchorOffset
+      return previous
+    }
+  }
+  const state: ContactHoldState = {
+    heldSince: null,
+    inContactAtLastHeight: false,
+    armable: false,
+    lastTime: time,
+    lastAnchorOffset: anchorOffset,
+  }
+  sharedContactHoldStateRef.current.set(callsign, state)
+  return state
+}
+
+/** Whether the frame's height is over the exit height that contact would be left above, from contact. */
+function overExitHeight(callsign: string, height: number, rest: number | null): boolean {
+  if (rest !== null) return height - rest > CONTACT_EXIT_HEIGHT_METERS
+  if (height > DROP_CONTACT_EXIT_HEIGHT_METERS) return true
+  const provisionalRest = provisionalRestFor(callsign)
+  return provisionalRest !== null && height - provisionalRest > CONTACT_EXIT_HEIGHT_METERS
+}
+
+/**
+ * Whether a running hold keeps the aircraft in contact this frame. It ends at CONTACT_HOLD_MS after the exit started,
+ * or once the height is back under the exit height. While it holds, lane B's memory is
+ * frozen but for its frame time, so a burst neither drops nor sets a provisional resting height.
+ */
+function stillHeld(
+  hold: ContactHoldState,
+  callsign: string,
+  height: number,
+  rest: number | null,
+  time: number,
+): boolean {
+  if (hold.heldSince === null) return false
+  if (time - hold.heldSince >= CONTACT_HOLD_MS) {
+    hold.heldSince = null
+    return false
+  }
+  if (!overExitHeight(callsign, height, rest)) {
+    hold.heldSince = null
+    return false
+  }
+  const laneB = sharedLaneBStateRef.current.get(callsign)
+  if (laneB !== undefined) laneB.lastTime = time
+  return true
+}
+
+/** What `updateContact` reads of a frame: the timeline's fields of the same names. */
+export type ContactFrame = Pick<
+  TimelineInterpolationResult,
+  'heightAboveGround' | 'aircraftType' | 'displayTime' | 'settleRun' | 'bracketStartStopped' | 'displayAnchorOffsetMs'
+>
+
+/** One frame's contact decision with a height. */
+interface ContactDecision {
+  callsign: string
+  height: number
+  rest: number | null
+  wasInContact: boolean
+  frame: ContactFrame
+}
+
+/**
+ * After the contact rule decided: leaving contact on a bracket whose earlier sample is stopped, not on the hold's
+ * first frame, starts a hold.
+ *
+ * @returns Whether a hold starts this frame
+ */
+function startsHold(hold: ContactHoldState, decision: ContactDecision, inContact: boolean): boolean {
+  const { frame } = decision
+  if (inContact || !hold.armable || !decision.wasInContact || !frame.bracketStartStopped) return false
+  hold.heldSince = frame.displayTime
+  return true
+}
+
+/**
+ * The frame's contact: a running hold's (`stillHeld`), else the contact rule's, which an exit that starts a hold
+ * (`startsHold`) overrides, lane B keeping its memory from before the frame.
+ */
+function heldOrRuledContact(hold: ContactHoldState | null, decision: ContactDecision): boolean {
+  const { callsign, height, rest, wasInContact, frame } = decision
+  // A hold that ends this frame does not start again on the same exit
+  const wasHeld = hold !== null && hold.heldSince !== null
+  if (hold !== null && stillHeld(hold, callsign, height, rest, frame.displayTime)) return true
+  const laneBBefore = laneBSnapshotOf(callsign)
+  const inContact =
+    rest === null
+      ? laneBContact(callsign, height, frame.displayTime, frame.settleRun, wasInContact)
+      : contactOverRest(wasInContact, height - rest)
+  if (hold === null || wasHeld || !startsHold(hold, decision, inContact)) return inContact
+  // The exit frame's height is the burst's: lane B keeps its memory from before it
+  restoreLaneB(callsign, laneBBefore, frame.displayTime)
+  return true
+}
+
+/**
+ * Whether an aircraft with no contact state from its height starts in contact. After a null height, it does when it
+ * was in contact at its last height and the bracket's earlier sample is stopped (it stood still through the gap).
+ * Otherwise it starts from the contact it was last drawn with (a source without height takes it from the terrain
+ * clamp), so a switch to a source with height on the ground keeps it in contact.
+ */
+function startsInContact(callsign: string, hold: ContactHoldState | null, frame: ContactFrame): boolean {
+  if (hold?.inContactAtLastHeight && frame.bracketStartStopped) return true
+  return sharedInterpolatedStates.get(callsign)?.inContact === true
 }
 
 /**
  * Ground contact for this frame from the height above ground at the displayed instant, with hysteresis.
  * Once the aircraft has a resting height (its own, else its type's), contact is entered below the entry height over it
  * and left above the exit height over it; until then lane B decides (`laneBContact`). An aircraft with no earlier
- * contact state from its height starts from the contact it was last drawn with (a source without height takes it from
- * the terrain clamp), so a switch to a source with height on the ground keeps it in contact.
+ * contact state from its height starts as `startsInContact` says.
+ *
+ * An aircraft that leaves contact on a bracket whose earlier sample is stopped is held in contact until its height has
+ * stayed over the exit height for CONTACT_HOLD_MS (`stillHeld`), unless its type is a rotorcraft's. A null height
+ * ends contact and the hold but keeps whether the aircraft was in contact; a seek, a playback mode change and removal
+ * clear the hold.
  *
  * Exported for tests.
  *
- * @param settleRun - The run of height samples lane B enters on (`TimelineInterpolationResult.settleRun`)
+ * @param frame - The timeline's height above ground, type, display time, settle run and bracket fields
  * @returns Whether the aircraft is in contact, or null when the source reports no height
  */
-export function updateContact(
-  callsign: string,
-  heightAboveGround: number | null,
-  aircraftType: string | null,
-  displayTime: number,
-  settleRun: SettleRun | undefined,
-): boolean | null {
-  if (heightAboveGround === null) {
+export function updateContact(callsign: string, frame: ContactFrame): boolean | null {
+  const hold = contactHoldFor(callsign, frame)
+  const height = frame.heightAboveGround
+  if (height === null) {
     sharedContactStateRef.current.delete(callsign)
     sharedLaneBStateRef.current.delete(callsign)
+    if (hold !== null) hold.heldSince = null
     return null
   }
-  const wasInContact =
-    sharedContactStateRef.current.get(callsign) ?? sharedInterpolatedStates.get(callsign)?.inContact === true
-  const rest = restingHeightFor(callsign, aircraftType)
-  let inContact: boolean
-  if (rest === null) {
-    inContact = laneBContact(callsign, heightAboveGround, displayTime, settleRun, wasInContact)
-  } else {
-    sharedLaneBStateRef.current.delete(callsign)
-    inContact = contactOverRest(wasInContact, heightAboveGround - rest)
-  }
+  const rest = restingHeightFor(callsign, frame.aircraftType)
+  if (rest !== null) sharedLaneBStateRef.current.delete(callsign)
+  const wasInContact = sharedContactStateRef.current.get(callsign) ?? startsInContact(callsign, hold, frame)
+  const inContact = heldOrRuledContact(hold, { callsign, height, rest, wasInContact, frame })
   sharedContactStateRef.current.set(callsign, inContact)
+  if (hold !== null) {
+    hold.inContactAtLastHeight = inContact
+    hold.armable = true
+  }
   return inContact
+}
+
+/** An aircraft's contact hold; null for a rotorcraft, which is never held. */
+function contactHoldFor(callsign: string, frame: ContactFrame): ContactHoldState | null {
+  if (isRotorcraftType(frame.aircraftType)) {
+    sharedContactHoldStateRef.current.delete(callsign)
+    return null
+  }
+  return contactHoldAt(callsign, frame)
+}
+
+/** A copy of an aircraft's lane B memory, or undefined while it has none. */
+function laneBSnapshotOf(callsign: string): LaneBState | undefined {
+  const state = sharedLaneBStateRef.current.get(callsign)
+  return state === undefined ? undefined : { ...state }
+}
+
+/** Put back lane B memory copied before this frame, at this frame's time. */
+function restoreLaneB(callsign: string, snapshot: LaneBState | undefined, time: number): void {
+  if (snapshot !== undefined) sharedLaneBStateRef.current.set(callsign, { ...snapshot, lastTime: time })
 }
 
 /**
@@ -422,13 +584,7 @@ function timelineToInterpolatedState(
   }
 
   const lastFrameTime = sharedTimelineLastFrameTimeRef.current
-  const inContact = updateContact(
-    callsign,
-    timeline.heightAboveGround,
-    timeline.aircraftType,
-    timeline.displayTime,
-    timeline.settleRun,
-  )
+  const inContact = updateContact(callsign, timeline)
   // On the ground for heading rate, pitch and roll: ground contact when the source reports its height above
   // ground, otherwise the source's ground flag or a groundspeed under 40 kt
   const isOnGround = inContact ?? (timeline.onGround === true || timeline.groundspeed < 40)
@@ -713,6 +869,7 @@ function runInterpolationFrame() {
     sharedContactStateRef.current.clear()
     sharedLaneBStateRef.current.clear()
     sharedRestOffsetStateRef.current.clear()
+    sharedContactHoldStateRef.current.clear()
 
     if (currentMode === 'imported') {
       // Entering imported replay mode - timelines are already loaded by
@@ -1215,6 +1372,7 @@ function runInterpolationFrame() {
       sharedContactStateRef.current.delete(callsign)
       sharedLaneBStateRef.current.delete(callsign)
       sharedRestOffsetStateRef.current.delete(callsign)
+      sharedContactHoldStateRef.current.delete(callsign)
     }
   }
 

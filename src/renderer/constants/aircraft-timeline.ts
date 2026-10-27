@@ -128,10 +128,26 @@ export const DROP_CONTACT_SETTLE_SPAN_MS = 2500
 export const DROP_CONTACT_SETTLE_MIN_SAMPLES = 3
 
 /**
- * While an aircraft has no resting height, display time going back or jumping forward more than this (ms) drops its
- * provisional resting height and restarts its contact as at first sight
+ * Display time going back or jumping forward more than this (ms) is a seek. While an aircraft has no resting height, a
+ * seek drops its provisional resting height and restarts its contact as at first sight; with or without one, a seek
+ * clears its contact hold (CONTACT_HOLD_MS). For the hold, the part of a display-time move that the change of its
+ * anchor's offset explains (`displayAnchorOffsetMs`, as when the drawn list switches source) is not a seek
  */
 export const DROP_CONTACT_SEEK_MS = 2000
+
+/**
+ * An aircraft that leaves contact on a bracket whose earlier sample shows it stopped is held in contact. A held
+ * aircraft leaves contact only once its height has stayed over the contact exit height this long (ms) of display
+ * time, so a short burst of high samples (a simulator reposition or reload) never lifts a parked aircraft
+ */
+export const CONTACT_HOLD_MS = 5000
+
+/**
+ * A contact hold arms only on a bracket whose horizontal step is under this (m). A parked aircraft's reload burst moves
+ * it a few metres (FDX772's burst bracket moved about 8 m); one repositioned further away (onto final, say) leaves
+ * contact as the source says. An estimate: real reload positions were never logged
+ */
+export const CONTACT_HOLD_MAX_ARM_STEP_M = 500
 
 /** While an aircraft has no resting height, a change of contact eases its drawn height over this long (ms) */
 export const DROP_CONTACT_EASE_MS = 1000

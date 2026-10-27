@@ -20,6 +20,16 @@ import {
   type ScenarioResult,
 } from './harness'
 
+/** What `updateContact` reads of a frame with a height and nothing else, as these cases drive it. */
+const heightOnly = (heightAboveGround: number, aircraftType: string | null, displayTime: number) => ({
+  heightAboveGround,
+  aircraftType,
+  displayTime,
+  settleRun: undefined,
+  bracketStartStopped: false,
+  displayAnchorOffsetMs: 0,
+})
+
 vi.mock('react', () => {
   const api = {
     useEffect: (fn: () => unknown) => {
@@ -326,8 +336,8 @@ it("an aircraft decides contact by its own resting height, not its type's", asyn
   for (let t = 0; t < 3; t++) store.addObservation('REST0', stoppedVnasSample(t, 0), metadata)
   const updateContact = (await import('@/hooks/useAircraftInterpolation')).updateContact
   // 6 ft over its own 0 ft is out of contact; over the type's 9 ft (median of six 9s and three 0s) it is -3 ft, in it
-  expect(updateContact('REST0', 6 * FT, type, 0, undefined), 'REST0 at a raw 6 ft').toBe(false)
-  expect(updateContact('REST9', 6 * FT, type, 0, undefined), 'REST9 at a raw 6 ft').toBe(true)
+  expect(updateContact('REST0', heightOnly(6 * FT, type, 0)), 'REST0 at a raw 6 ft').toBe(false)
+  expect(updateContact('REST9', heightOnly(6 * FT, type, 0)), 'REST9 at a raw 6 ft').toBe(true)
 })
 
 /** A stationary sample at second `t` from `source`, reporting `heightFt`; only a vNAS sample reports a height. */
@@ -383,7 +393,7 @@ describe("a vNAS aircraft's type while VATSIM files another", () => {
     }
     const { updateContact } = await import('@/hooks/useAircraftInterpolation')
     // Over its own 0 ft, 6 ft is out of contact; over B77W's 9 ft it would be -3 ft, in contact
-    expect(updateContact('WAT2918', 6 * FT, typeOf(), 0, undefined), 'WAT2918 at a raw 6 ft').toBe(false)
+    expect(updateContact('WAT2918', heightOnly(6 * FT, typeOf(), 0)), 'WAT2918 at a raw 6 ft').toBe(false)
   })
 
   it("vNAS samples feed the vNAS type's pool while VATSIM reports another type", async () => {

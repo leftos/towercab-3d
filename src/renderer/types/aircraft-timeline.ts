@@ -257,6 +257,22 @@ export interface TimelineInterpolationResult {
   settleRun: SettleRun | undefined
 
   /**
+   * Whether the bracket's earlier sample shows the aircraft stopped and the bracket's horizontal step is under
+   * CONTACT_HOLD_MAX_ARM_STEP_M. The sample is stopped when its last step is under STOPPED_SPEED_KTS and so is the step
+   * before it or its speed over the 3 s stop window, or when its step from the previous vNAS sample (however long
+   * before) is under STOPPED_SPEED_KTS and that sample is itself stopped. False while extrapolating or held, and for a
+   * sample from another source.
+   */
+  bracketStartStopped: boolean
+
+  /**
+   * The observed time less the received time (ms) of the sample display time is anchored to, the drawn list's oldest:
+   * display time is the frame's time plus this, less the display delay. When the drawn list switches source (vNAS
+   * alone or mixed with VATSIM), its oldest sample can change source and display time moves by this offset's change.
+   */
+  displayAnchorOffsetMs: number
+
+  /**
    * Pitch angle in degrees (interpolated from observations if available).
    * For broadcast source: pre-interpolated pitch from main app.
    * For other sources: null (calculated by rendering layer from vertical rate).

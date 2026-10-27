@@ -345,6 +345,8 @@ export {
   CADENCE_ANY_MOTION_MAX_MS,
   CONTACT_ENTER_HEIGHT_METERS,
   CONTACT_EXIT_HEIGHT_METERS,
+  CONTACT_HOLD_MAX_ARM_STEP_M,
+  CONTACT_HOLD_MS,
   DROP_CONTACT_EASE_MS,
   DROP_CONTACT_EXIT_HEIGHT_METERS,
   DROP_CONTACT_MAX_HEIGHT_METERS,
@@ -378,6 +380,12 @@ export {
   VNAS_PREFERENCE_THRESHOLD_MS,
   VNAS_STOP_WINDOW_MS,
 } from './aircraft-timeline'
+
+// ============================================================================
+// ROTORCRAFT TYPES (generated)
+// ============================================================================
+
+export { isRotorcraftType, ROTORCRAFT_TYPES } from './rotorcraftTypes'
 
 // ============================================================================
 // VNAS CONSTANTS

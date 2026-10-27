@@ -29,6 +29,7 @@ import {
   AIRCRAFT_TIMEOUT,
   CADENCE_ANY_MOTION_MAX_MS,
   CONTACT_EXIT_HEIGHT_METERS,
+  CONTACT_HOLD_MAX_ARM_STEP_M,
   DROP_CONTACT_SETTLE_MIN_SAMPLES,
   DROP_CONTACT_SETTLE_SPAN_MS,
   DYNAMIC_DELAY_EXTRAPOLATION_BUMP_MS,
@@ -526,8 +527,48 @@ function hasStopped(observations: AircraftObservation[], sample: AircraftObserva
 function forgetStopDecisionsAfter(observations: AircraftObservation[], late: AircraftObservation): void {
   if (late.source !== 'vnas') return
   for (const obs of observations) {
-    if (obs.observedAt > late.observedAt) stoppedSampleCache.delete(obs)
+    if (obs.observedAt > late.observedAt) {
+      stoppedSampleCache.delete(obs)
+      stillSampleCache.delete(obs)
+    }
   }
+}
+
+/** `isStillVnasSample` per vNAS sample, decided once: only the samples before it decide it */
+const stillSampleCache = new WeakMap<AircraftObservation, boolean>()
+
+/**
+ * Whether a vNAS sample shows the aircraft stopped: `hasStopped` holds for it, or its step from the previous vNAS
+ * sample, however long before it, is under STOPPED_SPEED_KTS and that sample is itself stopped. The chain carries a
+ * stop across a vNAS silence to the samples after it; a takeoff's single repeated position does not chain, since the
+ * sample before it is moving.
+ */
+function isStillVnasSample(observations: AircraftObservation[], sample: AircraftObservation): boolean {
+  const cached = stillSampleCache.get(sample)
+  if (cached !== undefined) return cached
+  const previous = newestVnasSampleIn(observations, Number.NEGATIVE_INFINITY, sample.observedAt - 1)
+  const still =
+    hasStopped(observations, sample) ||
+    (previous !== null &&
+      stepSpeedKts(previous, sample) < STOPPED_SPEED_KTS &&
+      isStillVnasSample(observations, previous))
+  stillSampleCache.set(sample, still)
+  return still
+}
+
+/**
+ * Whether the bracket's earlier sample shows the aircraft stopped (`isStillVnasSample`) and the bracket's horizontal
+ * step is under CONTACT_HOLD_MAX_ARM_STEP_M. False with no bracket (extrapolating or held) and for a sample from another
+ * source.
+ */
+function bracketStartsStopped(
+  observations: AircraftObservation[],
+  before: AircraftObservation | null,
+  after: AircraftObservation | null,
+): boolean {
+  if (!before || !after || before.source !== 'vnas') return false
+  if (stepMeters(before, after) >= CONTACT_HOLD_MAX_ARM_STEP_M) return false
+  return isStillVnasSample(observations, before)
 }
 
 /** The newest vNAS sample observed between `from` and `to` (inclusive, ms), wherever it sits in the timeline. */
@@ -603,10 +644,14 @@ function mergeObservationMetadata(
   return { ...merged, aircraftType: reported.bySource.vnas ?? reported.newestNonVnas ?? merged.aircraftType }
 }
 
+/** Horizontal distance (m) from `from` to `to`. */
+function stepMeters(from: AircraftObservation, to: AircraftObservation): number {
+  return haversineDistanceFt(from.latitude, from.longitude, to.latitude, to.longitude) * FEET_TO_METERS
+}
+
 /** Speed in knots from `from` to `to` over the time between them. */
 function stepSpeedKts(from: AircraftObservation, to: AircraftObservation): number {
-  const meters = haversineDistanceFt(from.latitude, from.longitude, to.latitude, to.longitude) * FEET_TO_METERS
-  return mpsToKnots(meters / ((to.observedAt - from.observedAt) / 1000))
+  return mpsToKnots(stepMeters(from, to) / ((to.observedAt - from.observedAt) / 1000))
 }
 
 /**
@@ -1637,6 +1682,8 @@ function interpolateTimeline(
       onGround: drawingGroundFlag(groundFlagSource, heightAboveGround),
       heightAboveGround,
       settleRun,
+      bracketStartStopped: bracketStartsStopped(observations, before, after),
+      displayAnchorOffsetMs: oldestObs.observedAt - oldestObs.receivedAt,
       pitch,
       roll,
       verticalRate,
