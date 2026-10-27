@@ -1,0 +1,300 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Facade looks for more OSM building types</title>
+<style>
+  :root {
+    --bg: #f6f6f3;
+    --panel: #ffffff;
+    --text: #1d1f22;
+    --muted: #5d636b;
+    --rule: #d9dbdf;
+    --accent: #0b6bcb;
+    --note-bg: #fff6dc;
+    --note-rule: #e8c766;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --bg: #131518;
+      --panel: #1b1e22;
+      --text: #e7e9ec;
+      --muted: #9aa1aa;
+      --rule: #30353b;
+      --accent: #6cb4ff;
+      --note-bg: #2b2616;
+      --note-rule: #7a6420;
+    }
+  }
+  :root[data-theme="dark"] {
+    --bg: #131518;
+    --panel: #1b1e22;
+    --text: #e7e9ec;
+    --muted: #9aa1aa;
+    --rule: #30353b;
+    --accent: #6cb4ff;
+    --note-bg: #2b2616;
+    --note-rule: #7a6420;
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--text); font: 15px/1.5 system-ui, -apple-system, "Segoe UI", sans-serif; }
+  main { max-width: 1800px; margin: 0 auto; padding: 24px 16px 64px; }
+  h1 { font-size: 1.6rem; margin: 0 0 4px; }
+  h2 { font-size: 1.25rem; margin: 0 0 6px; }
+  h3 { font-size: 1rem; margin: 18px 0 2px; }
+  p, li { max-width: 1150px; }
+  .sub { color: var(--muted); margin: 0 0 16px; }
+  .note { background: var(--note-bg); border-left: 4px solid var(--note-rule); border-radius: 4px; padding: 10px 14px; margin: 0 0 16px; max-width: 1200px; }
+  a { color: var(--accent); }
+  .toc { display: flex; flex-wrap: wrap; gap: 6px 16px; margin: 0 0 24px; padding: 0; list-style: none; }
+  .toc a { text-decoration: none; }
+  section { background: var(--panel); border: 1px solid var(--rule); border-radius: 8px; padding: 16px; margin: 0 0 22px; }
+  .cap { color: var(--muted); margin: 0 0 8px; font-size: 0.92rem; }
+  .bld { font-size: 0.88rem; margin: 0 0 6px; }
+  .two, .three, .four { display: grid; gap: 12px; align-items: start; }
+  .two { grid-template-columns: repeat(2, minmax(0, 1fr)); max-width: 1300px; }
+  .three { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+  .four { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+  figure { margin: 0; }
+  figure img { display: block; width: 100%; height: auto; border-radius: 4px; border: 1px solid var(--rule); background: #000; }
+  figcaption { font-size: 0.88rem; margin: 6px 0 0; }
+  figcaption b { display: block; font-size: 0.95rem; }
+  code { font-family: ui-monospace, "Cascadia Code", Consolas, monospace; font-size: 0.9em; }
+  @media (max-width: 1100px) {
+    .three, .four { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  }
+  @media (max-width: 640px) {
+    .two, .three, .four { grid-template-columns: minmax(0, 1fr); }
+  }
+</style>
+</head>
+<body>
+<main>
+<h1>TC3D-376: facade looks for more OSM building types</h1>
+<p class="sub">OSM Buildings facades, branch <code>tc3d-376</code> from <code>feat/osm-facades</code> 71a5534. Headless Edge, Vite dev server (<code>vite:headless</code>), 1596×800 canvas, building quality high, weather effects and clouds off. Day stills at 12:00, night stills at 22:00 local.</p>
+
+<div class="note">
+<p><b>The question.</b> Which look should each OSM building type get? One section per candidate from the phase-1 survey (ranks 1-10 by share of what the tower sees), then the three small rule additions. Each section shows two real buildings, one camera per building, the same in every lane, so the lanes differ only in the facade the shader draws.</p>
+<ul>
+<li><b>Today</b>: what the app draws now.</li>
+<li><b>Forced class</b>: an existing class forced on that one building by wrapping the tileset style's colour (the fire-station mock's method); nothing else changes.</li>
+<li><b>Prototype</b>: a new look drawn by a throwaway shader branch behind a new class id (CANOPY 7, RETAIL 8, WAREHOUSE 9, FIRE_STATION 10, HOTEL 11, TANK 12), forced the same way. The prototype is kept as <code>prototype.patch</code> beside this page and is not code that will land.</li>
+</ul>
+</div>
+
+<ul class="toc">
+<li><a href="#canopy">1. Canopy / open roof</a></li>
+<li><a href="#warehouse">2. Warehouse / industrial / distribution</a></li>
+<li><a href="#retail">3. Retail / low-rise commercial</a></li>
+<li><a href="#utility">4. Utility / service shed</a></li>
+<li><a href="#apartments">5. Apartments</a></li>
+<li><a href="#hotel">6. Hotel</a></li>
+<li><a href="#school">7. School / civic / government</a></li>
+<li><a href="#skybridge">8. Skybridge</a></li>
+<li><a href="#fire">9. Fire station / ARFF</a></li>
+<li><a href="#tank">10. Storage tank / fuel farm</a></li>
+<li><a href="#rules">Small rule additions</a></li>
+<li><a href="#approx">What is approximate</a></li>
+</ul>
+
+<section id="canopy">
+<h2>1. Canopy / open roof</h2>
+<p class="cap"><code>building=roof</code> (324, 109 of them solar with <code>power=generator</code>), <code>building=canopy</code>, <code>amenity=shelter</code> (47), <code>parking=carports</code>. 360 elements, 6.46% of the view. Today GENERIC (356): punched windows on a solid 3 m box.</p>
+<p class="cap">Survey proposal: a new look, a fascia over a dark void with posts. 356 of 360 have no <code>min_height</code>, so the box stays solid from the ground.</p>
+<ul class="bld">
+<li>KOAK solar roof at the tower&#x27;s foot (way 468786430): today GENERIC; 465 m², 3 m box, about 100 m from the eye.</li>
+<li>Costco Gasoline fuel canopy, KSJC (way 225007882): today GENERIC; 679 m², 3 m box.</li>
+</ul>
+<h3>Today (GENERIC)</h3>
+<p class="cap">GENERIC on both: punched windows on a solid 3 m box, nothing that reads as an open roof.</p>
+<div class="two"><figure><img src="canopy-oak-12-today.jpg" alt="KOAK solar roof at the tower&#x27;s foot, today, 12:00"><figcaption><b>KOAK solar roof at the tower&#x27;s foot</b>12:00</figcaption></figure><figure><img src="canopy-sjc-12-today.jpg" alt="Costco Gasoline fuel canopy, KSJC, today, 12:00"><figcaption><b>Costco Gasoline fuel canopy, KSJC</b>12:00</figcaption></figure></div>
+<h3>Proposed: CANOPY (prototype)</h3>
+<p class="cap">Prototype. A 0.75 m light fascia under the roof line, a near-black recessed void below it and 0.6 m posts every 7 m. It fakes an open roof on posts: the tileset still draws a solid box, so the roof top stays solid and nothing shows through the void; no light at night.</p>
+<div class="two"><figure><img src="canopy-oak-12-proposed.jpg" alt="KOAK solar roof at the tower&#x27;s foot, proposed, 12:00"><figcaption><b>KOAK solar roof at the tower&#x27;s foot</b>12:00</figcaption></figure><figure><img src="canopy-sjc-12-proposed.jpg" alt="Costco Gasoline fuel canopy, KSJC, proposed, 12:00"><figcaption><b>Costco Gasoline fuel canopy, KSJC</b>12:00</figcaption></figure></div>
+</section>
+
+<section id="warehouse">
+<h2>2. Warehouse / industrial / distribution</h2>
+<p class="cap"><code>building=industrial</code>, <code>warehouse</code>, <code>factory</code>, <code>data_center</code>, <code>aeroway=warehouse</code>, <code>man_made=works</code>. 1,027 elements, 3.93% of the view. Today HANGAR (999).</p>
+<p class="cap">Survey proposal: HANGAR's cladding without the hangar door, with a row of loading-dock doors.</p>
+<ul class="bld">
+<li>KVNY industrial block (way 312880006, building=industrial): today HANGAR; 3,371 m², 6.6 m.</li>
+<li>KVNY warehouse (way 312880003, building=warehouse): today HANGAR; 1,043 m², 11.7 m.</li>
+</ul>
+<h3>Today (HANGAR)</h3>
+<p class="cap">HANGAR on both: grey ribbed cladding in wide panels, no doors or windows; dark at night.</p>
+<div class="two"><figure><img src="wh-vny1-12-today.jpg" alt="KVNY industrial block, today, 12:00"><figcaption><b>KVNY industrial block</b>12:00</figcaption></figure><figure><img src="wh-vny2-12-today.jpg" alt="KVNY warehouse, today, 12:00"><figcaption><b>KVNY warehouse</b>12:00</figcaption></figure></div>
+<h3>Proposed: WAREHOUSE (prototype)</h3>
+<p class="cap">Prototype. HANGAR's ribbed cladding with panel joints every 8.4 m and no hangar door, plus runs of 4.2 m roll-up dock doors (slatted grey, black dock seals) on part of the wall, a lamp over each; at night only the dock lamps are lit.</p>
+<div class="two"><figure><img src="wh-vny1-12-proposed.jpg" alt="KVNY industrial block, proposed, 12:00"><figcaption><b>KVNY industrial block</b>12:00</figcaption></figure><figure><img src="wh-vny2-12-proposed.jpg" alt="KVNY warehouse, proposed, 12:00"><figcaption><b>KVNY warehouse</b>12:00</figcaption></figure></div>
+</section>
+
+<section id="retail">
+<h2>3. Retail / low-rise commercial</h2>
+<p class="cap"><code>building=retail</code>, low <code>building=commercial</code> (under 3 levels and 10 m), <code>shop=*</code>, <code>craft=*</code>, food and drink <code>amenity</code> values. 699 elements, 2.14% of the view. Today OFFICE (535) or GENERIC (163).</p>
+<p class="cap">Survey proposal: a new look, storefront glazing on the ground floor only.</p>
+<ul class="bld">
+<li>Lexus of Stevens Creek, KSJC (way 225010616): today GENERIC; 2,674 m², 8 m.</li>
+<li>KSJC retail neighbour of the Lexus dealership (way 225010615): today GENERIC; swapped in for the KHWD big boxes.</li>
+</ul>
+<h3>Today (GENERIC)</h3>
+<p class="cap">GENERIC on both: punched windows on every storey, as if offices; a scattering lit at night on every face.</p>
+<div class="four"><figure><img src="retail-sjc-12-today.jpg" alt="Lexus of Stevens Creek, KSJC, today, 12:00"><figcaption><b>Lexus of Stevens Creek, KSJC</b>12:00</figcaption></figure><figure><img src="retail-sjc-22-today.jpg" alt="Lexus of Stevens Creek, KSJC, today, 22:00"><figcaption><b>Lexus of Stevens Creek, KSJC</b>22:00</figcaption></figure><figure><img src="retail-sjc2-12-today.jpg" alt="KSJC retail neighbour of the Lexus dealership, today, 12:00"><figcaption><b>KSJC retail neighbour of the Lexus dealership</b>12:00</figcaption></figure><figure><img src="retail-sjc2-22-today.jpg" alt="KSJC retail neighbour of the Lexus dealership, today, 22:00"><figcaption><b>KSJC retail neighbour of the Lexus dealership</b>22:00</figcaption></figure></div>
+<h3>Proposed: RETAIL (prototype)</h3>
+<p class="cap">Prototype. Storefront glazing on the ground floor only, in runs of 3 m bays that cover about two thirds of the wall, a dark sign band above each run and blank stucco over it; at night the storefront and sign band are lit, the rest dark.</p>
+<div class="four"><figure><img src="retail-sjc-12-proposed.jpg" alt="Lexus of Stevens Creek, KSJC, proposed, 12:00"><figcaption><b>Lexus of Stevens Creek, KSJC</b>12:00</figcaption></figure><figure><img src="retail-sjc-22-proposed.jpg" alt="Lexus of Stevens Creek, KSJC, proposed, 22:00"><figcaption><b>Lexus of Stevens Creek, KSJC</b>22:00</figcaption></figure><figure><img src="retail-sjc2-12-proposed.jpg" alt="KSJC retail neighbour of the Lexus dealership, proposed, 12:00"><figcaption><b>KSJC retail neighbour of the Lexus dealership</b>12:00</figcaption></figure><figure><img src="retail-sjc2-22-proposed.jpg" alt="KSJC retail neighbour of the Lexus dealership, proposed, 22:00"><figcaption><b>KSJC retail neighbour of the Lexus dealership</b>22:00</figcaption></figure></div>
+</section>
+
+<section id="utility">
+<h2>4. Utility / service shed</h2>
+<p class="cap"><code>building=service</code>, <code>shed</code>, <code>construction</code>, <code>guardhouse</code>, <code>hut</code>, <code>barn</code>. 75 elements, 1.38% of the view. Today GENERIC (74).</p>
+<p class="cap">Survey proposal: reuse PLAIN (forced here).</p>
+<ul class="bld">
+<li>KSFO service building inside the boundary (way 586738087): today GENERIC; 589 m², 3 m box.</li>
+<li>KSFO service building (way 1155684933): today GENERIC; swapped in for the KLAX service block.</li>
+</ul>
+<h3>Today (GENERIC)</h3>
+<p class="cap">GENERIC on both: a row of punched windows along the shed.</p>
+<div class="two"><figure><img src="util-sfo-12-today.jpg" alt="KSFO service building inside the boundary, today, 12:00"><figcaption><b>KSFO service building inside the boundary</b>12:00</figcaption></figure><figure><img src="util-sfo2-12-today.jpg" alt="KSFO service building, today, 12:00"><figcaption><b>KSFO service building</b>12:00</figcaption></figure></div>
+<h3>Proposed: PLAIN (forced class)</h3>
+<p class="cap">A flat wall in a single tone with no openings and no cladding lines; a dark block at night.</p>
+<div class="two"><figure><img src="util-sfo-12-proposed.jpg" alt="KSFO service building inside the boundary, proposed, 12:00"><figcaption><b>KSFO service building inside the boundary</b>12:00</figcaption></figure><figure><img src="util-sfo2-12-proposed.jpg" alt="KSFO service building, proposed, 12:00"><figcaption><b>KSFO service building</b>12:00</figcaption></figure></div>
+</section>
+
+<section id="apartments">
+<h2>5. Apartments</h2>
+<p class="cap"><code>building=apartments</code>. 1,058 elements, 1.07% of the view. Today HOUSE.</p>
+<p class="cap">Survey proposal: keep HOUSE and check it at 5-7 storeys; the GENERIC grid is shown beside it as the alternative.</p>
+<ul class="bld">
+<li>Orlo Apartments, KSJC (way 1257695492): today HOUSE; 1,150 m², 18 m.</li>
+<li>Station 16, KSFO (way 1041758863): today HOUSE; 1,399 m², 21 m, 7 levels.</li>
+</ul>
+<h3>Today (HOUSE)</h3>
+<p class="cap">HOUSE on both: brick-red domestic walls with punched windows on each storey; some lit at night.</p>
+<div class="four"><figure><img src="apt-sjc-12-today.jpg" alt="Orlo Apartments, KSJC, today, 12:00"><figcaption><b>Orlo Apartments, KSJC</b>12:00</figcaption></figure><figure><img src="apt-sjc-22-today.jpg" alt="Orlo Apartments, KSJC, today, 22:00"><figcaption><b>Orlo Apartments, KSJC</b>22:00</figcaption></figure><figure><img src="apt-sfo-12-today.jpg" alt="Station 16, KSFO, today, 12:00"><figcaption><b>Station 16, KSFO</b>12:00</figcaption></figure><figure><img src="apt-sfo-22-today.jpg" alt="Station 16, KSFO, today, 22:00"><figcaption><b>Station 16, KSFO</b>22:00</figcaption></figure></div>
+<h3>GENERIC (forced class)</h3>
+<p class="cap">Punched square windows in a regular grid on a light wall; at night a scattering of the windows is lit warm.</p>
+<div class="four"><figure><img src="apt-sjc-12-generic.jpg" alt="Orlo Apartments, KSJC, generic, 12:00"><figcaption><b>Orlo Apartments, KSJC</b>12:00</figcaption></figure><figure><img src="apt-sjc-22-generic.jpg" alt="Orlo Apartments, KSJC, generic, 22:00"><figcaption><b>Orlo Apartments, KSJC</b>22:00</figcaption></figure><figure><img src="apt-sfo-12-generic.jpg" alt="Station 16, KSFO, generic, 12:00"><figcaption><b>Station 16, KSFO</b>12:00</figcaption></figure><figure><img src="apt-sfo-22-generic.jpg" alt="Station 16, KSFO, generic, 22:00"><figcaption><b>Station 16, KSFO</b>22:00</figcaption></figure></div>
+</section>
+
+<section id="hotel">
+<h2>6. Hotel</h2>
+<p class="cap"><code>tourism=hotel</code>, <code>tourism=motel</code>, <code>building=hotel</code>, <code>building=motel</code>. 128 elements, 0.69% of the view. Today OFFICE (79, <code>building=hotel</code>) or GENERIC (48, <code>tourism=hotel</code> on <code>building=yes</code>).</p>
+<p class="cap">Three lanes besides today: OFFICE (the open TC3D-218 decision), the GENERIC grid (the survey's proposal) and a prototype HOTEL punched grid with a high warm lit share.</p>
+<ul class="bld">
+<li>KSJC airport hotel (way 360669524): today GENERIC; swapped in for the KLAX Marriott.</li>
+<li>San Francisco Airport Marriott (way 24334778): today OFFICE; 1,993 m², 55 m.</li>
+</ul>
+<h3>Today (GENERIC / OFFICE)</h3>
+<p class="cap">The KSJC hotel draws GENERIC (punched grid on a grey wall), the SFO Marriott OFFICE (continuous window bands); both lit in scattered windows at night.</p>
+<div class="four"><figure><img src="hotel-sjc-12-today.jpg" alt="KSJC airport hotel, today, 12:00"><figcaption><b>KSJC airport hotel</b>12:00</figcaption></figure><figure><img src="hotel-sjc-22-today.jpg" alt="KSJC airport hotel, today, 22:00"><figcaption><b>KSJC airport hotel</b>22:00</figcaption></figure><figure><img src="hotel-sfo-12-today.jpg" alt="San Francisco Airport Marriott, today, 12:00"><figcaption><b>San Francisco Airport Marriott</b>12:00</figcaption></figure><figure><img src="hotel-sfo-22-today.jpg" alt="San Francisco Airport Marriott, today, 22:00"><figcaption><b>San Francisco Airport Marriott</b>22:00</figcaption></figure></div>
+<h3>OFFICE (forced class)</h3>
+<p class="cap">Continuous bands of dark glazing with thin mullions on every storey; several bays of each band lit at night.</p>
+<div class="four"><figure><img src="hotel-sjc-12-office.jpg" alt="KSJC airport hotel, office, 12:00"><figcaption><b>KSJC airport hotel</b>12:00</figcaption></figure><figure><img src="hotel-sjc-22-office.jpg" alt="KSJC airport hotel, office, 22:00"><figcaption><b>KSJC airport hotel</b>22:00</figcaption></figure><figure><img src="hotel-sfo-12-office.jpg" alt="San Francisco Airport Marriott, office, 12:00"><figcaption><b>San Francisco Airport Marriott</b>12:00</figcaption></figure><figure><img src="hotel-sfo-22-office.jpg" alt="San Francisco Airport Marriott, office, 22:00"><figcaption><b>San Francisco Airport Marriott</b>22:00</figcaption></figure></div>
+<h3>GENERIC (forced class)</h3>
+<p class="cap">Punched square windows in a regular grid on a light wall; at night a scattering of the windows is lit warm.</p>
+<div class="four"><figure><img src="hotel-sjc-12-generic.jpg" alt="KSJC airport hotel, generic, 12:00"><figcaption><b>KSJC airport hotel</b>12:00</figcaption></figure><figure><img src="hotel-sjc-22-generic.jpg" alt="KSJC airport hotel, generic, 22:00"><figcaption><b>KSJC airport hotel</b>22:00</figcaption></figure><figure><img src="hotel-sfo-12-generic.jpg" alt="San Francisco Airport Marriott, generic, 12:00"><figcaption><b>San Francisco Airport Marriott</b>12:00</figcaption></figure><figure><img src="hotel-sfo-22-generic.jpg" alt="San Francisco Airport Marriott, generic, 22:00"><figcaption><b>San Francisco Airport Marriott</b>22:00</figcaption></figure></div>
+<h3>HOTEL (prototype)</h3>
+<p class="cap">Prototype. A punched grid of room windows, one per 3.8 m bay and storey, a dark PTAC grille under each, slab lines and a fully glazed lobby floor; at night 62% of rooms lit in varied warm and cool tints and the lobby lit.</p>
+<div class="four"><figure><img src="hotel-sjc-12-hotel.jpg" alt="KSJC airport hotel, hotel, 12:00"><figcaption><b>KSJC airport hotel</b>12:00</figcaption></figure><figure><img src="hotel-sjc-22-hotel.jpg" alt="KSJC airport hotel, hotel, 22:00"><figcaption><b>KSJC airport hotel</b>22:00</figcaption></figure><figure><img src="hotel-sfo-12-hotel.jpg" alt="San Francisco Airport Marriott, hotel, 12:00"><figcaption><b>San Francisco Airport Marriott</b>12:00</figcaption></figure><figure><img src="hotel-sfo-22-hotel.jpg" alt="San Francisco Airport Marriott, hotel, 22:00"><figcaption><b>San Francisco Airport Marriott</b>22:00</figcaption></figure></div>
+</section>
+
+<section id="school">
+<h2>7. School / civic / government</h2>
+<p class="cap"><code>building=school</code>, <code>university</code>, <code>public</code>, <code>civic</code>, <code>government</code>, <code>office=government</code>, civic <code>amenity</code> values. 164 elements, 0.65% of the view. Today OFFICE (125) or GENERIC (38).</p>
+<p class="cap">Survey proposal: reuse the GENERIC punched grid (forced here).</p>
+<ul class="bld">
+<li>KOAK school (way 348819789): today OFFICE; swapped in for the KLAX administration building.</li>
+<li>NVOC Aviation Mechanic School, KVNY (way 430735535): today OFFICE; 373 m², 8.9 m.</li>
+</ul>
+<h3>Today (OFFICE)</h3>
+<p class="cap">OFFICE on both: continuous window bands with mullions; several bays lit at night.</p>
+<div class="four"><figure><img src="school-oak-12-today.jpg" alt="KOAK school, today, 12:00"><figcaption><b>KOAK school</b>12:00</figcaption></figure><figure><img src="school-oak-22-today.jpg" alt="KOAK school, today, 22:00"><figcaption><b>KOAK school</b>22:00</figcaption></figure><figure><img src="school-vny-12-today.jpg" alt="NVOC Aviation Mechanic School, KVNY, today, 12:00"><figcaption><b>NVOC Aviation Mechanic School, KVNY</b>12:00</figcaption></figure><figure><img src="school-vny-22-today.jpg" alt="NVOC Aviation Mechanic School, KVNY, today, 22:00"><figcaption><b>NVOC Aviation Mechanic School, KVNY</b>22:00</figcaption></figure></div>
+<h3>Proposed: GENERIC (forced class)</h3>
+<p class="cap">Punched square windows in a regular grid on a light wall; at night a scattering of the windows is lit warm.</p>
+<div class="four"><figure><img src="school-oak-12-proposed.jpg" alt="KOAK school, proposed, 12:00"><figcaption><b>KOAK school</b>12:00</figcaption></figure><figure><img src="school-oak-22-proposed.jpg" alt="KOAK school, proposed, 22:00"><figcaption><b>KOAK school</b>22:00</figcaption></figure><figure><img src="school-vny-12-proposed.jpg" alt="NVOC Aviation Mechanic School, KVNY, proposed, 12:00"><figcaption><b>NVOC Aviation Mechanic School, KVNY</b>12:00</figcaption></figure><figure><img src="school-vny-22-proposed.jpg" alt="NVOC Aviation Mechanic School, KVNY, proposed, 22:00"><figcaption><b>NVOC Aviation Mechanic School, KVNY</b>22:00</figcaption></figure></div>
+</section>
+
+<section id="skybridge">
+<h2>8. Skybridge</h2>
+<p class="cap"><code>building=bridge</code>, <code>man_made=bridge</code>. 9 elements, 0.39% of the view. Today GENERIC.</p>
+<p class="cap">Survey proposal: reuse TERMINAL glazing (forced here). The bridges are 3 m boxes with no <code>min_height</code>, so they stand on the ground; no facade lifts them.</p>
+<ul class="bld">
+<li>KSFO skybridge inside the boundary (way 933656604): today GENERIC; 214 m², 3 m box on the ground.</li>
+<li>KSFO skybridge (way 933656603): today GENERIC; 3 m box on the ground; swapped in for the KLAX bridge.</li>
+</ul>
+<h3>Today (GENERIC)</h3>
+<p class="cap">GENERIC on both: punched windows on a 3 m box standing on the ground.</p>
+<div class="two"><figure><img src="bridge-sfo-12-today.jpg" alt="KSFO skybridge inside the boundary, today, 12:00"><figcaption><b>KSFO skybridge inside the boundary</b>12:00</figcaption></figure><figure><img src="bridge-sfo2-12-today.jpg" alt="KSFO skybridge, today, 12:00"><figcaption><b>KSFO skybridge</b>12:00</figcaption></figure></div>
+<h3>Proposed: TERMINAL (forced class)</h3>
+<p class="cap">Full-height glazing in a thin frame, the terminal curtain wall.</p>
+<div class="two"><figure><img src="bridge-sfo-12-proposed.jpg" alt="KSFO skybridge inside the boundary, proposed, 12:00"><figcaption><b>KSFO skybridge inside the boundary</b>12:00</figcaption></figure><figure><img src="bridge-sfo2-12-proposed.jpg" alt="KSFO skybridge, proposed, 12:00"><figcaption><b>KSFO skybridge</b>12:00</figcaption></figure></div>
+</section>
+
+<section id="fire">
+<h2>9. Fire station / ARFF</h2>
+<p class="cap"><code>amenity=fire_station</code>, <code>building=fire_station</code>, <code>emergency=ambulance_station</code>. 19 elements, 0.12% of the view. Today GENERIC (16), HANGAR (1), GARAGE (1), OFFICE (1).</p>
+<p class="cap">Survey proposal: a new look, apparatus bay doors with a crew wing.</p>
+<ul class="bld">
+<li>LAFD Fire Station 114, KVNY (way 430735719): today GARAGE (by shape); 1,089 m², 10.9 m, so 4 storeys.</li>
+<li>SFO Fire Station 1, ARFF (way 25373259): today GENERIC; 1,324 m², 3 m box.</li>
+</ul>
+<h3>Today (GARAGE (by shape) / GENERIC)</h3>
+<p class="cap">LAFD 114 draws GARAGE by shape (pale slab bands over dark open decks, four storeys from its 10.9 m height); SFO Fire Station 1 draws GENERIC (one row of punched windows).</p>
+<div class="four"><figure><img src="fire-vny-12-today.jpg" alt="LAFD Fire Station 114, KVNY, today, 12:00"><figcaption><b>LAFD Fire Station 114, KVNY</b>12:00</figcaption></figure><figure><img src="fire-vny-22-today.jpg" alt="LAFD Fire Station 114, KVNY, today, 22:00"><figcaption><b>LAFD Fire Station 114, KVNY</b>22:00</figcaption></figure><figure><img src="fire-sfo-12-today.jpg" alt="SFO Fire Station 1, ARFF, today, 12:00"><figcaption><b>SFO Fire Station 1, ARFF</b>12:00</figcaption></figure><figure><img src="fire-sfo-22-today.jpg" alt="SFO Fire Station 1, ARFF, today, 22:00"><figcaption><b>SFO Fire Station 1, ARFF</b>22:00</figcaption></figure></div>
+<h3>Proposed: FIRE_STATION (prototype)</h3>
+<p class="cap">Prototype. Per 30 m of wall, three 6 m sectional bay doors (light grey, a glazed row, a red trim band over them) and an 11 m crew wing with punched windows; at night the door glazing glows from the apparatus floor and some crew windows are lit.</p>
+<div class="four"><figure><img src="fire-vny-12-proposed.jpg" alt="LAFD Fire Station 114, KVNY, proposed, 12:00"><figcaption><b>LAFD Fire Station 114, KVNY</b>12:00</figcaption></figure><figure><img src="fire-vny-22-proposed.jpg" alt="LAFD Fire Station 114, KVNY, proposed, 22:00"><figcaption><b>LAFD Fire Station 114, KVNY</b>22:00</figcaption></figure><figure><img src="fire-sfo-12-proposed.jpg" alt="SFO Fire Station 1, ARFF, proposed, 12:00"><figcaption><b>SFO Fire Station 1, ARFF</b>12:00</figcaption></figure><figure><img src="fire-sfo-22-proposed.jpg" alt="SFO Fire Station 1, ARFF, proposed, 22:00"><figcaption><b>SFO Fire Station 1, ARFF</b>22:00</figcaption></figure></div>
+</section>
+
+<section id="tank">
+<h2>10. Storage tank / fuel farm</h2>
+<p class="cap"><code>man_made=storage_tank</code>, <code>building=storage_tank</code>. 156 elements, 0.06% of the view. Today GENERIC.</p>
+<p class="cap">Survey proposal: PLAIN with a white/steel palette. PLAIN's palette is one class-wide set of tones, so the tank is a prototype class TANK with steel tones and ring seams.</p>
+<ul class="bld">
+<li>KOAK storage tank inside the boundary (way 1029079160): today GENERIC; 21 m², 3 m.</li>
+<li>KSJC storage tank (way 219121137): today GENERIC; swapped in for the KLAX fuel farm.</li>
+</ul>
+<h3>Today (GENERIC)</h3>
+<p class="cap">GENERIC on both: punched windows wrapped round the tank.</p>
+<div class="two"><figure><img src="tank-oak-12-today.jpg" alt="KOAK storage tank inside the boundary, today, 12:00"><figcaption><b>KOAK storage tank inside the boundary</b>12:00</figcaption></figure><figure><img src="tank-sjc-12-today.jpg" alt="KSJC storage tank, today, 12:00"><figcaption><b>KSJC storage tank</b>12:00</figcaption></figure></div>
+<h3>Proposed: TANK (prototype)</h3>
+<p class="cap">Prototype. A plain white or light steel wall with horizontal ring seams every 2.4 m and no openings; dark at night.</p>
+<div class="two"><figure><img src="tank-oak-12-proposed.jpg" alt="KOAK storage tank inside the boundary, proposed, 12:00"><figcaption><b>KOAK storage tank inside the boundary</b>12:00</figcaption></figure><figure><img src="tank-sjc-12-proposed.jpg" alt="KSJC storage tank, proposed, 12:00"><figcaption><b>KSJC storage tank</b>12:00</figcaption></figure></div>
+</section>
+
+<section id="rules">
+<h2>Small rule additions</h2>
+<p class="cap"><code>building=static_caravan</code> (364, all at one KVNY mobile-home park) to HOUSE; <code>building=carport</code> (3) and <code>parking=carports</code> (11) to the canopy look, not PLAIN; <code>building=staircase</code> (4) to GARAGE. One example each.</p>
+<p class="cap">No new look: each Proposed lane forces an existing class, or the canopy prototype for the carport.</p>
+<ul class="bld">
+<li>KVNY mobile-home park, building=static_caravan (way 429852462): today GENERIC; rule: static_caravan to HOUSE.</li>
+<li>KSJC carport, the long low roof behind the nearest block (way 697249583): today GENERIC; rule: carports to CANOPY.</li>
+<li>KSMF garage stair tower, building=staircase (way 759869617): today GENERIC; rule: staircase to GARAGE.</li>
+</ul>
+<h3>Today (GENERIC)</h3>
+<p class="cap">GENERIC on all three: punched windows on the caravans, the carport and the stair tower.</p>
+<div class="three"><figure><img src="caravan-vny-12-today.jpg" alt="KVNY mobile-home park, building=static_caravan, today, 12:00"><figcaption><b>KVNY mobile-home park, building=static_caravan</b>12:00</figcaption></figure><figure><img src="carport-sjc-12-today.jpg" alt="KSJC carport, the long low roof behind the nearest block, today, 12:00"><figcaption><b>KSJC carport, the long low roof behind the nearest block</b>12:00</figcaption></figure><figure><img src="stair-smf-12-today.jpg" alt="KSMF garage stair tower, building=staircase, today, 12:00"><figcaption><b>KSMF garage stair tower, building=staircase</b>12:00</figcaption></figure></div>
+<h3>Proposed: HOUSE, CANOPY (prototype), GARAGE (forced classes)</h3>
+<p class="cap">HOUSE on the caravans (brick-red or brown walls with punched windows), the CANOPY prototype on the carport (a fascia over a dark void with posts), GARAGE on the stair tower (a pale slab band over a dark open storey).</p>
+<div class="three"><figure><img src="caravan-vny-12-proposed.jpg" alt="KVNY mobile-home park, building=static_caravan, proposed, 12:00"><figcaption><b>KVNY mobile-home park, building=static_caravan</b>12:00</figcaption></figure><figure><img src="carport-sjc-12-proposed.jpg" alt="KSJC carport, the long low roof behind the nearest block, proposed, 12:00"><figcaption><b>KSJC carport, the long low roof behind the nearest block</b>12:00</figcaption></figure><figure><img src="stair-smf-12-proposed.jpg" alt="KSMF garage stair tower, building=staircase, proposed, 12:00"><figcaption><b>KSMF garage stair tower, building=staircase</b>12:00</figcaption></figure></div>
+</section>
+
+<section id="approx">
+<h2>What is approximate</h2>
+<ul>
+<li><b>No rule exists yet.</b> Each lane forces its class on the shot's one element from the page; a real rule would type every building with those tags.</li>
+<li><b>The prototypes are sketches.</b> Door, bay and window sizes, palettes and lit shares are first guesses to show the idea, not tuned values.</li>
+<li><b>The cameras are not the tower view.</b> They sit 30-220 m from each building so the facade can be read; from the tower eye most of these buildings are several hundred metres to 2 km away.</li>
+<li><b>Geometry is the tileset's.</b> Canopies and skybridges are solid boxes standing on the ground, and most untagged buildings are 3 m boxes whatever their real size; a facade can only paint the walls it is given.</li>
+<li><b>Night ground.</b> At 22:00 the buildings darken and their lights show, but the satellite imagery stays bright.</li>
+<li><b>Weather is off</b> (clouds, precipitation and weather effects): live METAR clouds drew across the walls.</li>
+<li><b>Swapped examples.</b> Where a survey example lay at KLAX or KHWD, a building of the same type at KOAK, KSJC or KSFO was shot instead (marked "swapped in" above).</li>
+</ul>
+</section>
+
+<p class="sub">Rebuild: <code>RECIPE.md</code> beside this page. The stills live only in the review copy.</p>
+</main>
+</body>
+</html>

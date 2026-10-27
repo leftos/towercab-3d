@@ -1,0 +1,272 @@
+diff --git a/src/renderer/utils/buildingStyle.ts b/src/renderer/utils/buildingStyle.ts
+index ee73851..963aebb 100644
+--- a/src/renderer/utils/buildingStyle.ts
++++ b/src/renderer/utils/buildingStyle.ts
+@@ -30,6 +30,12 @@ export const FacadeClass = {
+   OFFICE: 4,
+   TERMINAL: 5,
+   PLAIN: 6,
++  CANOPY: 7,
++  RETAIL: 8,
++  WAREHOUSE: 9,
++  FIRE_STATION: 10,
++  HOTEL: 11,
++  TANK: 12,
+ } as const
+ 
+ export type FacadeClassCode = (typeof FacadeClass)[keyof typeof FacadeClass]
+diff --git a/src/renderer/utils/facadeShader.ts b/src/renderer/utils/facadeShader.ts
+index 8927907..3ba5424 100644
+--- a/src/renderer/utils/facadeShader.ts
++++ b/src/renderer/utils/facadeShader.ts
+@@ -205,8 +205,65 @@ export const FACADE_GRAMMARS: Readonly<Record<FacadeClassCode, FacadeGrammar>> =
+     hi: [0, 0],
+     relief: 'flat',
+   },
++  [FacadeClass.CANOPY]: {
++    bayM: 7.0,
++    floorM: 3.0,
++    storeysFromLevels: false,
++    opening: 'gap',
++    lo: [0.05, -0.1],
++    hi: [0.95, 0.75],
++    relief: 'flat',
++  },
++  [FacadeClass.RETAIL]: {
++    bayM: 3.0,
++    floorM: 5.0,
++    storeysFromLevels: false,
++    opening: 'glass',
++    lo: [0.03, 0.08],
++    hi: [0.97, 0.45],
++    relief: 'flat',
++  },
++  [FacadeClass.WAREHOUSE]: {
++    bayM: 4.2,
++    floorM: 12.0,
++    storeysFromLevels: false,
++    opening: 'none',
++    lo: [0, 0],
++    hi: [0, 0],
++    relief: 'panels',
++  },
++  [FacadeClass.FIRE_STATION]: {
++    bayM: 6.0,
++    floorM: 4.0,
++    storeysFromLevels: false,
++    opening: 'none',
++    lo: [0, 0],
++    hi: [0, 0],
++    relief: 'flat',
++  },
++  [FacadeClass.HOTEL]: {
++    bayM: 3.8,
++    floorM: 3.0,
++    storeysFromLevels: true,
++    opening: 'glass',
++    lo: [0.22, 0.3],
++    hi: [0.78, 0.85],
++    relief: 'slabs',
++  },
++  [FacadeClass.TANK]: {
++    bayM: 3.0,
++    floorM: 2.4,
++    storeysFromLevels: false,
++    opening: 'none',
++    lo: [0, 0],
++    hi: [0, 0],
++    relief: 'slabs',
++  },
+ }
+ 
++/** Share of glazed cells lit at night per class; classes not listed use FACADE_LIT_SHARE. */
++const LIT_SHARES: Partial<Record<FacadeClassCode, number>> = { [FacadeClass.HOTEL]: 0.62 }
++
+ /**
+  * Wall colours per class in sRGB, one per hash state, so neighbouring buildings of one class
+  * differ in tone. The tiles' own base colour is white, so these are the walls' colours.
+@@ -254,6 +311,42 @@ export const FACADE_PALETTES: Readonly<Record<FacadeClassCode, readonly Vec3[]>>
+     [0.78, 0.74, 0.68],
+     [0.66, 0.65, 0.63],
+   ],
++  [FacadeClass.CANOPY]: [
++    [0.92, 0.92, 0.9],
++    [0.8, 0.82, 0.84],
++    [0.95, 0.94, 0.9],
++    [0.62, 0.65, 0.68],
++  ],
++  [FacadeClass.RETAIL]: [
++    [0.82, 0.76, 0.66],
++    [0.74, 0.72, 0.68],
++    [0.86, 0.82, 0.74],
++    [0.7, 0.66, 0.6],
++  ],
++  [FacadeClass.WAREHOUSE]: [
++    [0.8, 0.79, 0.76],
++    [0.84, 0.8, 0.72],
++    [0.88, 0.87, 0.84],
++    [0.72, 0.73, 0.74],
++  ],
++  [FacadeClass.FIRE_STATION]: [
++    [0.78, 0.68, 0.54],
++    [0.6, 0.36, 0.28],
++    [0.84, 0.8, 0.72],
++    [0.74, 0.66, 0.56],
++  ],
++  [FacadeClass.HOTEL]: [
++    [0.9, 0.88, 0.84],
++    [0.84, 0.8, 0.72],
++    [0.78, 0.78, 0.78],
++    [0.88, 0.84, 0.78],
++  ],
++  [FacadeClass.TANK]: [
++    [0.93, 0.93, 0.92],
++    [0.86, 0.87, 0.88],
++    [0.95, 0.95, 0.94],
++    [0.8, 0.82, 0.83],
++  ],
+ }
+ 
+ /**
+@@ -389,6 +482,102 @@ const OPENING_RECT_GLSL = glslPerClass('facadeOpeningRect', 'vec4', 'float facad
+ 
+ const COVER_GLSL = glslPerClass('facadeCover', 'float', 'float facadeClass', (code) => glslFloat(grammarCoverage(code)))
+ 
++const LIT_GLSL = glslPerClass('facadeLitShare', 'float', 'float facadeClass', (code) =>
++  glslFloat(LIT_SHARES[code] ?? FACADE_LIT_SHARE),
++)
++
++const GLASS_DARK_GLSL = glslVec3(srgbToLinear(GLASS_DARK_SRGB))
++const GLASS_LIGHT_GLSL = glslVec3(srgbToLinear(GLASS_LIGHT_SRGB))
++
++/**
++ * Prototype looks for the classes past PLAIN, drawn in metres along the wall (`p.x`) and up from
++ * the ground (`p.y`), with `m` the pixel footprint in metres. Each overwrites the near colour.
++ */
++const PROTO_GLSL = /* glsl */ `
++void facadeProto(float cls, float hash, vec2 p, vec2 m, float top, float night, vec3 wall, float ribShade,
++                 vec2 cell, vec2 aa, inout vec3 colour, inout vec3 emissive, inout float roughness) {
++  vec3 glassDark = ${GLASS_DARK_GLSL};
++  vec3 glassLight = ${GLASS_LIGHT_GLSL};
++  if (cls < 7.5) {
++    // CANOPY: a fascia band under the roof line, a dark void below it, posts every 7 m.
++    float fasciaLo = max(top - 0.75, 1.5);
++    float bx = fract(p.x / 7.0) * 7.0;
++    float voidM = facadeBox(vec2(bx, p.y), vec2(0.3, -1.0), vec2(6.7, fasciaLo), m);
++    float depth = clamp(p.y / fasciaLo, 0.0, 1.0);
++    vec3 under = mix(vec3(0.03, 0.03, 0.034), vec3(0.008, 0.008, 0.01), depth);
++    float drip = facadeBox(vec2(0.5, p.y), vec2(-1.0, fasciaLo), vec2(2.0, fasciaLo + 0.1), m);
++    colour = mix(wall * (1.0 - 0.4 * drip), under, voidM);
++    roughness = mix(roughness, 0.95, voidM);
++    emissive = vec3(0.0);
++  } else if (cls < 8.5) {
++    // RETAIL: storefront glazing on the ground floor in runs of bays, a sign band above, blank wall over it.
++    float bw = 3.0;
++    float bi = floor(p.x / bw);
++    float bx = fract(p.x / bw) * bw;
++    float run = step(0.35, facadeHash12(vec2(floor(bi / 5.0), hash + 17.0)));
++    float glassTop = clamp(top * 0.62, 2.1, 6.0);
++    float pane = facadeBox(vec2(bx, p.y), vec2(0.07, 0.3), vec2(bw - 0.07, glassTop), m) * run;
++    float signBand = facadeBox(vec2(bx, p.y), vec2(-1.0, glassTop + 0.12), vec2(bw + 1.0, glassTop + 0.6), m) * run;
++    vec3 glass = mix(glassDark, glassLight, facadeHash12(vec2(bi, 3.0)));
++    colour = mix(wall * (1.0 - 0.3 * signBand), glass, pane);
++    roughness = mix(roughness, ${glslFloat(GLASS_ROUGHNESS)}, pane);
++    float lit = step(0.12, facadeHash12(vec2(bi, 9.0)));
++    emissive = vec3(1.5, 1.45, 1.3) * night * pane * lit + vec3(0.5, 0.45, 0.4) * night * signBand;
++  } else if (cls < 9.5) {
++    // WAREHOUSE: ribbed cladding with panel joints every 8.4 m, no hangar door, runs of dock doors with seals and lamps.
++    float jx = fract(p.x / 8.4) * 8.4;
++    float joint = 1.0 - 0.3 * (1.0 - facadeBox(vec2(jx, 0.5), vec2(0.06, -1.0), vec2(8.34, 2.0), m));
++    vec3 base = wall * ribShade * joint;
++    float dw = 4.2;
++    float dx = fract(p.x / dw) * dw;
++    float row = step(0.45, facadeHash12(vec2(floor(floor(p.x / dw) / 8.0), hash + 5.0)));
++    float doorBot = min(1.1, top * 0.2);
++    float doorTop = min(4.3, top - 0.6);
++    float seal = facadeBox(vec2(dx, p.y), vec2(0.45, doorBot - 0.2), vec2(dw - 0.45, doorTop + 0.25), m) * row;
++    float door = facadeBox(vec2(dx, p.y), vec2(0.65, doorBot), vec2(dw - 0.65, doorTop), m) * row;
++    float slat = 0.85 + 0.15 * step(0.5, fract(p.y * 3.0));
++    colour = mix(mix(base, vec3(0.015), seal), vec3(0.3, 0.32, 0.34) * slat, door);
++    float lamp = facadeBox(vec2(dx, p.y), vec2(dw * 0.5 - 0.2, doorTop + 0.4), vec2(dw * 0.5 + 0.2, doorTop + 0.62), m) * row;
++    emissive = vec3(2.4, 2.0, 1.4) * night * lamp;
++  } else if (cls < 10.5) {
++    // FIRE_STATION: per 30 m of wall, three 6 m apparatus bays (sectional doors, a glazed row, a red trim band) and a crew wing.
++    float zone = fract(p.x / 30.0) * 30.0;
++    float inBay = facadeBox(vec2(zone, 0.5), vec2(-1.0, -1.0), vec2(18.0, 2.0), m);
++    float dx = fract(zone / 6.0) * 6.0;
++    float doorTop = clamp(top - 0.55, 2.4, 4.6);
++    float door = facadeBox(vec2(dx, p.y), vec2(0.55, -1.0), vec2(5.45, doorTop), m) * inBay;
++    float sect = 0.86 + 0.14 * step(0.08, fract(p.y / 0.6));
++    float glz = facadeBox(vec2(dx, p.y), vec2(0.8, doorTop * 0.58), vec2(5.2, doorTop * 0.58 + 0.45), m) * door;
++    float trim = facadeBox(vec2(zone, p.y), vec2(-1.0, doorTop + 0.1), vec2(18.0, doorTop + 0.42), m);
++    float wing = facadeBox(vec2(zone, 0.5), vec2(18.6, -1.0), vec2(29.4, 2.0), m);
++    float cx = fract(p.x / 2.6) * 2.6;
++    float cy = fract(p.y / 3.4) * 3.4;
++    float win = facadeBox(vec2(cx, cy), vec2(0.7, 1.0), vec2(1.9, 2.2), m) * wing;
++    vec2 wid = vec2(floor(p.x / 2.6), floor(p.y / 3.4));
++    vec3 glass = mix(glassDark, glassLight, facadeHash12(wid));
++    colour = mix(wall, vec3(0.42, 0.025, 0.02), trim);
++    colour = mix(colour, vec3(0.78, 0.79, 0.78) * sect, door);
++    colour = mix(colour, glassDark, glz);
++    colour = mix(colour, glass, win);
++    roughness = mix(roughness, ${glslFloat(GLASS_ROUGHNESS)}, max(glz, win));
++    float crewLit = step(0.55, facadeHash12(wid * 1.37));
++    emissive = night * (vec3(1.7, 1.6, 1.4) * glz + vec3(0.22, 0.21, 0.18) * door * (1.0 - glz)
++      + ${glslVec3(LIT_WINDOW_EMISSIVE)} * win * crewLit);
++  } else if (cls < 11.5) {
++    // HOTEL: the punched grid of the grammar, a PTAC grille under each room window, a glazed lobby floor, varied warm room light.
++    vec2 f = fract(cell);
++    vec2 id = floor(cell);
++    float upper = step(0.5, id.y);
++    float ptac = facadeBox(f, vec2(0.36, 0.13), vec2(0.64, 0.25), aa) * upper;
++    emissive *= mix(vec3(1.1, 0.92, 0.75), vec3(0.9, 1.0, 1.1), facadeHash12(id * 2.1)) * upper;
++    colour = mix(colour, wall * 0.55, ptac);
++    float lobby = facadeBox(f, vec2(0.03, 0.06), vec2(0.97, 0.94), aa) * (1.0 - upper);
++    colour = mix(colour, mix(glassDark, glassLight, 0.5), lobby);
++    emissive += vec3(1.6, 1.4, 1.1) * night * lobby;
++  }
++}
++`
++
+ /** Packed heights at or above this are saturated and say nothing about the storey height. */
+ const SATURATED_HEIGHT_M = PACK_CODE_MAX * PACK_HEIGHT_STEP_M
+ 
+@@ -451,6 +640,8 @@ ${OPENING_RECT_GLSL}
+ ${COVER_GLSL}
+ ${RELIEF_GLSL}
+ ${WALL_GLSL}
++${LIT_GLSL}
++${PROTO_GLSL}
+ 
+ void fragmentMain(FragmentInput fsInput, inout czm_modelMaterial material) {
+   vec4 building = vec4(0.0);
+@@ -493,6 +684,9 @@ void fragmentMain(FragmentInput fsInput, inout czm_modelMaterial material) {
+   float fadeDetail = 1.0 - smoothstep(u_fadeStart, u_fadeEnd, max(aa.x, aa.y));
+   float detail = mix(1.0, fadeDetail, u_fade) * step(0.0, ground.w);
+   float ribDetail = 1.0 - smoothstep(0.25, 0.6, ribAa);
++  vec2 metresAa = max(fwidth(vec2(s, h)), vec2(1e-4));
++  // A 3 m untagged box packs as a 4 m bucket, so short walls read as 3 m.
++  float wallTop = building.z < 4.5 ? 3.0 : building.z - 1.0;
+ 
+   if (dot(normalWC, upWC) > 0.6) {
+     return;
+@@ -511,7 +705,7 @@ void fragmentMain(FragmentInput fsInput, inout czm_modelMaterial material) {
+   float wallRoughness = material.roughness;
+   float night = facadeNight(fsInput.attributes.positionWC);
+   vec3 litEmissive = ${glslVec3(LIT_WINDOW_EMISSIVE)} * night;
+-  float litShare = ${glslFloat(FACADE_LIT_SHARE)} * glassy;
++  float litShare = facadeLitShare(building.x) * glassy;
+ 
+   vec3 farWall = wall * mix(1.0, ${glslFloat(RIB_SHADE_MEAN)}, panels);
+   vec3 farColour = mix(farWall, mix(u_glassMean, gap, gappy), cover);
+@@ -539,6 +733,10 @@ void fragmentMain(FragmentInput fsInput, inout czm_modelMaterial material) {
+   vec3 nearColour = mix(wall * shade, mix(glass, gap, gappy), opening);
+   float nearRoughness = mix(wallRoughness, openingRoughness, opening);
+   vec3 nearEmissive = litEmissive * opening * lit;
++  if (building.x > 6.5 && building.x < 11.5) {
++    facadeProto(building.x, building.w, vec2(s, h), metresAa, wallTop, night, wall, ribShade, cell, aa,
++      nearColour, nearEmissive, nearRoughness);
++  }
+ 
+   material.diffuse = mix(farColour, nearColour, detail);
+   material.roughness = mix(farRoughness, nearRoughness, detail);
