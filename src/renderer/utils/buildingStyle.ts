@@ -1,6 +1,6 @@
 /**
- * The style that packs each OSM building's type, storeys, wall height and a stable hash into its
- * feature colour, for the facade shader to read.
+ * The style that packs each OSM building's type, storeys and wall height into its feature colour,
+ * for the facade shader to read.
  *
  * Text tags never reach a custom shader, but a `Cesium3DTileStyle` colour does: the shader reads
  * it back through `selectedFeatureIdStage()`. The tileset's MIX colour blend at amount 0 (see
@@ -8,9 +8,12 @@
  * stays near white (228 to 255) and alpha stays 1, so no feature moves to the translucent pass.
  *
  * Layout, with each channel holding `255 - code` and every code in 0..27:
- * - red: `facadeClass * 4 + hash`, the hash in 0..3 from the building's latitude and longitude
+ * - red: `facadeClass`
  * - green: storeys of the building or part, 0 when unknown
  * - blue: wall height (roof left out) in 2 m buckets, 0 when unknown, 27 for 54 m or more
+ *
+ * The building's colour variant is not packed: its hash (`featureHash`) travels in the tile's
+ * lookup texture (see `buildingBaseLookup.ts`).
  *
  * A tag's cell counts as a number only when it is a finite number, or a string holding one with an
  * optional trailing `m`; every other cell (missing, null, empty, `12;14`, `30 ft`) counts as absent.
@@ -40,7 +43,7 @@ export const PACK_CHANNEL_MIN = 228
 /** Largest code a channel carries: `255 - PACK_CHANNEL_MIN`. */
 export const PACK_CODE_MAX = 255 - PACK_CHANNEL_MIN
 
-/** Number of hash states packed beside the class in the red channel. */
+/** Number of wall colour variants per class, picked by the lookup's per-building hash. */
 export const PACK_HASH_STATES = 4
 
 /** Height bucket size in metres. */
@@ -51,7 +54,6 @@ export interface PackedBuilding {
   facadeClass: number
   levels: number
   heightM: number
-  hash: number
 }
 
 interface ClassRule {
@@ -357,12 +359,6 @@ function roofHeight(feature: Feature, keys: HeightKeys, totalM: number, storeys:
   return (totalM * roofLevels) / (storeys + roofLevels)
 }
 
-function hashOf(feature: Feature): number {
-  const seed = tagNumber(feature, 'cesium#latitude') * 12.9898 + tagNumber(feature, 'cesium#longitude') * 78.233
-  const sine = Math.abs(Math.sin(seed)) * 43758.5453
-  return orZero(Math.floor((sine - Math.floor(sine)) * PACK_HASH_STATES))
-}
-
 function clampCode(value: number): number {
   return Number.isNaN(value) ? 0 : Math.min(Math.max(Math.round(value), 0), PACK_CODE_MAX)
 }
@@ -382,7 +378,7 @@ class BuildingColour extends Cesium.StyleExpression {
     if (feature === undefined) return Cesium.Color.clone(Cesium.Color.WHITE, result)
     const size = storeysAndWall(feature)
     const { storeys, wallM } = size
-    const red = 255 - (classifyWithFallback(feature, size) * PACK_HASH_STATES + hashOf(feature))
+    const red = 255 - classifyWithFallback(feature, size)
     const green = 255 - clampCode(storeys)
     const blue = 255 - clampCode(wallM / PACK_HEIGHT_STEP_M)
     return Cesium.Color.fromBytes(red, green, blue, 255, result)
@@ -393,7 +389,7 @@ class BuildingColour extends Cesium.StyleExpression {
  * The style for the OSM Buildings tileset. It replaces Cesium's default style, whose
  * `cesium#color` tint the facade palette supersedes.
  *
- * @returns A new style packing class, storeys, wall height and hash into each feature's colour
+ * @returns A new style packing class, storeys and wall height into each feature's colour
  */
 export function createBuildingStyle(): Cesium.Cesium3DTileStyle {
   const style = new Cesium.Cesium3DTileStyle()
@@ -418,14 +414,13 @@ export function applyBuildingStyle(tileset: Cesium.Cesium3DTileset): void {
  * Decodes a packed colour, as the facade shader does.
  *
  * @param rgb - The feature colour in 8-bit channels
- * @returns The class, storeys (0 unknown), wall height in metres (0 unknown) and hash
+ * @returns The class, storeys (0 unknown) and wall height in metres (0 unknown)
  */
 export function decodePackedColour(rgb: readonly [number, number, number]): PackedBuilding {
   const [red, green, blue] = rgb.map((channel) => 255 - channel)
   return {
-    facadeClass: Math.floor(red / PACK_HASH_STATES),
+    facadeClass: red,
     levels: green,
     heightM: blue * PACK_HEIGHT_STEP_M,
-    hash: red % PACK_HASH_STATES,
   }
 }

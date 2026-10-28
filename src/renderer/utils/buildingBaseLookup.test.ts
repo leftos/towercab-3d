@@ -6,18 +6,22 @@ import {
   BUILDING_LOOKUP_DEFINE,
   BUILDING_LOOKUP_SAMPLER,
   computeFeatureStats,
-  emptyLookupTexel,
+  emptyLookupTexels,
   type FeatureProperties,
   featureGroundOffset,
+  featureHash,
   featureKey,
   fillTwins,
   getTileFeatureStats,
   glslBuildingLookupRead,
   installBuildingLookupStage,
+  LOOKUP_ROW_GROUND,
+  LOOKUP_ROW_TOP,
   lookupTexels,
   type PrimitiveGeometry,
 } from '@/utils/buildingBaseLookup'
 import { BOX_TRIANGLES, ENU, type FakeContext, fakeContext, fakeModel } from '@/utils/buildingLookupFakes.test-support'
+import { PACK_HASH_STATES } from '@/utils/buildingStyle'
 
 interface Box {
   id: number
@@ -149,24 +153,117 @@ describe('featureGroundOffset', () => {
   })
 })
 
+describe('featureHash', () => {
+  const at = (latitude: unknown, longitude: unknown) =>
+    properties({ 'cesium#latitude': latitude, 'cesium#longitude': longitude })
+
+  it('featureHash is a stable fraction in [0, 1)', () => {
+    expect(featureHash(at(37.61568, -122.38905))).toBe(featureHash(at(37.61568, -122.38905)))
+    for (let i = 0; i < 20; i++) {
+      const hash = featureHash(at(37.6 + i * 1e-3, -122.4 + i * 7e-4))
+      expect(hash).toBeGreaterThanOrEqual(0)
+      expect(hash).toBeLessThan(1)
+    }
+    expect(featureHash(at(undefined, -122.38905))).toBe(0)
+    expect(featureHash(properties({}))).toBe(0)
+  })
+
+  it('floors to the palette state the packed colour carried before the hash moved to the lookup', () => {
+    const state = (latitude: number, longitude: number) =>
+      Math.floor(featureHash(at(latitude, longitude)) * PACK_HASH_STATES)
+
+    expect(state(37.61568, -122.38905)).toBe(3)
+    expect(state(37.72118, -122.22054)).toBe(2)
+    expect(state(51.4775, -0.4614)).toBe(0)
+  })
+})
+
 describe('lookupTexels', () => {
-  it('holds one row: the base vertex and the ground offset of each feature', () => {
+  it('holds row 0 first: the base vertex and the ground offset of each feature', () => {
     const stats = computeFeatureStats([geometry([TERMINAL, TOWER])], 2)
     stats.groundOffset[1] = 6
 
     const texels = lookupTexels(stats)
 
-    expect(texels).toHaveLength(2 * 4)
+    expect(texels).toHaveLength(2 * 8)
     expect(texels[2]).toBeCloseTo(5, 4)
     expect(texels[3]).toBe(0)
     expect(texels[4]).toBeGreaterThanOrEqual(30)
     expect(texels[7]).toBe(6)
   })
+
+  it("holds row 1 after it: each feature's wall top above its ground and its hash, a twin's from its owner", () => {
+    const stats = computeFeatureStats([geometry([TERMINAL, TOWER])], 3)
+    stats.groundOffset.set([2, 6, 2])
+    stats.hash.set([0.25, 0.75, 0.25])
+    fillTwins(stats, ['w1', 'w2', 'w1'])
+
+    const texels = lookupTexels(stats)
+    const row1 = [...texels.subarray(3 * 4)]
+
+    expect(row1).toHaveLength(3 * 4)
+    expect(row1[0]).toBeCloseTo(17 - 5 + 2, 3)
+    expect(row1.slice(1, 4)).toEqual([0.25, 0, 0])
+    expect(row1[4]).toBeCloseTo(30 - 0 + 6, 3)
+    expect(row1.slice(5, 8)).toEqual([0.75, 0, 0])
+    expect(row1[8]).toBeCloseTo(17 - 5 + 2, 3)
+    expect(row1.slice(9, 12)).toEqual([0.25, 0, 0])
+  })
 })
 
-describe('emptyLookupTexel', () => {
-  it('carries the no-lookup sentinel, a negative ground offset', () => {
-    expect([...emptyLookupTexel()]).toEqual([0, 0, 0, -1])
+describe('lookupTexels wall top', () => {
+  /** A gabled house: walls from 0 to 6 m, two sloped roof faces meeting at a 9 m ridge. */
+  function gabledHouse(): PrimitiveGeometry {
+    const positions = [
+      [0, 0, 0],
+      [10, 0, 0],
+      [10, 8, 0],
+      [0, 8, 0],
+      [0, 0, 6],
+      [10, 0, 6],
+      [10, 8, 6],
+      [0, 8, 6],
+      [0, 4, 9],
+      [10, 4, 9],
+    ].flat()
+    return {
+      positions: new Float32Array(positions),
+      featureIds: new Float32Array(10),
+      indices: new Uint16Array([0, 1, 5, 0, 5, 4, 4, 5, 9, 4, 9, 8, 6, 7, 8, 6, 8, 9]),
+      modelMatrix: ENU,
+    }
+  }
+
+  const wallTop = (stats: ReturnType<typeof computeFeatureStats>, f: number) =>
+    lookupTexels(stats)[stats.count * 4 + f * 4]
+
+  it('puts the wall top of a flat box at its roof, above the ground offset', () => {
+    const stats = computeFeatureStats([geometry([{ id: 0, x: [0, 10], y: [0, 20], z: [0, 10] }])], 1)
+    stats.groundOffset[0] = 2
+
+    expect(wallTop(stats, 0)).toBeCloseTo(12, 3)
+  })
+
+  it('puts the wall top of a gabled house at its eaves, not its ridge', () => {
+    const stats = computeFeatureStats([gabledHouse()], 1)
+
+    expect(stats.roof[0]).toBeCloseTo(9, 3)
+    expect(wallTop(stats, 0)).toBeCloseTo(6, 3)
+  })
+
+  it("gives a twin its owner's wall top, and a feature with no vertices and no twin -1", () => {
+    const stats = computeFeatureStats([gabledHouse()], 3)
+    stats.groundOffset.set([1, 1, 4])
+    fillTwins(stats, ['w1', 'w1', 'w2'])
+
+    expect(wallTop(stats, 1)).toBeCloseTo(7, 3)
+    expect(wallTop(stats, 2)).toBe(-1)
+  })
+})
+
+describe('emptyLookupTexels', () => {
+  it('carries the no-lookup sentinels: a negative ground offset, an unknown wall top and hash 0', () => {
+    expect([...emptyLookupTexels()]).toEqual([0, 0, 0, -1, -1, 0, 0, 0])
   })
 })
 
@@ -291,7 +388,7 @@ describe('attachBuildingLookup', () => {
     vi.restoreAllMocks()
   })
 
-  it("builds a loaded tile's one-row lookup at the next render, and releases it when the tile unloads", () => {
+  it("builds a loaded tile's two-row lookup at the next render, and releases it when the tile unloads", () => {
     const { fake, tileset, render, createTexture, textures } = attachFakes()
     const tile = fakeTile(terminalModel(fake), 'a.glb')
 
@@ -299,13 +396,41 @@ describe('attachBuildingLookup', () => {
     expect(getTileFeatureStats(tile.content)).toBeUndefined()
     render()
 
-    expect(createTexture).toHaveBeenCalledWith(fake.context, 1, 1, expect.any(Float32Array))
+    expect(createTexture).toHaveBeenCalledWith(fake.context, 1, 2, expect.any(Float32Array))
+    expect((createTexture.mock.calls[0] as unknown[])[3]).toHaveLength(1 * 2 * 4)
     expect(getTileFeatureStats(tile.content)?.base[0]).toBeCloseTo(5, 3)
 
     tileset.tileUnload.raiseEvent(tile)
 
     expect(textures[0].destroy).toHaveBeenCalledTimes(1)
     expect(getTileFeatureStats(tile.content)).toBeUndefined()
+  })
+
+  it("fills each feature's hash from its position and carries it in row 1 of the texture", () => {
+    const { fake, tileset, render, createTexture } = attachFakes()
+    const feature = properties({ elementId: 'w1', 'cesium#latitude': 37.61568, 'cesium#longitude': -122.38905 })
+    const tile = fakeTile(terminalModel(fake), 'a.glb', () => feature)
+
+    tileset.tileLoad.raiseEvent(tile)
+    render()
+
+    const hash = featureHash(feature)
+    expect(hash).toBeGreaterThan(0)
+    expect(getTileFeatureStats(tile.content)?.hash[0]).toBe(hash)
+    const texels = (createTexture.mock.calls[0] as unknown[])[3] as Float32Array
+    expect(texels[1 * 4 + 1]).toBeCloseTo(hash, 6)
+  })
+
+  it('builds the empty texture of a tile without a lookup through the same factory, 1 wide and 2 high', () => {
+    const { fake, createTexture } = attachFakes()
+    installBuildingLookupStage()
+    const resources = fakeRenderResources()
+    PRIVATE.BatchTexturePipelineStage.process(resources, {}, { context: fake.context })
+
+    resources.uniformMap[BUILDING_LOOKUP_SAMPLER]()
+
+    expect(createTexture).toHaveBeenCalledTimes(1)
+    expect(createTexture).toHaveBeenCalledWith(fake.context, 1, 2, emptyLookupTexels())
   })
 
   it('releases every lookup on detach and stops listening', () => {
@@ -432,9 +557,15 @@ describe('attachBuildingLookup', () => {
 })
 
 describe('glslBuildingLookupRead', () => {
-  it('reads row 0 of the lookup at the clamped id', () => {
-    expect(glslBuildingLookupRead('i')).toBe(
+  it('reads the given row of the lookup at the clamped id', () => {
+    expect(glslBuildingLookupRead('i', '0')).toBe(
       `texelFetch(${BUILDING_LOOKUP_SAMPLER}, ivec2(clamp(i, 0, textureSize(${BUILDING_LOOKUP_SAMPLER}, 0).x - 1), 0), 0)`,
     )
+    expect(glslBuildingLookupRead('id', '1')).toContain(', 1), 0)')
+    expect(glslBuildingLookupRead('id', '0')).toContain(', 0), 0)')
+  })
+
+  it('names row 0 the ground row and row 1 the wall-top row', () => {
+    expect([LOOKUP_ROW_GROUND, LOOKUP_ROW_TOP]).toEqual([0, 1])
   })
 })

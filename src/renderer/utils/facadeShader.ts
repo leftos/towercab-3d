@@ -24,7 +24,12 @@ import {
   FACADE_WINDOW_HI,
   FACADE_WINDOW_LO,
 } from '@/constants'
-import { BUILDING_LOOKUP_DEFINE, glslBuildingLookupRead } from '@/utils/buildingBaseLookup'
+import {
+  BUILDING_LOOKUP_DEFINE,
+  glslBuildingLookupRead,
+  LOOKUP_ROW_GROUND,
+  LOOKUP_ROW_TOP,
+} from '@/utils/buildingBaseLookup'
 import {
   FacadeClass,
   type FacadeClassCode,
@@ -257,15 +262,15 @@ export const FACADE_PALETTES: Readonly<Record<FacadeClassCode, readonly Vec3[]>>
 }
 
 /**
- * The wall colour a building gets: its class palette's entry for its hash.
+ * The wall colour a building gets: its class palette's entry at its palette index.
  *
  * @param facadeClass - The building's facade class
- * @param hash - The building's packed hash, 0 to `PACK_HASH_STATES - 1`
+ * @param paletteIndex - The building's palette index, `featureHash` floored by `PACK_HASH_STATES`
  * @returns The wall colour in sRGB
  */
-export function wallColourSrgb(facadeClass: FacadeClassCode, hash: number): Vec3 {
+export function wallColourSrgb(facadeClass: FacadeClassCode, paletteIndex: number): Vec3 {
   const palette = FACADE_PALETTES[facadeClass]
-  return palette[hash % palette.length]
+  return palette[paletteIndex % palette.length]
 }
 
 const CLASS_CODES = Object.values(FacadeClass)
@@ -356,18 +361,18 @@ function glslPerClass(
   return `${type} ${name}(${params}) {\n  return ${chain};\n}`
 }
 
-/** Selects a class's palette entry by `hash`, mirroring `wallColourSrgb`, in linear light. */
+/** Selects a class's palette entry by `paletteIndex`, mirroring `wallColourSrgb`, in linear light. */
 function glslPaletteEntry(facadeClass: FacadeClassCode): string {
   const palette = FACADE_PALETTES[facadeClass].map(srgbToLinear)
   return palette
     .slice(1)
     .reduceRight(
-      (otherwise, entry, i) => `hash == ${glslFloat(i + 1)} ? ${glslVec3(entry)} : (${otherwise})`,
+      (otherwise, entry, i) => `paletteIndex == ${glslFloat(i + 1)} ? ${glslVec3(entry)} : (${otherwise})`,
       glslVec3(palette[0]),
     )
 }
 
-const WALL_GLSL = glslPerClass('facadeWallLinear', 'vec3', 'float facadeClass, float hash', glslPaletteEntry)
+const WALL_GLSL = glslPerClass('facadeWallLinear', 'vec3', 'float facadeClass, float paletteIndex', glslPaletteEntry)
 
 /** Per relief: (slab lines on, panel seams and ribs on). */
 const RELIEF_VALUES: Record<FacadeRelief, Vec2> = { slabs: [1, 0], panels: [1, 1], flat: [0, 0] }
@@ -438,12 +443,10 @@ float facadeSeam(float x, float footprint) {
     + facadeSeamArea(x1 - floor(x1)) - facadeSeamArea(x0 - base);
   return area / width;
 }
-// The packed style colour (see buildingStyle.ts) as (class, storeys, wall height in metres, hash).
+// The packed style colour (see buildingStyle.ts) as (class, storeys, wall height in metres, 0).
 vec4 facadeDecode(vec3 styleRgb) {
   vec3 code = floor((1.0 - styleRgb) * 255.0 + 0.5);
-  float facadeClass = floor(code.r / ${glslFloat(PACK_HASH_STATES)});
-  float hash = code.r - facadeClass * ${glslFloat(PACK_HASH_STATES)};
-  return vec4(facadeClass, code.g, code.b * ${glslFloat(PACK_HEIGHT_STEP_M)}, hash);
+  return vec4(code.r, code.g, code.b * ${glslFloat(PACK_HEIGHT_STEP_M)}, 0.0);
 }
 // (bay width, default storey height, opening kind: 0 glass 1 gap 2 none, storeys from levels)
 ${CELL_GLSL}
@@ -457,13 +460,17 @@ void fragmentMain(FragmentInput fsInput, inout czm_modelMaterial material) {
   // (the building's lowest vertex in model coordinates, metres from its ground to that vertex);
   // a negative w marks no lookup (unbuilt or skipped tile, or none bound), which draws no rows.
   vec4 ground = vec4(0.0, 0.0, 0.0, -1.0);
+  // (metres from the building's ground to its wall top, -1 unknown; the hash in [0, 1)); the hash
+  // picks the wall colour variant, variant 0 until the tile's lookup is built.
+  vec4 top = vec4(-1.0, 0.0, 0.0, 0.0);
   #ifdef HAS_SELECTED_FEATURE_ID
   SelectedFeature styled;
   selectedFeatureIdStage(styled, fsInput.featureIds);
   building = facadeDecode(styled.color.rgb);
   #endif
   #if defined(HAS_SELECTED_FEATURE_ID) && defined(${BUILDING_LOOKUP_DEFINE})
-  ground = ${glslBuildingLookupRead('styled.id')};
+  ground = ${glslBuildingLookupRead('styled.id', `${LOOKUP_ROW_GROUND}`)};
+  top = ${glslBuildingLookupRead('styled.id', `${LOOKUP_ROW_TOP}`)};
   #endif
   vec4 grammar = facadeCell(building.x);
   float levelsKnown = step(0.5, building.y) * step(0.5, building.z) * step(building.z, ${glslFloat(SATURATED_HEIGHT_M - 1)}) * grammar.w;
@@ -507,7 +514,8 @@ void fragmentMain(FragmentInput fsInput, inout czm_modelMaterial material) {
   vec3 gap = ${glslVec3(srgbToLinear(GAP_SRGB))};
   float openingRoughness = mix(${glslFloat(GLASS_ROUGHNESS)}, ${glslFloat(GAP_ROUGHNESS)}, gappy);
 
-  vec3 wall = material.diffuse * facadeWallLinear(building.x, building.w);
+  float paletteIndex = clamp(floor(top.y * ${glslFloat(PACK_HASH_STATES)}), 0.0, ${glslFloat(PACK_HASH_STATES - 1)});
+  vec3 wall = material.diffuse * facadeWallLinear(building.x, paletteIndex);
   float wallRoughness = material.roughness;
   float night = facadeNight(fsInput.attributes.positionWC);
   vec3 litEmissive = ${glslVec3(LIT_WINDOW_EMISSIVE)} * night;

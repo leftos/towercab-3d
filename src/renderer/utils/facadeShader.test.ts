@@ -1,6 +1,11 @@
 import * as Cesium from 'cesium'
 import { describe, expect, it } from 'vitest'
-import { BUILDING_LOOKUP_DEFINE, BUILDING_LOOKUP_SAMPLER, glslBuildingLookupRead } from '@/utils/buildingBaseLookup'
+import {
+  BUILDING_LOOKUP_DEFINE,
+  BUILDING_LOOKUP_SAMPLER,
+  featureHash,
+  glslBuildingLookupRead,
+} from '@/utils/buildingBaseLookup'
 import {
   createBuildingStyle,
   decodePackedColour,
@@ -112,8 +117,8 @@ function wallFor(tags: Record<string, string | number>): readonly number[] {
   const style = createBuildingStyle()
   const colour = (style.color as Cesium.StyleExpression).evaluateColor(feature, new Cesium.Color())
   const rgb = [colour.red, colour.green, colour.blue].map((c) => Math.round(c * 255)) as [number, number, number]
-  const { facadeClass, hash } = decodePackedColour(rgb)
-  return wallColourSrgb(facadeClass as FacadeClassCode, hash)
+  const { facadeClass } = decodePackedColour(rgb)
+  return wallColourSrgb(facadeClass as FacadeClassCode, Math.floor(featureHash(feature) * PACK_HASH_STATES))
 }
 
 describe('wall palette', () => {
@@ -202,18 +207,35 @@ describe('createFacadeShader', () => {
     const text = createFacadeShader().fragmentShaderText ?? ''
     const body = text.slice(text.indexOf('void fragmentMain('))
     const guard = body.indexOf(`#if defined(HAS_SELECTED_FEATURE_ID) && defined(${BUILDING_LOOKUP_DEFINE})`)
-    const read = body.indexOf(`ground = ${glslBuildingLookupRead('styled.id')};`)
+    const read = body.indexOf(`ground = ${glslBuildingLookupRead('styled.id', '0')};`)
+    const topRead = body.indexOf(`top = ${glslBuildingLookupRead('styled.id', '1')};`)
 
     expect(guard).toBeGreaterThan(-1)
     expect(read).toBeGreaterThan(guard)
+    expect(topRead).toBeGreaterThan(read)
     expect(body.indexOf('texelFetch(')).toBe(read + 'ground = '.length)
-    expect(body.indexOf('#endif', guard)).toBeGreaterThan(read)
+    expect(body.indexOf('#endif', guard)).toBeGreaterThan(topRead)
   })
 
-  it('starts the base at the no-lookup sentinel, so a tile without one never draws rows', () => {
+  it('starts the base and the wall top at the no-lookup sentinels, so a tile without one never draws rows', () => {
     const text = createFacadeShader().fragmentShaderText ?? ''
+    const body = text.slice(text.indexOf('void fragmentMain('))
 
     expect(text).toContain('vec4 ground = vec4(0.0, 0.0, 0.0, -1.0);')
+    expect(body.indexOf('vec4 top = vec4(-1.0, 0.0, 0.0, 0.0);')).toBeGreaterThan(-1)
+    expect(body.indexOf('vec4 top = vec4(-1.0, 0.0, 0.0, 0.0);')).toBeLessThan(body.indexOf('#if defined('))
+  })
+
+  it("picks the wall palette entry from the lookup's hash, not from the packed colour", () => {
+    const text = createFacadeShader().fragmentShaderText ?? ''
+    const decode = text.slice(text.indexOf('vec4 facadeDecode('), text.indexOf('}', text.indexOf('vec4 facadeDecode(')))
+
+    expect(text).toContain(
+      `float paletteIndex = clamp(floor(top.y * ${PACK_HASH_STATES}.0), 0.0, ${PACK_HASH_STATES - 1}.0);`,
+    )
+    expect(text).toContain('facadeWallLinear(building.x, paletteIndex)')
+    expect(decode).not.toContain(`${PACK_HASH_STATES}.0`)
+    expect(decode).toContain('return vec4(code.r, code.g,')
   })
 
   it('clamps the feature id into the lookup on both sides', () => {

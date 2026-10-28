@@ -1,6 +1,6 @@
 import * as Cesium from 'cesium'
 import { afterEach, describe, expect, it } from 'vitest'
-import { attachBuildingLookup } from '@/utils/buildingBaseLookup'
+import { attachBuildingLookup, featureHash } from '@/utils/buildingBaseLookup'
 import { BOX_TRIANGLES, type FakeContext, fakeContext, fakeModel } from '@/utils/buildingLookupFakes.test-support'
 import {
   applyBuildingStyle,
@@ -528,17 +528,30 @@ describe('createBuildingStyle bounds', () => {
 })
 
 describe('createBuildingStyle packing headroom', () => {
-  it('fits every class and the largest hash in the red channel', () => {
-    for (const code of Object.values(FacadeClass)) {
-      expect(code * PACK_HASH_STATES + (PACK_HASH_STATES - 1)).toBeLessThanOrEqual(PACK_CODE_MAX)
+  it('has a red code for each of 13 classes', () => {
+    expect(PACK_CODE_MAX + 1).toBeGreaterThanOrEqual(13)
+  })
+
+  it('round-trips every class code through the packed colour', () => {
+    for (let code = 0; code < 13; code++) {
+      expect(decodePackedColour([255 - code, 255 - 5, 255 - 10])).toEqual({
+        facadeClass: code,
+        levels: 5,
+        heightM: 10 * PACK_HEIGHT_STEP_M,
+      })
     }
   })
 })
 
-describe('createBuildingStyle hash', () => {
+/** The palette index a building with these tags gets from its lookup hash. */
+function hashState(tags: Tags): number {
+  return Math.floor(featureHash(stubFeature(tags)) * PACK_HASH_STATES)
+}
+
+describe('featureHash palette states', () => {
   it('gives the same hash for the same position, whatever the other tags', () => {
-    const a = packed({ ...AT_KSFO, building: 'office' }).hash
-    const b = packed({ ...AT_KSFO, building: 'office', 'building:levels': '3' }).hash
+    const a = hashState({ ...AT_KSFO, building: 'office' })
+    const b = hashState({ ...AT_KSFO, building: 'office', 'building:levels': '3' })
     expect(a).toBe(b)
   })
 
@@ -551,13 +564,13 @@ describe('createBuildingStyle hash', () => {
       { 'part#building:levels': '6', 'part#building:min_level': '3', 'part#height': '24', 'part#min_height': '12' },
       { 'part#building:part': 'roof', 'part#height': '41' },
     ]
-    const hashes = parts.map((part) => packed({ ...AT_KSFO, type: 'building', ...part }).hash)
+    const hashes = parts.map((part) => hashState({ ...AT_KSFO, type: 'building', ...part }))
     expect(new Set(hashes).size).toBe(1)
   })
 
   it('is zero without a position', () => {
-    expect(packed({ building: 'office' }).hash).toBe(0)
-    expect(packed({ building: 'office', 'cesium#latitude': null, 'cesium#longitude': '' }).hash).toBe(0)
+    expect(hashState({ building: 'office' })).toBe(0)
+    expect(hashState({ building: 'office', 'cesium#latitude': null, 'cesium#longitude': '' })).toBe(0)
   })
 
   it('spreads neighbouring buildings over every hash state', () => {
@@ -565,7 +578,7 @@ describe('createBuildingStyle hash', () => {
     for (let i = 0; i < 10; i++) {
       for (let j = 0; j < 10; j++) {
         const tags = { 'cesium#latitude': 37.615 + i * 1e-4, 'cesium#longitude': -122.389 + j * 1e-4 }
-        counts[packed(tags).hash]++
+        counts[hashState(tags)]++
       }
     }
     for (const count of counts) {
@@ -591,16 +604,14 @@ describe('decodePackedColour', () => {
       facadeClass: FacadeClass.GENERIC,
       levels: 0,
       heightM: 0,
-      hash: 0,
     })
   })
 
   it('reads the darkest packed colour as the largest codes', () => {
     expect(decodePackedColour([PACK_CHANNEL_MIN, PACK_CHANNEL_MIN, PACK_CHANNEL_MIN])).toEqual({
-      facadeClass: FacadeClass.PLAIN,
+      facadeClass: PACK_CODE_MAX,
       levels: PACK_CODE_MAX,
       heightM: PACK_CODE_MAX * PACK_HEIGHT_STEP_M,
-      hash: PACK_HASH_STATES - 1,
     })
   })
 })

@@ -9,11 +9,15 @@
  * shader; a custom shader has no per-tile uniform, so the texture is bound by a patch on Cesium's
  * private `BatchTexturePipelineStage.process` (`Source/Scene/Model/BatchTexturePipelineStage.js`).
  *
- * The lookup texture is one row of `featuresLength` RGBA float texels: each feature's lowest
- * vertex in the tile's model coordinates and the metres from the building's ground to that vertex
- * (a raised part's `min_height`). A tile without a lookup (not built yet, or skipped) binds a
- * single texel whose ground offset is -1, the sentinel on which the shader draws no floor lines.
- * The base and roof heights and the footprint area stay on the CPU (`getTileFeatureStats`).
+ * The lookup texture is two rows of `featuresLength` RGBA float texels. Row 0 holds each
+ * feature's lowest vertex in the tile's model coordinates and the metres from the building's
+ * ground to that vertex (a raised part's `min_height`). Row 1 holds the metres from the building's
+ * ground to the lowest vertex of the feature's upward faces (its wall top: the eave of a sloped
+ * roof, the roof of a flat one; -1 when unknown) and the feature's hash (`featureHash`),
+ * which picks its wall colour variant; its last two floats are 0. A tile without a lookup (not
+ * built yet, or skipped) binds a single column whose ground offset is -1, the sentinel on which
+ * the shader draws no floor lines, whose wall top is -1 (unknown) and whose hash is 0. The base
+ * and roof heights and the footprint area stay on the CPU (`getTileFeatureStats`).
  */
 import * as Cesium from 'cesium'
 import { BUILDING_LOOKUP_BUILD_BUDGET_MS } from '@/constants'
@@ -25,23 +29,33 @@ export const BUILDING_LOOKUP_SAMPLER = 'tc3d_buildingLookup'
 /** The define the patched stage adds to the fragment shader where it binds the lookup (WebGL2 only). */
 export const BUILDING_LOOKUP_DEFINE = 'TC3D_BUILDING_LOOKUP'
 
-/** The lookup texture's only row. */
-const LOOKUP_ROW = 0
+/** The lookup row holding each feature's lowest vertex and ground offset. */
+export const LOOKUP_ROW_GROUND = 0
+
+/** The lookup row holding each feature's wall top and hash. */
+export const LOOKUP_ROW_TOP = 1
+
+/** Rows of the lookup texture. */
+const LOOKUP_ROWS = 2
 
 /**
- * GLSL reading one feature's lookup texel, the id clamped into the texture on both sides.
+ * GLSL reading one feature's lookup texel in a row, the id clamped into the texture on both sides.
  *
  * @param id - A GLSL `int` expression holding the feature id
+ * @param row - The row, a GLSL `int` literal (`LOOKUP_ROW_GROUND` or `LOOKUP_ROW_TOP`)
  * @returns The `vec4` expression
  */
-export function glslBuildingLookupRead(id: string): string {
+export function glslBuildingLookupRead(id: string, row: string): string {
   const size = `textureSize(${BUILDING_LOOKUP_SAMPLER}, 0).x`
-  return `texelFetch(${BUILDING_LOOKUP_SAMPLER}, ivec2(clamp(${id}, 0, ${size} - 1), ${LOOKUP_ROW}), 0)`
+  return `texelFetch(${BUILDING_LOOKUP_SAMPLER}, ivec2(clamp(${id}, 0, ${size} - 1), ${row}), 0)`
 }
 
-/** The texel bound where a tile has no lookup: ground offset -1, the shader's sentinel. */
-export function emptyLookupTexel(): Float32Array {
-  return Float32Array.of(0, 0, 0, -1)
+/**
+ * The texels bound where a tile has no lookup, one per row: ground offset -1, the shader's
+ * sentinel for no floor lines, then wall top -1 (unknown) and hash 0 (colour variant 0).
+ */
+export function emptyLookupTexels(): Float32Array {
+  return Float32Array.of(0, 0, 0, -1, -1, 0, 0, 0)
 }
 
 /** One triangle-list primitive of a tile, read back from the GPU. */
@@ -65,12 +79,20 @@ export interface TileFeatureStats {
   readonly base: Float64Array
   /** The highest vertex's height along the feature's up, in model coordinates (metres). */
   readonly roof: Float64Array
+  /**
+   * The lowest vertex of the feature's upward faces, along its up in model coordinates (metres):
+   * the eave of a sloped roof, the roof of a flat one, `roof` when no face points up; NaN for a
+   * feature without vertices until `fillTwins` gives it its twin's.
+   */
+  readonly eave: Float64Array
   /** Footprint area in m²: the upward faces projected on the horizontal. */
   readonly area: Float64Array
   /** Metres from the building's ground to the feature's base: a raised part's `min_height`. */
   readonly groundOffset: Float64Array
   /** 1 where the feature owns vertices in the tile; a vertex-less twin keeps 0. */
   readonly hasGeometry: Uint8Array
+  /** The feature's `featureHash`, in [0, 1). */
+  readonly hash: Float64Array
 }
 
 /** The property reader a tile feature offers. */
@@ -84,9 +106,11 @@ function emptyStats(count: number): TileFeatureStats {
     baseMC: new Float64Array(count * 3),
     base: new Float64Array(count),
     roof: new Float64Array(count),
+    eave: new Float64Array(count).fill(Number.NaN),
     area: new Float64Array(count),
     groundOffset: new Float64Array(count),
     hasGeometry: new Uint8Array(count),
+    hash: new Float64Array(count),
   }
 }
 
@@ -113,6 +137,7 @@ function scanVertices(primitive: PrimitiveGeometry, stats: TileFeatureStats, up:
       up.set([u.x, u.y, u.z], f * 3)
       stats.base[f] = Number.POSITIVE_INFINITY
       stats.roof[f] = Number.NEGATIVE_INFINITY
+      stats.eave[f] = Number.POSITIVE_INFINITY
       stats.hasGeometry[f] = 1
     }
     const h = point.x * up[f * 3] + point.y * up[f * 3 + 1] + point.z * up[f * 3 + 2]
@@ -148,19 +173,49 @@ function projectedDoubleArea(
   return nx * up[f * 3] + ny * up[f * 3 + 1] + nz * up[f * 3 + 2]
 }
 
+/** Twice the triangle's area. */
+function doubleArea(positions: Float32Array, a: number, b: number, c: number): number {
+  const e1 = [0, 1, 2].map((i) => positions[b * 3 + i] - positions[a * 3 + i])
+  const e2 = [0, 1, 2].map((i) => positions[c * 3 + i] - positions[a * 3 + i])
+  return Math.hypot(e1[1] * e2[2] - e1[2] * e2[1], e1[2] * e2[0] - e1[0] * e2[2], e1[0] * e2[1] - e1[1] * e2[0])
+}
+
+/**
+ * A face counts as a roof for the eave when its normal is within this cosine of up, the facade
+ * shader's roof test; walls tilted a little toward up by the Earth's curvature across a tile stay walls.
+ */
+const ROOF_MIN_UP = 0.6
+
+function lowerEave(
+  stats: TileFeatureStats,
+  positions: Float32Array,
+  vertices: readonly number[],
+  up: Float64Array,
+  f: number,
+) {
+  for (const v of vertices) {
+    const h = positions[v * 3] * up[f * 3] + positions[v * 3 + 1] * up[f * 3 + 1] + positions[v * 3 + 2] * up[f * 3 + 2]
+    stats.eave[f] = Math.min(stats.eave[f], h)
+  }
+}
+
 function sumFootprints(primitive: PrimitiveGeometry, stats: TileFeatureStats, up: Float64Array): void {
   const { positions, featureIds, indices } = primitive
   for (let t = 0; t + 2 < indices.length; t += 3) {
     const a = indices[t]
     const f = featureIds[a]
     if (!(f >= 0 && f < stats.count)) continue
-    const doubled = projectedDoubleArea(positions, a, indices[t + 1], indices[t + 2], up, f)
-    if (doubled > 0) stats.area[f] += doubled / 2
+    const b = indices[t + 1]
+    const c = indices[t + 2]
+    const doubled = projectedDoubleArea(positions, a, b, c, up, f)
+    if (doubled <= 0) continue
+    stats.area[f] += doubled / 2
+    if (doubled > ROOF_MIN_UP * doubleArea(positions, a, b, c)) lowerEave(stats, positions, [a, b, c], up, f)
   }
 }
 
 /**
- * Base, roof and footprint area of every feature in a tile's primitives.
+ * Base, roof, eave and footprint area of every feature in a tile's primitives.
  *
  * A feature's up is the geocentric up at its first vertex, as the shader's is at each fragment.
  * The footprint is the sum of its upward faces projected on the horizontal, which covers the
@@ -175,6 +230,9 @@ export function computeFeatureStats(primitives: readonly PrimitiveGeometry[], co
   const up = new Float64Array(count * 3)
   for (const primitive of primitives) scanVertices(primitive, stats, up)
   for (const primitive of primitives) sumFootprints(primitive, stats, up)
+  for (let f = 0; f < count; f++) {
+    if (stats.eave[f] === Number.POSITIVE_INFINITY) stats.eave[f] = stats.roof[f]
+  }
   return stats
 }
 
@@ -196,6 +254,21 @@ export function featureGroundOffset(feature: FeatureProperties): number {
 }
 
 /**
+ * A stable hash of a feature's position, which picks its wall colour variant. Every part of one
+ * building carries the building's own `cesium#latitude` and `cesium#longitude`, so they share it.
+ *
+ * @param feature - The tile feature
+ * @returns A fraction in [0, 1); 0 when the latitude or longitude is absent
+ */
+export function featureHash(feature: FeatureProperties): number {
+  const latitude = tagValueNumber(feature.getProperty('cesium#latitude'))
+  const longitude = tagValueNumber(feature.getProperty('cesium#longitude'))
+  const sine = Math.abs(Math.sin(latitude * 12.9898 + longitude * 78.233)) * 43758.5453
+  const fraction = sine - Math.floor(sine)
+  return Number.isNaN(fraction) ? 0 : fraction
+}
+
+/**
  * Gives each vertex-less feature its twin's base, roof and footprint. Every element appears twice
  * in a tile, with identical properties, and one of the two owns no vertices.
  *
@@ -212,16 +285,28 @@ export function fillTwins(stats: TileFeatureStats, keys: readonly string[]): voi
     if (twin === undefined) continue
     stats.base[f] = stats.base[twin]
     stats.roof[f] = stats.roof[twin]
+    stats.eave[f] = stats.eave[twin]
     stats.area[f] = stats.area[twin]
     stats.baseMC.set(stats.baseMC.subarray(twin * 3, twin * 3 + 3), f * 3)
   }
 }
 
-/** The lookup texture's texels, one row of `count` RGBA floats (see the module comment). */
+/**
+ * The lookup texture's texels, two rows of `count` RGBA floats (see the module comment). The wall
+ * top is the eave above the building's ground, `eave - base + groundOffset`, and -1 (unknown) for
+ * a feature without vertices or a twin.
+ */
 export function lookupTexels(stats: TileFeatureStats): Float32Array {
-  const texels = new Float32Array(stats.count * 4)
-  for (let f = 0; f < stats.count; f++) {
-    texels.set([stats.baseMC[f * 3], stats.baseMC[f * 3 + 1], stats.baseMC[f * 3 + 2], stats.groundOffset[f]], f * 4)
+  const { count } = stats
+  const texels = new Float32Array(count * 4 * LOOKUP_ROWS)
+  const ground = LOOKUP_ROW_GROUND * count * 4
+  const top = LOOKUP_ROW_TOP * count * 4
+  for (let f = 0; f < count; f++) {
+    const offset = stats.groundOffset[f]
+    texels.set([stats.baseMC[f * 3], stats.baseMC[f * 3 + 1], stats.baseMC[f * 3 + 2], offset], ground + f * 4)
+    const eave = stats.eave[f]
+    const wallTop = Number.isNaN(eave) ? -1 : eave - stats.base[f] + offset
+    texels.set([wallTop, stats.hash[f], 0, 0], top + f * 4)
   }
   return texels
 }
@@ -316,6 +401,12 @@ const PRIVATE = Cesium as unknown as CesiumPrivate
 /** Each built lookup, by model: other code reads the stats through `getTileFeatureStats`. */
 const lookups = new WeakMap<object, { stats: TileFeatureStats; texture: LookupTexture }>()
 const emptyTextures = new WeakMap<LookupContext, LookupTexture>()
+/**
+ * The texture factory `attachBuildingLookup` was given, by context, so the empty texture is made
+ * the same way as each tile's. A model of a tileset without an attached lookup (any other tileset
+ * with feature ids) binds an empty texture made by `createLookupTexture`.
+ */
+const factories = new WeakMap<LookupContext, LookupTextureFactory>()
 
 /**
  * Restyles one tile through `Cesium3DTileContent.applyStyle`, which Cesium marks `@private`
@@ -366,10 +457,10 @@ export const createLookupTexture: LookupTextureFactory = (context, width, height
   })
 }
 
-function emptyTexture(context: LookupContext): LookupTexture {
+function emptyTexture(context: LookupContext, createTexture: LookupTextureFactory): LookupTexture {
   let texture = emptyTextures.get(context)
   if (texture === undefined) {
-    texture = createLookupTexture(context, 1, 1, emptyLookupTexel())
+    texture = createTexture(context, 1, LOOKUP_ROWS, emptyLookupTexels())
     emptyTextures.set(context, texture)
   }
   return texture
@@ -409,7 +500,8 @@ export function installBuildingLookupStage(): void {
     shaderBuilder.addUniform('highp sampler2D', BUILDING_LOOKUP_SAMPLER, fragment)
     renderResources.uniformMap = {
       ...renderResources.uniformMap,
-      [BUILDING_LOOKUP_SAMPLER]: () => lookups.get(model)?.texture ?? emptyTexture(context),
+      [BUILDING_LOOKUP_SAMPLER]: () =>
+        lookups.get(model)?.texture ?? emptyTexture(context, factories.get(context) ?? createLookupTexture),
     }
   }
   wrapper[WRAPPED] = original
@@ -511,6 +603,7 @@ export function tileFeatureStats(
     const feature = content.getFeature(f)
     keys[f] = featureKey(feature)
     stats.groundOffset[f] = featureGroundOffset(feature)
+    stats.hash[f] = featureHash(feature)
   }
   fillTwins(stats, keys)
   return stats
@@ -556,7 +649,7 @@ function buildLookup(tile: Cesium.Cesium3DTile, attachment: Attachment): BuildOu
   if (primitives === undefined) return 'waiting'
   if (primitives.length === 0) return 'skipped'
   const stats = tileFeatureStats(tile.content, primitives)
-  const texture = attachment.createTexture(attachment.context, count, 1, lookupTexels(stats))
+  const texture = attachment.createTexture(attachment.context, count, LOOKUP_ROWS, lookupTexels(stats))
   lookups.set(model, { stats, texture })
   attachment.built.add(model)
   return 'built'
@@ -612,6 +705,7 @@ export function attachBuildingLookup(
     createTexture,
     unreadableLogged: false,
   }
+  factories.set(context, createTexture)
   const pending = new Set<Cesium.Cesium3DTile>()
   // Restyles only the tiles a pass built, while `restyleWhen` holds, so the style's shape fallback
   // sees their new stats without re-evaluating every visible feature.
@@ -641,5 +735,6 @@ export function attachBuildingLookup(
     for (const remove of removers) remove()
     for (const model of [...attachment.built]) release(model, attachment)
     pending.clear()
+    if (factories.get(context) === createTexture) factories.delete(context)
   }
 }
