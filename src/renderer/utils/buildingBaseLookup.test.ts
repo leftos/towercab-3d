@@ -19,6 +19,7 @@ import {
   LOOKUP_ROW_TOP,
   lookupTexels,
   type PrimitiveGeometry,
+  readTileGeometry,
 } from '@/utils/buildingBaseLookup'
 import { BOX_TRIANGLES, ENU, type FakeContext, fakeContext, fakeModel } from '@/utils/buildingLookupFakes.test-support'
 import { PACK_HASH_STATES } from '@/utils/buildingStyle'
@@ -95,6 +96,18 @@ describe('computeFeatureStats', () => {
     expect(Math.abs(stats.base[0])).toBeLessThan(0.01)
     expect(Math.abs(stats.roof[0] - 30)).toBeLessThan(0.01)
     expect(stats.area[0]).toBeCloseTo(200, 0)
+  })
+
+  it('keeps the footprint and eave finite when one vertex is not a number', () => {
+    const box = geometry([TERMINAL])
+    const positions = box.positions.slice()
+    // Vertex 1, a bottom corner: the feature's up comes from vertex 0, and the roof triangles skip it.
+    positions[1 * 3 + 2] = Number.NaN
+
+    const stats = computeFeatureStats([{ ...box, positions }], 1)
+
+    expect(stats.area[0]).toBeCloseTo(200, 2)
+    expect(stats.eave[0]).toBeCloseTo(17, 3)
   })
 
   it('keeps two features in one buffer apart', () => {
@@ -346,6 +359,51 @@ function terminalModel(fake: FakeContext, nodes: 'dense' | 'sparse' = 'dense') {
   const { positions, featureIds, indices } = geometry([TERMINAL])
   return fakeModel(fake, { positions, featureIds: featureIds as Float32Array, indices: indices as Uint16Array }, nodes)
 }
+
+/** The terminal box's buffers, typed as a fake model uploads them. */
+function terminalBuffers() {
+  const { positions, featureIds, indices } = geometry([TERMINAL])
+  return { positions, featureIds: featureIds as Float32Array, indices: indices as Uint16Array }
+}
+
+describe('readTileGeometry', () => {
+  it('reads every vertex a decoded attribute buffer holds, past its glTF accessor count', () => {
+    const fake = fakeContext()
+    const { positions, featureIds, indices } = terminalBuffers()
+    const model = fakeModel(fake, { positions, featureIds, indices })
+    // A Draco-decoded attribute keeps its accessor's count while its buffer holds every decoded vertex.
+    for (const attribute of model._sceneGraph._runtimeNodes[0]!.runtimePrimitives[0].primitive.attributes) {
+      attribute.count = 6
+    }
+    const read = readTileGeometry(model, fake.context._gl as unknown as WebGL2RenderingContext)
+    expect(read?.primitives[0].positions).toHaveLength(8 * 3)
+    expect(computeFeatureStats(read?.primitives ?? [], 1).area[0]).toBeCloseTo(10 * 20)
+  })
+
+  it('reads attributes sharing one buffer, each at its own offset', () => {
+    const fake = fakeContext()
+    const { positions, featureIds, indices } = terminalBuffers()
+    const model = fakeModel(fake, { positions, featureIds, indices })
+    const shared = fake.upload(Float32Array.of(...positions, ...featureIds))
+    const [position, featureId] = model._sceneGraph._runtimeNodes[0]!.runtimePrimitives[0].primitive.attributes
+    Object.assign(position, { buffer: shared, byteOffset: 0, count: 8 })
+    Object.assign(featureId, { buffer: shared, byteOffset: 96, count: 8 })
+    const read = readTileGeometry(model, fake.context._gl as unknown as WebGL2RenderingContext)
+    expect(read?.unreadable).toEqual([])
+    expect(read?.primitives[0].positions).toEqual(positions)
+    expect(read?.primitives[0].featureIds).toEqual(featureIds)
+    expect(computeFeatureStats(read?.primitives ?? [], 1).area[0]).toBeCloseTo(10 * 20)
+  })
+
+  it('refuses a primitive whose attribute reaches past its buffer', () => {
+    const fake = fakeContext()
+    const model = fakeModel(fake, terminalBuffers())
+    const featureId = model._sceneGraph._runtimeNodes[0]!.runtimePrimitives[0].primitive.attributes[1]
+    Object.assign(featureId, { byteOffset: 4 })
+    const read = readTileGeometry(model, fake.context._gl as unknown as WebGL2RenderingContext)
+    expect(read).toEqual({ primitives: [], unreadable: ['attribute past its buffer (needs 36 bytes, has 32)'] })
+  })
+})
 
 function fakeTile(model: object, url: string, getFeature = () => properties({ elementId: url })) {
   const content = { _model: model, featuresLength: 1, url, getFeature, applyStyle: vi.fn() }

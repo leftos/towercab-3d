@@ -175,9 +175,16 @@ function projectedDoubleArea(
 
 /** Twice the triangle's area. */
 function doubleArea(positions: Float32Array, a: number, b: number, c: number): number {
-  const e1 = [0, 1, 2].map((i) => positions[b * 3 + i] - positions[a * 3 + i])
-  const e2 = [0, 1, 2].map((i) => positions[c * 3 + i] - positions[a * 3 + i])
-  return Math.hypot(e1[1] * e2[2] - e1[2] * e2[1], e1[2] * e2[0] - e1[0] * e2[2], e1[0] * e2[1] - e1[1] * e2[0])
+  const ax = positions[a * 3]
+  const ay = positions[a * 3 + 1]
+  const az = positions[a * 3 + 2]
+  const e1x = positions[b * 3] - ax
+  const e1y = positions[b * 3 + 1] - ay
+  const e1z = positions[b * 3 + 2] - az
+  const e2x = positions[c * 3] - ax
+  const e2y = positions[c * 3 + 1] - ay
+  const e2z = positions[c * 3 + 2] - az
+  return Math.hypot(e1y * e2z - e1z * e2y, e1z * e2x - e1x * e2z, e1x * e2y - e1y * e2x)
 }
 
 /**
@@ -186,17 +193,10 @@ function doubleArea(positions: Float32Array, a: number, b: number, c: number): n
  */
 const ROOF_MIN_UP = 0.6
 
-function lowerEave(
-  stats: TileFeatureStats,
-  positions: Float32Array,
-  vertices: readonly number[],
-  up: Float64Array,
-  f: number,
-) {
-  for (const v of vertices) {
-    const h = positions[v * 3] * up[f * 3] + positions[v * 3 + 1] * up[f * 3 + 1] + positions[v * 3 + 2] * up[f * 3 + 2]
-    stats.eave[f] = Math.min(stats.eave[f], h)
-  }
+/** Lowers feature `f`'s eave to vertex `v`'s height along its up. */
+function lowerEave(stats: TileFeatureStats, positions: Float32Array, v: number, up: Float64Array, f: number): void {
+  const h = positions[v * 3] * up[f * 3] + positions[v * 3 + 1] * up[f * 3 + 1] + positions[v * 3 + 2] * up[f * 3 + 2]
+  stats.eave[f] = Math.min(stats.eave[f], h)
 }
 
 function sumFootprints(primitive: PrimitiveGeometry, stats: TileFeatureStats, up: Float64Array): void {
@@ -208,9 +208,12 @@ function sumFootprints(primitive: PrimitiveGeometry, stats: TileFeatureStats, up
     const b = indices[t + 1]
     const c = indices[t + 2]
     const doubled = projectedDoubleArea(positions, a, b, c, up, f)
-    if (doubled <= 0) continue
+    if (!(doubled > 0)) continue
     stats.area[f] += doubled / 2
-    if (doubled > ROOF_MIN_UP * doubleArea(positions, a, b, c)) lowerEave(stats, positions, [a, b, c], up, f)
+    if (doubled <= ROOF_MIN_UP * doubleArea(positions, a, b, c)) continue
+    lowerEave(stats, positions, a, up, f)
+    lowerEave(stats, positions, b, up, f)
+    lowerEave(stats, positions, c, up, f)
   }
 }
 
@@ -269,7 +272,7 @@ export function featureHash(feature: FeatureProperties): number {
 }
 
 /**
- * Gives each vertex-less feature its twin's base, roof and footprint. Every element appears twice
+ * Gives each vertex-less feature its twin's base, roof, eave and footprint. Every element appears twice
  * in a tile, with identical properties, and one of the two owns no vertices.
  *
  * @param stats - The tile's stats, filled in place
@@ -429,7 +432,7 @@ function modelOf(content: Cesium.Cesium3DTileContent | undefined): (PrivateModel
 }
 
 /**
- * The per-feature base, roof and footprint area of a loaded tile, once its lookup is built.
+ * The per-feature base, roof, eave and footprint area of a loaded tile, once its lookup is built.
  *
  * @param content - A tile's content
  * @returns The stats, or undefined before the tile's lookup is built or for a tile without one
@@ -551,18 +554,52 @@ function readPrimitive(
   if (indices?.buffer === undefined) return 'no index buffer'
   const problem = attributeProblem(position, 'POSITION', 3) ?? attributeProblem(featureId, '_FEATURE_ID_0', 1)
   if (problem !== undefined) return problem
+  return readVertices(gl, position as PrivateAttribute, featureId as PrivateAttribute, indices, modelMatrix)
+}
+
+/**
+ * Reads the indices, then every vertex they or the attributes' counts reach. A Draco-decoded
+ * attribute keeps its glTF accessor's count while its buffer holds every decoded vertex, so the
+ * largest index can pass `count`; the buffer's size is not the count either, since attributes can
+ * share one buffer at different offsets.
+ */
+function readVertices(
+  gl: WebGL2RenderingContext,
+  position: PrivateAttribute,
+  featureId: PrivateAttribute,
+  indexBuffer: NonNullable<PrivatePrimitive['indices']>,
+  modelMatrix: Cesium.Matrix4,
+): PrimitiveGeometry | string {
+  const indices = readIndices(gl, indexBuffer)
+  let largest = -1
+  for (let i = 0; i < indices.length; i++) largest = Math.max(largest, indices[i])
+  const vertices = Math.max(position.count, featureId.count, largest + 1)
+  const overrun = bufferOverrun(position, 3, vertices) ?? bufferOverrun(featureId, 1, vertices)
+  if (overrun !== undefined) return overrun
   return {
-    positions: readFloats(gl, position as PrivateAttribute, 3),
-    featureIds: readFloats(gl, featureId as PrivateAttribute, 1),
-    indices: readIndices(gl, indices),
+    positions: readFloats(gl, position, 3, vertices),
+    featureIds: readFloats(gl, featureId, 1, vertices),
+    indices,
     modelMatrix,
   }
 }
 
-/** An attribute `attributeProblem` passed, read back as `components` floats per vertex. */
-function readFloats(gl: WebGL2RenderingContext, attribute: PrivateAttribute, components: number): Float32Array {
+/** Why `vertices` vertices of an attribute do not fit in its buffer, or undefined when they do. */
+function bufferOverrun(attribute: PrivateAttribute, components: number, vertices: number): string | undefined {
+  const needed = (attribute.byteOffset ?? 0) + vertices * components * 4
+  const has = (attribute.buffer as PrivateBuffer).sizeInBytes
+  return needed > has ? `attribute past its buffer (needs ${needed} bytes, has ${has})` : undefined
+}
+
+/** `vertices` vertices of an attribute `attributeProblem` and `bufferOverrun` passed, as `components` floats each. */
+function readFloats(
+  gl: WebGL2RenderingContext,
+  attribute: PrivateAttribute,
+  components: number,
+  vertices: number,
+): Float32Array {
   const bytes = readBack(gl, attribute.buffer as PrivateBuffer)
-  return new Float32Array(bytes, attribute.byteOffset ?? 0, attribute.count * components)
+  return new Float32Array(bytes, attribute.byteOffset ?? 0, vertices * components)
 }
 
 /** A model's readable triangle primitives, and why each other one could not be read. */
