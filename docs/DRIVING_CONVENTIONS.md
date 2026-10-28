@@ -260,7 +260,9 @@ Measured in headless checks driven over raw CDP (or `playwright-headless`):
 - The sun direction is `viewer.scene.context.uniformState.sunDirectionWC`, not `scene.light.direction`.
 - A fresh Edge profile opens an `edge://sync-confirmation-dialog` tab. Closing it stalled CDP on the debugging port, and the `tauri-app` calls attached there hung to their timeout. Leave the tab alone and drive the page's own tab, or use `playwright-headless`.
 - A Node driver script ends with an explicit `process.exit()`: after printing that it was done, `ft-run.cjs` stayed alive until the gate killed it as stalled.
-Source: headless checks of TC3D-244's session; the TC3D-376 mock runs. Seen: twice.
+- The OSM Buildings tileset is ADD-refined: an airport's own terminals can sit in a coarse tile (SFO's in a depth-12 tile some 200 km across), so a check that picks tiles by their radius drops them. Pick features by their distance from the camera instead.
+- The first page load after Vite sat idle once hung over 120 s waiting for `window.__tc3d`; a reload loaded in 4 s. Bound the wait and reload once before calling a run failed.
+Source: headless checks of TC3D-244's session; the TC3D-376 mock runs; the TC3D-385 census. Seen: three times.
 
 ### Reset one-time UI flags through persisted state, then reload
 <!-- rule: reset-flags-via-storage scope: project -->
