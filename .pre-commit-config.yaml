@@ -1,5 +1,8 @@
 # Run by prek (`prek install` once per clone). Each hook runs only when its own kind of file is
-# staged; CI's clippy and the weekly toolchain pin catch drift in files a commit did not touch.
+# staged or pushed: a commit runs Biome and the lease guard, a push runs the type check and
+# clippy. CI's clippy and the weekly toolchain pin catch drift in files a change did not touch.
+default_install_hook_types: [pre-commit, pre-push]
+default_stages: [pre-commit]
 repos:
   - repo: https://github.com/pre-commit/pre-commit-hooks
     rev: v6.0.0
@@ -21,6 +24,7 @@ repos:
         language: system
         pass_filenames: false
         files: ^src/.*\.(ts|tsx)$
+        stages: [pre-push]
       - id: cargo-clippy
         name: cargo clippy -D warnings
         # The hook builds the public stub; running from src-tauri keeps cargo's config lookup the
@@ -29,6 +33,7 @@ repos:
         language: system
         pass_filenames: false
         files: ^src-tauri/.*\.rs$
+        stages: [pre-push]
       - id: agent-mail-guard
         name: agent-mail lease guard
         entry: pwsh -NoProfile -File tools/agent-mail-guard.ps1
