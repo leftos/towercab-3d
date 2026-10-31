@@ -71,6 +71,23 @@ const OUTAGE_TAXI_MPS = 7.7
 const OUTAGE_BEFORE_S = 20
 const OUTAGE_BACK_S = 80
 const ONE_HZ_TARGET_MS = 1000 + DYNAMIC_DELAY_JITTER_BUFFER_MS
+// A parked aircraft's still samples at vNAS's irregular 1-3 s gaps (TC3D-398)
+const PARKED_GAPS_S = [1, 2, 3, 1, 1, 3, 2, 1, 3, 1]
+const PARKED_GAPS_SILENCE_S = 60
+const HOLD_SHORT_3_MIN_S = 180
+// First seen parked with only VATSIM reports (TC3D-382), then vNAS from this scenario second
+const FIRST_SEEN_VNAS_FROM_S = 62
+const FIRST_SEEN_VNAS_SAMPLES = 10
+// The stop test needs two still steps, so the third vNAS sample is the first that can show a stop
+const FIRST_STOPPED_SAMPLE = 2
+// The commonest real shape whose display delay settled near 3.2 s: 43 of run 4's 258 parked resumptions had a target
+// of 2.9-3.4 s, each after still samples at irregular 1-5 s gaps and a 10-46 s silence, resumed at rest. SMX9750 at
+// t 522.2 s (gaps 1, 3, 1, 4, 5 s, then 10 s of silence), delay.jsonl:
+// [1793144845782,"SMX9750",3230,3030,[1123,2880,998],200]
+const REAL_PARKED_GAPS_S = [1, 3, 1, 4, 5]
+const REAL_PARKED_SILENCE_S = 10
+// vNAS can repeat a moving aircraft's position: a gap this long counts at its length whether or not it moved
+const REPEATED_GAP_S = 3
 
 /** One sample `eastM` metres east of the origin at scenario second `t`; a vNAS one reads the resting height. */
 function sample(source: AircraftDataSource, t: number, eastM = 0, groundspeed = 0): AircraftObservation {
@@ -95,7 +112,7 @@ function sample(source: AircraftDataSource, t: number, eastM = 0, groundspeed = 
   }
 }
 
-function eastOf(s: AircraftObservation): number {
+function eastOf(s: { longitude: number }): number {
   return (s.longitude - LON) * M_PER_DEG_LON
 }
 
@@ -122,6 +139,8 @@ interface Frame {
   displayTime: number
   displayDelay: number
   isExtrapolating: boolean
+  /** Metres east of the origin the aircraft is drawn */
+  eastM: number
 }
 
 /** What VATSIM reports every 15 s: nothing, where vNAS last put the aircraft, or the aircraft taxiing away after TAXI_AWAY_AT_S. */
@@ -199,7 +218,13 @@ async function runFeeds(vnas: AircraftObservation[], vatsim: AircraftObservation
     if (batch.length > 0) store.getState().addObservationBatch(batch)
     const result = store.getState().getInterpolatedStates(now).get(CS)
     if (!result) continue
-    frames.push({ now, displayTime: result.displayTime, displayDelay: result.displayDelay, isExtrapolating: result.isExtrapolating })
+    frames.push({
+      now,
+      displayTime: result.displayTime,
+      displayDelay: result.displayDelay,
+      isExtrapolating: result.isExtrapolating,
+      eastM: eastOf(result),
+    })
   }
   return frames
 }
@@ -340,6 +365,34 @@ function holdShort(holdS: number, vatsimFromS: number, staleS: number): Feeds {
   return { vnas, vatsim: vatsimAlong(vnas, vatsimFromS, lastS + 30, staleS), checked: go }
 }
 
+/**
+ * A held stop, still samples at `gapsS` (s) apart, `silenceS` of silence, then 3 samples at rest; no VATSIM. The
+ * resumed samples are checked.
+ */
+function parkedGaps(gapsS: number[], silenceS: number): Feeds {
+  const parked = heldStop()
+  let t = (parked[parked.length - 1].observedAt - T0) / 1000
+  const still = gapsS.map((gap) => {
+    t += gap
+    return sample('vnas', t)
+  })
+  const resumed = Array.from({ length: RESUMED_AT_REST }, (_, i) => sample('vnas', t + silenceS + i))
+  return { vnas: [...parked, ...still, ...resumed], vatsim: [], checked: resumed }
+}
+
+/**
+ * First seen parked with only VATSIM reports every 15 s, then 1 Hz vNAS at the same spot from FIRST_SEEN_VNAS_FROM_S;
+ * VATSIM reports throughout. The vNAS samples from the first that can show a stop are checked.
+ */
+function firstSeenParked(): Feeds {
+  const vnas = Array.from({ length: FIRST_SEEN_VNAS_SAMPLES }, (_, i) => sample('vnas', FIRST_SEEN_VNAS_FROM_S + i))
+  const lastS = FIRST_SEEN_VNAS_FROM_S + FIRST_SEEN_VNAS_SAMPLES - 1
+  const vatsim = Array.from({ length: Math.floor(lastS / VATSIM_PERIOD_S) + 1 }, (_, i) =>
+    sample('vatsim', i * VATSIM_PERIOD_S),
+  )
+  return { vnas, vatsim, checked: vnas.slice(FIRST_STOPPED_SAMPLE) }
+}
+
 /** Milliseconds from a sample's receipt to the first frame whose displayed instant reaches it. */
 function receiptToDisplayMs(frames: Frame[], s: AircraftObservation): number {
   const shown = frames.find((f) => f.displayTime >= s.observedAt)
@@ -355,6 +408,16 @@ function expectResumedWithinVnasDelay(run: Run): void {
       RESUMED_MAX_LAG_MS,
     )
   }
+}
+
+/** Once the display delay first reaches the resumed-sample limit, it never rises over it again. */
+function expectDelaySettledWithinLimit(run: Run): void {
+  const settled = run.frames.findIndex((f) => f.displayDelay <= RESUMED_MAX_LAG_MS)
+  expect(settled, 'first frame within the limit').toBeGreaterThanOrEqual(0)
+  const worst = run.frames.slice(settled).reduce((w, f) => (f.displayDelay > w.displayDelay ? f : w))
+  expect(worst.displayDelay, `display delay at +${((worst.now - T0) / 1000).toFixed(2)} s`).toBeLessThanOrEqual(
+    RESUMED_MAX_LAG_MS,
+  )
 }
 
 // The scenarios run at the top level, where collection has no timeout (tests/setup/hookBudget.ts).
@@ -376,6 +439,39 @@ const holdShort60 = await runChecked(holdShort(60, 3, 0))
 const holdShort120 = await runChecked(holdShort(120, 3, 0))
 const holdShortStaleVatsim6 = await runChecked(holdShort(120, STALE_VATSIM_FROM_S, 6))
 const holdShortStaleVatsim7 = await runChecked(holdShort(120, STALE_VATSIM_FROM_S, 7))
+const parkedIrregular = await runChecked(parkedGaps(PARKED_GAPS_S, PARKED_GAPS_SILENCE_S))
+const holdShort3Min = await runChecked(holdShort(HOLD_SHORT_3_MIN_S, 3, 0))
+const firstSeenParkedOnVatsim = await runChecked(firstSeenParked())
+const realParkedShape = await runChecked(parkedGaps(REAL_PARKED_GAPS_S, REAL_PARKED_SILENCE_S))
+// A 10 kt taxi VATSIM reported first, taken over by 1 Hz vNAS at TAKEOVER_S; its delay, falling from VATSIM's at the
+// 100 ms/s limit, is still about 10 s when it stops at STOP_S, then stands still to STOPPED_UNTIL_S (TC3D-398)
+const TAKEOVER_S = 60
+const STOP_S = 111
+const STOPPED_UNTIL_S = 130
+// A frame's step may exceed one frame of taxi speed by this much: the delay falling at 100 ms/s plays it at 1.1x
+const TAKEOVER_STEP_MARGIN = 1.5
+// A one-frame fall of the delay over this is a snap, not the rate limit
+const SNAP_MIN_MS = 100
+const takeoverMps = knotsToMps(TAXI_KTS)
+const takeoverVnas = [
+  ...Array.from({ length: STOP_S - TAKEOVER_S + 1 }, (_, i) => {
+    const t = TAKEOVER_S + i
+    return sample('vnas', t, takeoverMps * t, TAXI_KTS)
+  }),
+  ...Array.from({ length: STOPPED_UNTIL_S - STOP_S }, (_, i) => sample('vnas', STOP_S + 1 + i, takeoverMps * STOP_S)),
+]
+const takeoverVatsim = Array.from({ length: Math.floor(STOPPED_UNTIL_S / VATSIM_PERIOD_S) + 1 }, (_, i) => {
+  const t = i * VATSIM_PERIOD_S
+  return sample('vatsim', t, takeoverMps * Math.min(t, STOP_S), t < STOP_S ? TAXI_KTS : 0)
+})
+const takeoverStop = takeoverVnas[STOP_S - TAKEOVER_S]
+const takenOverTaxi = await runFeeds(takeoverVnas, takeoverVatsim, takeoverStop.receivedAt - T0 + 30_000)
+// A 10 kt taxi whose vNAS repeats the last position after a 3 s gap: a moving aircraft, not a stop
+const repeatTaxiMps = knotsToMps(TAXI_KTS)
+const repeatedOnTaxi = await delayStateAfter([
+  ...Array.from({ length: TAXI_S + 1 }, (_, t) => sample('vnas', t, repeatTaxiMps * t, TAXI_KTS)),
+  sample('vnas', TAXI_S + REPEATED_GAP_S, repeatTaxiMps * TAXI_S, TAXI_KTS),
+])
 // Moving samples, so only the change of source and the 30 s bound leave their intervals out
 const vatsimToVnas = [sample('vatsim', 0, 0, 20), sample('vatsim', 15, 150, 20), sample('vnas', 50, 500, 20)]
 const vatsimToVnasIntervals = (await delayStateAfter(vatsimToVnas)).intervalHistory
@@ -503,6 +599,46 @@ it('a VATSIM report taken 6 s before the stop, 17 m short, does not raise the de
 
 it('a VATSIM report taken 7 s before the stop, 24 m short, does not raise the delay of the vNAS burst after a 120 s hold (TC3D-373)', () => {
   expectResumedWithinVnasDelay(holdShortStaleVatsim7)
+})
+
+it('a parked aircraft with still samples 1-3 s apart keeps its display delay within 1.4 s and shows its samples after 60 s of silence within it (TC3D-398)', () => {
+  expectDelaySettledWithinLimit(parkedIrregular)
+  expectResumedWithinVnasDelay(parkedIrregular)
+})
+
+it('an aircraft holding short for 3 min, with VATSIM every 15 s, shows its taxi on within the vNAS display delay (TC3D-398 B3)', () => {
+  expectResumedWithinVnasDelay(holdShort3Min)
+})
+
+it('an aircraft first seen parked on VATSIM alone shows its vNAS samples within the vNAS display delay once they show a stop (TC3D-382)', () => {
+  expectResumedWithinVnasDelay(firstSeenParkedOnVatsim)
+})
+
+it("run 4's commonest parked shape that settled near 3.2 s (SMX9750) keeps its delay within 1.4 s and shows its resumed samples within it (TC3D-398)", () => {
+  expectDelaySettledWithinLimit(realParkedShape)
+  expectResumedWithinVnasDelay(realParkedShape)
+})
+
+it('a taxiing aircraft whose vNAS repeats a position after a 3 s gap counts that gap at its length (TC3D-398)', () => {
+  const gapMs = REPEATED_GAP_S * 1000
+  expect(repeatedOnTaxi.intervalHistory, 'intervals kept in the statistics').toContain(gapMs)
+  expect(repeatedOnTaxi.targetDelayMs, 'target display delay').toBe(gapMs + DYNAMIC_DELAY_JITTER_BUFFER_MS)
+})
+
+it('a taxi taken over from VATSIM (delay ~10 s) that stops never jumps forward; the snap waits until the drawn instant reaches the stop sample (TC3D-398)', () => {
+  const fromStop = takenOverTaxi.filter((f) => f.now >= takeoverStop.receivedAt)
+  expect(fromStop[0]?.displayDelay, 'display delay when the stop sample arrives').toBeGreaterThan(9000)
+  const frameOfTaxiM = takeoverMps * (FRAME_MS / 1000)
+  const steps = fromStop.slice(1).map((f, i) => ({ f, stepM: Math.abs(f.eastM - fromStop[i].eastM) }))
+  const worst = steps.reduce((w, s) => (s.stepM > w.stepM ? s : w))
+  expect(
+    worst.stepM,
+    `step at +${((worst.f.now - T0) / 1000).toFixed(2)} s (one frame of taxi ${frameOfTaxiM.toFixed(3)} m)`,
+  ).toBeLessThanOrEqual(frameOfTaxiM * TAKEOVER_STEP_MARGIN)
+  const snaps = fromStop.slice(1).filter((f, i) => fromStop[i].displayDelay - f.displayDelay > SNAP_MIN_MS)
+  expect(snaps.length, 'snaps of the delay').toBeGreaterThan(0)
+  const early = snaps.filter((f) => f.displayTime < takeoverStop.observedAt)
+  expect(early.length, 'snaps before the drawn instant reaches the stop sample').toBe(0)
 })
 
 it('a VATSIM-only aircraft moving at 20 kt keeps its display delay at its 15 s cadence', () => {

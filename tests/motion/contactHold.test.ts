@@ -12,7 +12,7 @@
 import { expect, it, vi } from 'vitest'
 import { CONTACT_EXIT_HEIGHT_METERS, CONTACT_HOLD_MS, SOURCE_DISPLAY_DELAYS } from '@/constants'
 import type { AircraftObservation } from '@/types/aircraft-timeline'
-import type { InterpolatedAircraftState } from '@/types/vatsim'
+import type { InterpolatedAircraftState, PilotData } from '@/types/vatsim'
 
 vi.mock('react', () => {
   const api = {
@@ -106,6 +106,26 @@ const REPOSITION_STEP_M = 2000
 const REPOSITION_FT = 1000
 // A VATSIM report is observed this long before it is received
 const VATSIM_FEED_LAG_MS = 3000
+// GHOST41 (F35, TC3D-396): VATSIM's pilot list holds a report observed 11.5 s before it was received, taken on the
+// roll; the vNAS hub then disconnects the aircraft after liftoff, between two samples, and vNAS carries on
+const LATE_VATSIM_LAG_MS = 11_500
+const LATE_VATSIM_RECEIVED_MS = (NORMAL_LIFTOFF_S + 3) * 1000
+const VNAS_DISCONNECT_MS = (NORMAL_LIFTOFF_S + 5) * 1000 + 300
+const VATSIM_PERIOD_MS = 15_000
+// GHOST41 held at its last vNAS sample: frames run until display time passes this (scenario ms), past the first
+// VATSIM report observed after that sample
+const GHOST_HELD_END_MS = 60_000
+// A held aircraft is drawn within this of its hold point, and at its height within this
+const HELD_TOLERANCE_M = 1
+const HELD_TOLERANCE_FT = 1
+// A departure VATSIM saw first: VATSIM's reports of it at rest, 15 s apart, all received before its first vNAS sample,
+// since vNAS is silent while it is parked
+const VATSIM_FIRST_RECEIVED_MS = [4000, 19_000]
+// An aircraft first seen parked on VATSIM alone: its vNAS samples start here, and the third shows the stop
+const SNAP_VNAS_FROM_S = 30
+const SNAP_VNAS_SAMPLES = 8
+// The delay's snap from VATSIM's to vNAS's moves display time forward by more than this
+const SNAP_MIN_MOVE_MS = 10_000
 
 interface Sample {
   /** Scenario second */
@@ -141,8 +161,8 @@ function observation(s: Sample): AircraftObservation {
   }
 }
 
-/** A VATSIM report of an aircraft standing at rest, received at scenario ms `receivedMs`. */
-function vatsimReport(receivedMs: number): AircraftObservation {
+/** A VATSIM report of an aircraft standing at rest, received at scenario ms `receivedMs` and observed `lagMs` before. */
+function vatsimReport(receivedMs: number, lagMs: number): AircraftObservation {
   const receivedAt = T0 + receivedMs
   return {
     latitude: LAT,
@@ -156,10 +176,45 @@ function vatsimReport(receivedMs: number): AircraftObservation {
     pitch: null,
     roll: null,
     verticalRate: null,
-    observedAt: receivedAt - VATSIM_FEED_LAG_MS,
+    observedAt: receivedAt - lagMs,
     receivedAt,
     source: 'vatsim',
     displayDelay: SOURCE_DISPLAY_DELAYS.vatsim,
+  }
+}
+
+/** A VATSIM report where the newest of `samples` at its observed time put the aircraft, with that sample's speed. */
+function vatsimOnTrack(samples: Sample[], receivedMs: number, lagMs: number): AircraftObservation {
+  const report = vatsimReport(receivedMs, lagMs)
+  const observedS = (report.observedAt - T0) / 1000
+  const at = samples.filter((s) => s.t <= observedS).pop() ?? samples[0]
+  return {
+    ...report,
+    longitude: LON + at.eastM / M_PER_DEG_LON,
+    altitude: 10 + at.ft * FT,
+    groundspeed: at.gs,
+  }
+}
+
+/** VATSIM's pilot list entry for a report, as the feed lists it (altitude in feet). */
+function pilotOf(callsign: string, report: AircraftObservation): PilotData {
+  return {
+    cid: 1,
+    name: callsign,
+    callsign,
+    server: 'TEST',
+    pilot_rating: 0,
+    latitude: report.latitude,
+    longitude: report.longitude,
+    altitude: report.altitude / FT,
+    groundspeed: report.groundspeed,
+    transponder: '',
+    heading: report.heading,
+    qnh_i_hg: 29.92,
+    qnh_mb: 1013,
+    flight_plan: null,
+    logon_time: '',
+    last_updated: '',
   }
 }
 
@@ -190,6 +245,10 @@ interface Frame {
   inContact: boolean | null
   /** Lane B's provisional resting height after the frame (ft), or null */
   restFt: number | null
+  /** Whether the interpolation loop draws the aircraft on the frame; set only for a scenario it draws */
+  drawn?: boolean
+  /** Metres east of the origin the aircraft is drawn; set only for a scenario the loop draws */
+  eastM?: number
 }
 
 interface Scenario {
@@ -198,12 +257,31 @@ interface Scenario {
   samples: Sample[]
   /** Scenario ms at which VATSIM reports of the aircraft at rest are received; none by default */
   vatsimReceivedMs?: number[]
+  /** How long before its receipt each VATSIM report is observed; VATSIM_FEED_LAG_MS by default */
+  vatsimLagMs?: number
+  /** VATSIM reports reach the store in batches, as the VATSIM feed delivers them; one at a time by default */
+  vatsimBatch?: true
+  /**
+   * Scenario ms at which the vNAS hub disconnects the aircraft, while VATSIM's pilot list holds its newest VATSIM report
+   */
+  vnasDisconnectMs?: number
+  /** vNAS sends nothing from the hub disconnect on; by default its samples carry on */
+  vnasEndsAtDisconnect?: true
+  /** VATSIM reports the aircraft where its samples put it when observed; at rest at the origin by default */
+  vatsimAlongTrack?: true
+  /** The displayed instant (scenario ms) frames run to; the last sample's by default */
+  endMs?: number
   /** The frame's input, from what the store displays; may act on the hook first */
   input?: (base: ContactInput, ms: number, hook: Hook) => ContactInput
   /** Drawn in contact before its first frame, as a source without height leaves it */
   drawnInContact?: boolean
   /** The first displayed instant contact is decided on (the aircraft comes into range); 0 by default */
   fromMs?: number
+  /**
+   * The interpolation loop draws the aircraft (in range of the reference position) every frame, and each frame's
+   * contact is the drawn entry's; by default no aircraft is in range and contact is decided outside the loop
+   */
+  drawnByLoop?: true
 }
 
 /** Run one frame of the interpolation loop. */
@@ -233,7 +311,7 @@ async function run(scenario: Scenario): Promise<Frame[]> {
   vi.useFakeTimers({ toFake: ['Date'] })
   try {
     vi.setSystemTime(T0)
-    useVatsimStore.setState({ referencePosition: null })
+    useVatsimStore.setState({ referencePosition: scenario.drawnByLoop ? { latitude: LAT, longitude: LON } : null })
     // biome-ignore lint/correctness/useHookAtTopLevel: this is the interpolation singleton, driven outside React
     const map = useAircraftInterpolation()
     const snapshot = (timestamp: number) => ({
@@ -258,24 +336,53 @@ async function run(scenario: Scenario): Promise<Frame[]> {
         ),
     }
     if (scenario.drawnInContact) map.set(cs, { callsign: cs, inContact: true } as InterpolatedAircraftState)
-    const samples = [
-      ...scenario.samples.map(observation),
-      ...(scenario.vatsimReceivedMs ?? []).map(vatsimReport),
-    ].sort((a, b) => a.receivedAt - b.receivedAt)
-    const endMs = scenario.samples[scenario.samples.length - 1].t * 1000
+    const lagMs = scenario.vatsimLagMs ?? VATSIM_FEED_LAG_MS
+    const disconnectMs = scenario.vnasDisconnectMs ?? Number.POSITIVE_INFINITY
+    const vnasSent = scenario.vnasEndsAtDisconnect
+      ? scenario.samples.filter((s) => s.t * 1000 < disconnectMs)
+      : scenario.samples
+    const vatsimOf = (ms: number) =>
+      scenario.vatsimAlongTrack ? vatsimOnTrack(scenario.samples, ms, lagMs) : vatsimReport(ms, lagMs)
+    const samples = [...vnasSent.map(observation), ...(scenario.vatsimReceivedMs ?? []).map(vatsimOf)].sort(
+      (a, b) => a.receivedAt - b.receivedAt,
+    )
+    const endMs = scenario.endMs ?? scenario.samples[scenario.samples.length - 1].t * 1000
     const frames: Frame[] = []
     let next = 0
+    let newestVatsim: AircraftObservation | null = null
+    let disconnected = false
     for (let f = 0; ; f++) {
       const now = T0 + f * FRAME_MS
       vi.setSystemTime(now)
-      while (next < samples.length && samples[next].receivedAt <= now) {
-        store.getState().addObservation(cs, samples[next++], metadata)
+      if (!disconnected && scenario.vnasDisconnectMs !== undefined && now >= T0 + scenario.vnasDisconnectMs) {
+        disconnected = true
+        const listed = newestVatsim ? [pilotOf(cs, newestVatsim)] : []
+        const listTimes = newestVatsim ? { lastVatsimTimestamp: newestVatsim.observedAt, lastUpdate: new Date(newestVatsim.receivedAt) } : {}
+        useVatsimStore.setState({ allPilots: listed, isPolling: true, ...listTimes })
+        store.getState().dropSourceObservations('vnas', [cs])
       }
+      while (next < samples.length && samples[next].receivedAt <= now) {
+        const sample = samples[next++]
+        if (sample.source === 'vatsim') newestVatsim = sample
+        if (sample.source === 'vatsim' && scenario.vatsimBatch) {
+          store.getState().addObservationBatch([{ callsign: cs, observation: sample, metadata }])
+        } else {
+          store.getState().addObservation(cs, sample, metadata)
+        }
+      }
+      if (scenario.drawnByLoop) runLoopFrame()
       const result = store.getState().getInterpolatedStates(now).get(cs)
       if (!result) continue
       const ms = result.displayTime - T0
       if (ms > endMs) break
       if (ms < (scenario.fromMs ?? 0)) continue
+      if (scenario.drawnByLoop) {
+        const entry = map.get(cs)
+        const ft = result.heightAboveGround === null ? null : result.heightAboveGround / FT
+        const eastM = (result.longitude - LON) * M_PER_DEG_LON
+        frames.push({ ms, ft, inContact: entry?.inContact ?? null, restFt: null, drawn: entry !== undefined, eastM })
+        continue
+      }
       const base: ContactInput = {
         height: result.heightAboveGround,
         type: scenario.type,
@@ -518,6 +625,55 @@ const laneBBurst = await run({
   ],
 })
 
+/** A normal takeoff that VATSIM reports late, then the vNAS hub disconnects (GHOST41's shape). */
+function lateVatsimTakeoff(callsign: string, vatsimBatch: boolean): Scenario {
+  return {
+    callsign,
+    type: 'A320',
+    samples: takeoff(
+      NORMAL_REST_FT,
+      { fromS: NORMAL_ROLL_FROM_S, accelG: NORMAL_ACCEL_G, liftoffS: NORMAL_LIFTOFF_S },
+      NORMAL_CLIMB_FT_PER_S,
+    ),
+    vatsimReceivedMs: [LATE_VATSIM_RECEIVED_MS],
+    vatsimLagMs: LATE_VATSIM_LAG_MS,
+    ...(vatsimBatch ? { vatsimBatch: true as const } : {}),
+    vnasDisconnectMs: VNAS_DISCONNECT_MS,
+    drawnByLoop: true,
+  }
+}
+
+const lateVatsimBatch = await run(lateVatsimTakeoff('GHOST1', true))
+const lateVatsimSingle = await run(lateVatsimTakeoff('GHOST2', false))
+// GHOST41 as recorded: vNAS ends at the hub disconnect, and VATSIM's reports, 11.5 s late every 15 s, follow the takeoff
+const ghostHeld = await run({
+  ...lateVatsimTakeoff('GHOST3', true),
+  vatsimReceivedMs: [0, 1, 2].map((i) => LATE_VATSIM_RECEIVED_MS + i * VATSIM_PERIOD_MS),
+  vatsimAlongTrack: true,
+  vnasEndsAtDisconnect: true,
+  endMs: GHOST_HELD_END_MS,
+})
+// The normal takeoff's vNAS from its first moving sample, after VATSIM's reports at rest, drawn by the loop
+const vatsimSeenFirst = await run({
+  callsign: 'VSEEN1',
+  type: 'A320',
+  samples: takeoff(
+    NORMAL_REST_FT,
+    { fromS: NORMAL_ROLL_FROM_S, accelG: NORMAL_ACCEL_G, liftoffS: NORMAL_LIFTOFF_S },
+    NORMAL_CLIMB_FT_PER_S,
+  ).filter((s) => s.t > NORMAL_ROLL_FROM_S),
+  vatsimReceivedMs: VATSIM_FIRST_RECEIVED_MS,
+  drawnByLoop: true,
+})
+// Drawn in contact from VATSIM, with no resting height, when its vNAS samples at rest snap its display delay
+const delaySnap = await run({
+  callsign: 'SNAP1',
+  type: UNLEARNED_TYPE,
+  samples: steady(SNAP_VNAS_FROM_S, repeat(LANE_B_REST_FT, SNAP_VNAS_SAMPLES), 0, UNLEARNED_GS_KTS),
+  vatsimReceivedMs: VATSIM_FIRST_RECEIVED_MS,
+  drawnInContact: true,
+})
+
 /**
  * Frames with a height after the stop: the burst is shown over the exit height, and contact is never left. More than
  * 300 frames are drawn from `resumeMs` (5 s).
@@ -682,4 +838,76 @@ it("an unlearned type's burst above 100 ft during a hold leaves R-hat unchanged"
 
 it('removing an aircraft clears its hold', () => {
   expectHeldThenCleared(removal)
+})
+
+/**
+ * Display time never steps back, and no frame from the displayed liftoff on is in contact without a height or over the
+ * exit height above the resting height.
+ */
+function expectNoStepBackAfterLiftoff(frames: Frame[], restFt: number, liftoffMs: number): void {
+  const back = frames.findIndex((f, i) => i > 0 && f.ms < frames[i - 1].ms)
+  const step = back === -1 ? null : `${frames[back - 1].ms.toFixed(0)} -> ${frames[back].ms.toFixed(0)} ms`
+  expect(step, 'display time stepping back').toBeNull()
+  const fromLiftoff = frames.filter((f) => f.ms >= liftoffMs)
+  expect(fromLiftoff.length, 'frames from the displayed liftoff').toBeGreaterThan(60)
+  const wrong = fromLiftoff.filter((f) => f.inContact === true && (f.ft === null || f.ft - restFt > EXIT_FT))
+  expect(wrong.length, 'frames after liftoff in contact without a height or over the exit height').toBe(0)
+}
+
+it('a VATSIM report 11.5 s late, batched before a vNAS hub disconnect after liftoff, never moves display time back (TC3D-396)', () => {
+  expectNoStepBackAfterLiftoff(lateVatsimBatch, NORMAL_REST_FT, NORMAL_LIFTOFF_S * 1000)
+})
+
+it('a VATSIM report 11.5 s late, added on its own before a vNAS hub disconnect after liftoff, never moves display time back (TC3D-396)', () => {
+  expectNoStepBackAfterLiftoff(lateVatsimSingle, NORMAL_REST_FT, NORMAL_LIFTOFF_S * 1000)
+})
+
+it('a departure VATSIM saw first stays drawn and in contact when its first vNAS sample arrives (TC3D-396)', () => {
+  const beforeLiftoff = vatsimSeenFirst.filter((f) => f.ms < NORMAL_LIFTOFF_S * 1000)
+  expect(beforeLiftoff.length, 'frames before the displayed liftoff').toBeGreaterThan(60)
+  const absent = beforeLiftoff.filter((f) => f.drawn !== true)
+  expect(absent.length, 'frames before the displayed liftoff the loop does not draw').toBe(0)
+  const outOfContactOnGround = beforeLiftoff.filter((f) => f.inContact !== true)
+  expect(outOfContactOnGround.length, 'frames before the displayed liftoff out of contact').toBe(0)
+})
+
+it('a parked aircraft with no resting height keeps contact across the snap of its display delay', () => {
+  const moves = delaySnap.slice(1).map((f, i) => f.ms - delaySnap[i].ms)
+  expect(Math.max(...moves), 'largest forward move of display time (ms)').toBeGreaterThan(SNAP_MIN_MOVE_MS)
+  const snapAt = moves.findIndex((move) => move > SNAP_MIN_MOVE_MS)
+  const beforeSnap = delaySnap.slice(0, snapAt + 1).filter((f) => f.ft !== null)
+  expect(beforeSnap.length, 'frames with a height before the snap').toBeGreaterThan(30)
+  expect(beforeSnap.filter((f) => f.restFt === null).length, 'frames before the snap without lane B').toBe(0)
+  const withHeight = delaySnap.filter((f) => f.ft !== null)
+  expect(withHeight.length, 'frames with a height').toBeGreaterThan(120)
+  expect(outOfContact(withHeight).length, 'frames with a height out of contact').toBe(0)
+})
+
+it('GHOST41 is drawn every frame at its last vNAS position (within 1 m, at its height, out of contact) until display time reaches the first report observed after it, then moves toward that report with no frame-to-frame jump over one frame of speed (TC3D-396)', () => {
+  const samples = lateVatsimTakeoff('GHOST3', true).samples
+  const point = samples.filter((s) => s.t * 1000 < VNAS_DISCONNECT_MS).pop() as Sample
+  const pointMs = point.t * 1000
+  const reportMs = [0, 1, 2]
+    .map((i) => LATE_VATSIM_RECEIVED_MS + i * VATSIM_PERIOD_MS - LATE_VATSIM_LAG_MS)
+    .find((ms) => ms > pointMs) as number
+
+  const fromDrop = ghostHeld.filter((f) => f.ms >= pointMs - 1000)
+  expect(fromDrop.filter((f) => f.drawn !== true).length, 'frames from the drop the loop does not draw').toBe(0)
+
+  const held = ghostHeld.filter((f) => f.ms === pointMs)
+  expect(held.length, 'frames held at the last vNAS position').toBeGreaterThan(60)
+  const offPoint = held.filter((f) => Math.abs((f.eastM ?? Number.NaN) - point.eastM) > HELD_TOLERANCE_M)
+  expect(offPoint.length, 'held frames off the last vNAS position').toBe(0)
+  const offHeight = held.filter((f) => f.ft === null || Math.abs(f.ft - point.ft) > HELD_TOLERANCE_FT)
+  expect(offHeight.length, 'held frames off its height').toBe(0)
+  expect(held.filter((f) => f.inContact !== false).length, 'held frames in contact').toBe(0)
+
+  const toReport = ghostHeld.filter((f) => f.ms >= pointMs && f.ms <= reportMs)
+  expect(toReport.length - held.length, 'frames moving toward the report').toBeGreaterThan(10)
+  const frameOfSpeedM = (point.gs / KT_PER_MPS) * (FRAME_MS / 1000)
+  const steps = toReport.slice(1).map((f, i) => Math.abs((f.eastM ?? Number.NaN) - (toReport[i].eastM ?? Number.NaN)))
+  const worst = Math.max(...steps)
+  expect(worst, `largest frame-to-frame step (one frame of speed ${frameOfSpeedM.toFixed(2)} m)`).toBeLessThanOrEqual(
+    frameOfSpeedM,
+  )
 })

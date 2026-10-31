@@ -353,8 +353,15 @@ export const useReplayStore = create<ReplayStore>((set, get) => ({
         metadata: { ...timeline.metadata },
         lastSource: timeline.lastSource,
         lastReceivedAt: timeline.lastReceivedAt,
+        // The live-only drop hold and carried anchor offset stay out of a replay
         dynamicDelay: dynamicDelay
-          ? { ...dynamicDelay, intervalHistory: [...dynamicDelay.intervalHistory] }
+          ? {
+              currentDelayMs: dynamicDelay.currentDelayMs,
+              targetDelayMs: dynamicDelay.targetDelayMs,
+              lastUpdateTime: dynamicDelay.lastUpdateTime,
+              intervalHistory: [...dynamicDelay.intervalHistory],
+              extrapolationBumpMs: dynamicDelay.extrapolationBumpMs,
+            }
           : undefined,
       })
     }

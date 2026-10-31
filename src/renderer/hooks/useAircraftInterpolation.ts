@@ -130,6 +130,8 @@ interface LaneBState {
   provisionalRest: number | null
   /** Display time of the last frame, to see it go back or jump */
   lastTime: number
+  /** The last frame's `displayAnchorOffsetMs`, to tell display time's own moves from a seek */
+  lastAnchorOffset: number
 }
 
 /** Per aircraft with a height above ground and no resting height, lane B's memory */
@@ -167,7 +169,7 @@ interface ContactHoldState {
   armable: boolean
   /** Display time of the last frame, to see it go back or jump */
   lastTime: number
-  /** The last frame's `displayAnchorOffsetMs`, to tell a move of the anchor from a seek */
+  /** The last frame's `displayAnchorOffsetMs`, to tell display time's own moves from a seek */
   lastAnchorOffset: number
 }
 
@@ -217,21 +219,32 @@ function contactOverRest(wasInContact: boolean, overRest: number): boolean {
 }
 
 /**
- * An aircraft's lane B memory at this frame, with the frame's height fed to its descent memory. Display time moving
- * more than DROP_CONTACT_SEEK_MS either way from the last frame is a seek: the memory restarts as at first sight, and
- * so does what is taken off the drawn height, rather than easing out a provisional resting height the seek dropped.
- * Smaller steps back (the store's anchor moving by a receive-latency difference) take the frame as any other.
+ * Whether display time moved more than DROP_CONTACT_SEEK_MS either way from the last frame, beyond what its offset
+ * moved (`displayAnchorOffsetMs`). A move of its own (a new anchor, a snap of the delay) is not a seek.
  */
-function laneBStateAt(callsign: string, height: number, time: number): { state: LaneBState; restarts: boolean } {
+function isSeek(last: { lastTime: number; lastAnchorOffset: number }, frame: ContactFrame): boolean {
+  const seekMs = frame.displayTime - last.lastTime - (frame.displayAnchorOffsetMs - last.lastAnchorOffset)
+  return Math.abs(seekMs) > DROP_CONTACT_SEEK_MS
+}
+
+/**
+ * An aircraft's lane B memory at this frame, with the frame's height fed to its descent memory. On a seek (`isSeek`)
+ * the memory restarts as at first sight, and so does what is taken off the drawn height, rather than easing out a
+ * provisional resting height the seek dropped.
+ */
+function laneBStateAt(callsign: string, height: number, frame: ContactFrame): { state: LaneBState; restarts: boolean } {
+  const time = frame.displayTime
+  const anchorOffset = frame.displayAnchorOffsetMs
   const previous = sharedLaneBStateRef.current.get(callsign)
-  const restarts = previous !== undefined && Math.abs(time - previous.lastTime) > DROP_CONTACT_SEEK_MS
+  const restarts = previous !== undefined && isSeek(previous, frame)
   if (restarts) sharedRestOffsetStateRef.current.delete(callsign)
   const state: LaneBState =
     previous === undefined || restarts
-      ? { reference: height, descending: true, provisionalRest: null, lastTime: time }
+      ? { reference: height, descending: true, provisionalRest: null, lastTime: time, lastAnchorOffset: anchorOffset }
       : previous
   feedDescentMemory(state, height)
   state.lastTime = time
+  state.lastAnchorOffset = anchorOffset
   sharedLaneBStateRef.current.set(callsign, state)
   return { state, restarts }
 }
@@ -258,14 +271,9 @@ function laneBEntry(state: LaneBState, height: number, run: SettleRun | undefine
  * and above DROP_CONTACT_REST_DROP_HEIGHT_METERS the provisional resting height is dropped; a seek (`laneBStateAt`)
  * drops it and restarts out of contact, as at first sight.
  */
-function laneBContact(
-  callsign: string,
-  height: number,
-  time: number,
-  run: SettleRun | undefined,
-  wasInContact: boolean,
-): boolean {
-  const { state, restarts } = laneBStateAt(callsign, height, time)
+function laneBContact(callsign: string, height: number, frame: ContactFrame, wasInContact: boolean): boolean {
+  const run = frame.settleRun
+  const { state, restarts } = laneBStateAt(callsign, height, frame)
   const inContactBefore = wasInContact && !restarts
   if (height > DROP_CONTACT_REST_DROP_HEIGHT_METERS) state.provisionalRest = null
   if (height > DROP_CONTACT_EXIT_HEIGHT_METERS) return false
@@ -291,21 +299,17 @@ export function provisionalRestFor(callsign: string): number | null {
 }
 
 /**
- * An aircraft's contact hold at this frame. Display time moving more than DROP_CONTACT_SEEK_MS either way from the
- * last frame, beyond what its anchor's offset moved (`displayAnchorOffsetMs`, as when the drawn list switches source),
- * is a seek: the hold restarts as at first sight, not armable on its first frame. A move of the anchor alone keeps it.
+ * An aircraft's contact hold at this frame. On a seek (`isSeek`) the hold restarts as at first sight, not armable on its
+ * first frame. A move of display time's own keeps it.
  */
 function contactHoldAt(callsign: string, frame: ContactFrame): ContactHoldState {
   const time = frame.displayTime
   const anchorOffset = frame.displayAnchorOffsetMs
   const previous = sharedContactHoldStateRef.current.get(callsign)
-  if (previous !== undefined) {
-    const seekMs = time - previous.lastTime - (anchorOffset - previous.lastAnchorOffset)
-    if (Math.abs(seekMs) <= DROP_CONTACT_SEEK_MS) {
-      previous.lastTime = time
-      previous.lastAnchorOffset = anchorOffset
-      return previous
-    }
+  if (previous !== undefined && !isSeek(previous, frame)) {
+    previous.lastTime = time
+    previous.lastAnchorOffset = anchorOffset
+    return previous
   }
   const state: ContactHoldState = {
     heldSince: null,
@@ -336,10 +340,10 @@ function stillHeld(
   callsign: string,
   height: number,
   rest: number | null,
-  time: number,
+  frame: ContactFrame,
 ): boolean {
   if (hold.heldSince === null) return false
-  if (time - hold.heldSince >= CONTACT_HOLD_MS) {
+  if (frame.displayTime - hold.heldSince >= CONTACT_HOLD_MS) {
     hold.heldSince = null
     return false
   }
@@ -348,7 +352,10 @@ function stillHeld(
     return false
   }
   const laneB = sharedLaneBStateRef.current.get(callsign)
-  if (laneB !== undefined) laneB.lastTime = time
+  if (laneB !== undefined) {
+    laneB.lastTime = frame.displayTime
+    laneB.lastAnchorOffset = frame.displayAnchorOffsetMs
+  }
   return true
 }
 
@@ -388,15 +395,13 @@ function heldOrRuledContact(hold: ContactHoldState | null, decision: ContactDeci
   const { callsign, height, rest, wasInContact, frame } = decision
   // A hold that ends this frame does not start again on the same exit
   const wasHeld = hold !== null && hold.heldSince !== null
-  if (hold !== null && stillHeld(hold, callsign, height, rest, frame.displayTime)) return true
+  if (hold !== null && stillHeld(hold, callsign, height, rest, frame)) return true
   const laneBBefore = laneBSnapshotOf(callsign)
   const inContact =
-    rest === null
-      ? laneBContact(callsign, height, frame.displayTime, frame.settleRun, wasInContact)
-      : contactOverRest(wasInContact, height - rest)
+    rest === null ? laneBContact(callsign, height, frame, wasInContact) : contactOverRest(wasInContact, height - rest)
   if (hold === null || wasHeld || !startsHold(hold, decision, inContact)) return inContact
   // The exit frame's height is the burst's: lane B keeps its memory from before it
-  restoreLaneB(callsign, laneBBefore, frame.displayTime)
+  restoreLaneB(callsign, laneBBefore, frame)
   return true
 }
 
@@ -464,8 +469,13 @@ function laneBSnapshotOf(callsign: string): LaneBState | undefined {
 }
 
 /** Put back lane B memory copied before this frame, at this frame's time. */
-function restoreLaneB(callsign: string, snapshot: LaneBState | undefined, time: number): void {
-  if (snapshot !== undefined) sharedLaneBStateRef.current.set(callsign, { ...snapshot, lastTime: time })
+function restoreLaneB(callsign: string, snapshot: LaneBState | undefined, frame: ContactFrame): void {
+  if (snapshot === undefined) return
+  sharedLaneBStateRef.current.set(callsign, {
+    ...snapshot,
+    lastTime: frame.displayTime,
+    lastAnchorOffset: frame.displayAnchorOffsetMs,
+  })
 }
 
 /**
@@ -914,8 +924,9 @@ function runInterpolationFrame() {
     // 1 observation. vNAS doesn't send updates for stationary aircraft, so they would
     // otherwise never appear. Since they're not moving, interpolation isn't needed -
     // their VATSIM position is valid as-is. The reported speed decides, not the held groundspeed of 0, so an
-    // aircraft first seen moving is not drawn held and then hidden when display time passes its first report.
-    if (timeline.observationCount < 2 && timeline.reportedGroundspeed >= STOPPED_SPEED_KTS) {
+    // aircraft first seen moving is not drawn held and then hidden when display time passes its first report. An
+    // aircraft a vNAS drop holds is drawn at the hold's point, the only sample in its drawn list until a newer arrives.
+    if (timeline.observationCount < 2 && timeline.reportedGroundspeed >= STOPPED_SPEED_KTS && !timeline.heldAtDrop) {
       continue
     }
 

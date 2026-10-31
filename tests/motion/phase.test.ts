@@ -408,8 +408,8 @@ it('7.6 the acceleration window spans two VATSIM samples 15 s apart at the displ
       [t0, 8],
       [t0 + 15000, 40],
     ])
-    // biome-ignore lint/suspicious/noExplicitAny: partial timeline is enough for the window
-    const result = computeWindowedAcceleration(timeline as any, t0 + 15000)
+    // biome-ignore lint/suspicious/noExplicitAny: partial observations are enough for the window
+    const result = computeWindowedAcceleration(timeline.observations as any, t0 + 15000)
     expect(result.confidence).toBeGreaterThan(0)
     expect(result.acceleration).toBeCloseTo(32 / 15, 5)
   } finally {
@@ -434,8 +434,8 @@ it('7.6 an observation newer than the display time is left out of the accelerati
       [t0 + 6000, 5],
       [t0 + 7000, 0],
     ])
-    // biome-ignore lint/suspicious/noExplicitAny: partial timeline is enough for the window
-    const result = computeWindowedAcceleration(timeline as any, t0 + 4000)
+    // biome-ignore lint/suspicious/noExplicitAny: partial observations are enough for the window
+    const result = computeWindowedAcceleration(timeline.observations as any, t0 + 4000)
     expect(result.acceleration).toBeCloseTo(2, 5)
   } finally {
     vi.useRealTimers()

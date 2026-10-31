@@ -122,11 +122,11 @@ export function calculateSmartSort(
   cleanupStabilizationStates(activeCallsigns)
 
   for (const ac of aircraft) {
-    // Get timeline for trajectory-based phase detection
-    const timeline = timelineStore.getTimeline(ac.callsign)
+    // The observations the aircraft is drawn from, for trajectory-based phase detection
+    const shown = timelineStore.getShownObservations(ac.callsign)
 
     // Detect phase with stabilization (includes phase history recording)
-    const { phase, runway, runwayDistance } = detectFlightPhase(ac, context, timeline)
+    const { phase, runway, runwayDistance } = detectFlightPhase(ac, context, shown)
     const score = calculatePriorityScore(ac, phase, context)
     const tier = getTierFromScore(score)
 

@@ -13,11 +13,10 @@ import type {
   DynamicDelayState,
   TimelineInterpolationResult,
 } from '@/types/aircraft-timeline'
+import { resetRestingHeightsForTests } from '@/utils/aircraft/restingHeight'
 import { knotsToMps } from '@/utils/coordinates'
 
-type TimelineModule = typeof import('@/stores/aircraftTimelineStore')
-
-const T0 = Date.UTC(2026, 0, 1, 12, 0, 0)
+const T0= Date.UTC(2026, 0, 1, 12, 0, 0)
 const FRAME_MS = 1000 / 60
 const CS = 'AAL1'
 const METADATA = { cid: 1, aircraftType: 'B738', transponder: '1200', departure: null, arrival: null }
@@ -39,14 +38,15 @@ const RESUME_STEP_MAX_M = 0.3
 // min(20 s, 25.15 s) = 20 s.
 const ONE_HZ_TARGET_MS = 1000 + DYNAMIC_DELAY_JITTER_BUFFER_MS
 
-let tl: TimelineModule
+// The store graph loads cold at the top level, where collection runs it with no timeout (tests/setup/hookBudget.ts).
+// vnasStore registers a removal listener at module init; loading it first resolves the store import cycle in the same
+// order the app does.
+await import('@/stores/vnasStore')
+const tl = await import('@/stores/aircraftTimelineStore')
 
-beforeEach(async () => {
-  vi.resetModules()
-  // vnasStore registers a removal listener at module init; loading it first resolves the store import cycle
-  // in the same order the app does.
-  await import('@/stores/vnasStore')
-  tl = await import('@/stores/aircraftTimelineStore')
+beforeEach(() => {
+  tl.useAircraftTimelineStore.getState().clear()
+  resetRestingHeightsForTests()
 })
 
 afterEach(() => {

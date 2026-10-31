@@ -8,7 +8,7 @@
 import { LEVEL_TOUCHDOWN_MAX_AGL_FT, ROLL_MIN_SPEED_KTS, STOPPED_SPEED_KTS, TOUCHDOWN_AGL_FT } from '@/constants'
 import { isPushingBack } from '@/utils/aircraft/pushback'
 import { geoidService } from '../../services/GeoidService'
-import type { AircraftTimeline } from '../../types/aircraft-timeline'
+import type { AircraftObservation } from '../../types/aircraft-timeline'
 import type { Runway } from '../../types/airport'
 import type { InterpolatedAircraftState } from '../../types/vatsim'
 import { calculateBearing, haversineDistanceFt, haversineDistanceNm, headingDifference } from './geoMath'
@@ -852,13 +852,13 @@ function detectRawFlightPhase(aircraft: InterpolatedAircraftState, context: Smar
  *
  * @param aircraft Current interpolated aircraft state
  * @param context Smart sort context (airport info, runways)
- * @param timeline Aircraft timeline for trajectory analysis (optional)
+ * @param shown The aircraft's shown observations for trajectory analysis (`getShownObservations`; optional)
  * @returns Stabilized phase detection result
  */
 export function detectFlightPhase(
   aircraft: InterpolatedAircraftState,
   context: SmartSortContext,
-  timeline?: AircraftTimeline,
+  shown?: AircraftObservation[],
 ): PhaseDetectionResult {
   // A replay scrubbed back drops the aircraft's phase state; its history goes with it, before detection reads it
   const { now, scrubbedBack } = phaseClock(aircraft.callsign, aircraft.displayTime)
@@ -868,7 +868,7 @@ export function detectFlightPhase(
   const raw = detectRawFlightPhase(aircraft, context)
 
   // Apply stabilization (state machine, hysteresis, dwell times)
-  const stabilizedPhase = stabilizePhase(aircraft.callsign, raw, aircraft, context, timeline, raw.nearestRunway)
+  const stabilizedPhase = stabilizePhase(aircraft.callsign, raw, aircraft, context, shown, raw.nearestRunway)
 
   // Record phase for go-around detection history
   recordPhase(aircraft.callsign, stabilizedPhase, now)

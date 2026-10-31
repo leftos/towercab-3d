@@ -130,8 +130,8 @@ export const DROP_CONTACT_SETTLE_MIN_SAMPLES = 3
 /**
  * Display time going back or jumping forward more than this (ms) is a seek. While an aircraft has no resting height, a
  * seek drops its provisional resting height and restarts its contact as at first sight; with or without one, a seek
- * clears its contact hold (CONTACT_HOLD_MS). For the hold, the part of a display-time move that the change of its
- * anchor's offset explains (`displayAnchorOffsetMs`, as when the drawn list switches source) is not a seek
+ * clears its contact hold (CONTACT_HOLD_MS). The part of a display-time move that its offset's change explains
+ * (`displayAnchorOffsetMs`, as when the drawn list switches source or a stopped aircraft's delay snaps) is not a seek
  */
 export const DROP_CONTACT_SEEK_MS = 2000
 
@@ -172,6 +172,17 @@ export const VNAS_STOP_WINDOW_MS = 3000 // 3 seconds
  * VATSIM_MOVING_MIN_SPEED_KTS for VATSIM), so a hold does not raise the delay.
  */
 export const CADENCE_ANY_MOTION_MAX_MS = 3000 // 3 seconds
+
+/**
+ * vNAS's sample period (ms): 1 Hz, the rate at which vNAS sends a moving aircraft's position (the 1 Hz UDP stream of
+ * the vNAS integration, against VATSIM's 15 s feed).
+ *
+ * While an aircraft's newest sample is stopped, an interval between two vNAS samples it stood still across counts
+ * toward the display-delay statistics as this when it is at most VNAS_PREFERENCE_THRESHOLD_MS (30 s) long, and the
+ * target is at least this plus
+ * DYNAMIC_DELAY_JITTER_BUFFER_MS: vNAS sends a parked aircraft's samples at irregular gaps, which are not its cadence.
+ */
+export const VNAS_CADENCE_MS = 1000
 
 /**
  * Speed (kt), measured from the two reports' positions, at or over which an interval between two VATSIM reports longer
@@ -239,6 +250,12 @@ export const DYNAMIC_DELAY_MIN_OBSERVATIONS = 3
 export const DYNAMIC_DELAY_MAX_DECREASE_RATE = 100
 
 /**
+ * Rate at which the delay decreases (ms per second) while the aircraft's newest sample is stopped. A parked aircraft
+ * is drawn at rest whatever the delay, so a delay left high by a still gap or a dropout falls within seconds.
+ */
+export const DYNAMIC_DELAY_STOPPED_DECREASE_RATE = 1000
+
+/**
  * Maximum rate at which delay can increase (ms per second).
  * Without this, source flips like vNAS→VATSIM (target jumps from ~1.2s to ~15s
  * because the interval window now sees 15s VATSIM gaps) would snap displayTime
@@ -255,6 +272,19 @@ export const DYNAMIC_DELAY_MAX_INCREASE_RATE = 500
  * when the delay falls, 500 ms when it rises. Frames at 1 fps or faster ease at the full rate.
  */
 export const DYNAMIC_DELAY_MAX_ELAPSED_MS = 1000
+
+/**
+ * Slowest rate (displayed ms per wall-clock ms) at which a live aircraft's display time runs while its lag behind now
+ * grows: a backward change of its display-time anchor (a vNAS drop, the vNAS-silence switch to VATSIM, a prune) slows
+ * display time to this until the new lag is reached, instead of stepping it back. A forward change is instant.
+ */
+export const DISPLAY_TIME_MIN_RATE = 0.5
+
+/**
+ * How long (ms) the gap closes between where a drop hold that expired drew an aircraft and where its reports put it,
+ * while it moves on at its speed. One VATSIM cadence, so the next report's reconciliation takes over before it ends.
+ */
+export const DROP_HOLD_RELEASE_MS = 15000
 
 /**
  * Amount added to the delay target when extrapolation is detected (ms).

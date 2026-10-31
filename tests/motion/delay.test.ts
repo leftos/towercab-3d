@@ -57,6 +57,33 @@ function delayState(currentDelayMs: number, targetDelayMs: number): DynamicDelay
   return { currentDelayMs, targetDelayMs, lastUpdateTime: T0, intervalHistory: [15000], extrapolationBumpMs: 0 }
 }
 
+/** The observations the still-run cache keeps alive from `sample`: each entry's object values, walked to the end. */
+function retainedThroughStillRunCache(sample: AircraftObservation): unknown[] {
+  const retained: unknown[] = []
+  const pending = [sample]
+  while (pending.length > 0) {
+    const entry = tl.stillRunStartCache.get(pending.pop() as AircraftObservation)
+    const values: unknown[] = Object.values(entry ?? {})
+    for (const value of values) {
+      if (typeof value !== 'object' || value === null) continue
+      retained.push(value)
+      pending.push(value as AircraftObservation)
+    }
+  }
+  return retained
+}
+
+it('the still-run cache holds no observation, so a parked run keeps none of its pruned samples alive', () => {
+  const parkedRun = [0, 1, 2, 3].map((s) => ({
+    ...observation('vnas'),
+    observedAt: T0 + s * 1000,
+    receivedAt: T0 + s * 1000 + 80,
+  }))
+  tl.stillRunStartAt(parkedRun)
+  expect(tl.stillRunStartCache.get(parkedRun[3]), 'the newest sample is cached').toBeDefined()
+  expect(retainedThroughStillRunCache(parkedRun[3]), 'observations reachable from the newest sample').toEqual([])
+})
+
 it('1.1 saving the display delay every frame does not replace the timelines map (TC3D-49)', () => {
   const store = tl.useAircraftTimelineStore
   store.getState().addObservation('AAL1', observation('vatsim'), METADATA)
@@ -81,19 +108,19 @@ it('1.1 an aircraft held before its first report keeps its source delay, with no
 })
 
 it('1.1 a time step backward leaves the delay where it is (TC3D-49)', () => {
-  const { delayMs, updatedState } = tl.applyDelayTransition(delayState(17000, 15150), T0 - 5000, false)
+  const { delayMs, updatedState } = tl.applyDelayTransition(delayState(17000, 15150), T0 - 5000, false, false)
   expect(delayMs).toBe(17000)
   expect(updatedState.extrapolationBumpMs).toBe(0)
 })
 
 it('1.1 a long gap between frames moves the delay by at most 1 s worth of the rate limit (TC3D-49)', () => {
-  const { delayMs } = tl.applyDelayTransition(delayState(17000, 15150), T0 + 60_000, false)
+  const { delayMs } = tl.applyDelayTransition(delayState(17000, 15150), T0 + 60_000, false, false)
   expect(delayMs).toBeLessThan(17000)
   expect(17000 - delayMs).toBeLessThanOrEqual(1.0 * DYNAMIC_DELAY_MAX_DECREASE_RATE)
 })
 
 it('1.1 a 200 ms frame (5 fps) moves the delay by the full rate limit for that frame (TC3D-49)', () => {
-  const { delayMs } = tl.applyDelayTransition(delayState(17000, 15150), T0 + 200, false)
+  const { delayMs } = tl.applyDelayTransition(delayState(17000, 15150), T0 + 200, false, false)
   expect(17000 - delayMs).toBeCloseTo(0.2 * DYNAMIC_DELAY_MAX_DECREASE_RATE, 6)
 })
 

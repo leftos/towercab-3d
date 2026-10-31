@@ -30,8 +30,10 @@ import {
   CADENCE_ANY_MOTION_MAX_MS,
   CONTACT_EXIT_HEIGHT_METERS,
   CONTACT_HOLD_MAX_ARM_STEP_M,
+  DISPLAY_TIME_MIN_RATE,
   DROP_CONTACT_SETTLE_MIN_SAMPLES,
   DROP_CONTACT_SETTLE_SPAN_MS,
+  DROP_HOLD_RELEASE_MS,
   DYNAMIC_DELAY_EXTRAPOLATION_BUMP_MS,
   DYNAMIC_DELAY_EXTRAPOLATION_DECAY_RATE,
   DYNAMIC_DELAY_INTERVAL_WINDOW,
@@ -42,6 +44,7 @@ import {
   DYNAMIC_DELAY_MAX_MS,
   DYNAMIC_DELAY_MIN_MS,
   DYNAMIC_DELAY_MIN_OBSERVATIONS,
+  DYNAMIC_DELAY_STOPPED_DECREASE_RATE,
   FEET_TO_METERS,
   GROUNDSPEED_THRESHOLD_KNOTS,
   MAX_EXTRAPOLATION_TIME,
@@ -52,6 +55,7 @@ import {
   SOURCE_DISPLAY_DELAYS,
   STOPPED_SPEED_KTS,
   VATSIM_MOVING_MIN_SPEED_KTS,
+  VNAS_CADENCE_MS,
   VNAS_PREFERENCE_THRESHOLD_MS,
   VNAS_STOP_WINDOW_MS,
 } from '@/constants'
@@ -69,6 +73,7 @@ import type {
   AircraftMetadata,
   AircraftObservation,
   AircraftTimeline,
+  DropHold,
   DynamicDelayState,
   SettleRun,
   TimelineInterpolationResult,
@@ -170,21 +175,7 @@ interface AircraftTimelineStore {
 
   // Per-aircraft reconciliation state for smooth transitions.
   // Tracks what 'after' observation we're interpolating toward and where we started from.
-  reconciliationStates: Map<
-    string,
-    {
-      // The observation time of 'after' we're currently interpolating toward
-      targetObservedAt: number
-      // Position we were at when this target was set (our starting point)
-      startLat: number
-      startLon: number
-      startAlt: number
-      // displayTime when we started interpolating toward this target
-      startDisplayTime: number
-      // Anchor (oldest obs) when this reconciliation was created
-      anchorObservedAt: number
-    }
-  >
+  reconciliationStates: Map<string, ReconciliationState>
 
   // Prune timer
   pruneTimer: number | null
@@ -222,6 +213,11 @@ interface AircraftTimelineStore {
   getInterpolatedState: (callsign: string, now: number) => TimelineInterpolationResult | null
   getInterpolatedStates: (now: number) => Map<string, TimelineInterpolationResult>
   getTimeline: (callsign: string) => AircraftTimeline | undefined
+  /**
+   * The observations an aircraft is shown from now: in live playback its drawn list, a drop hold's point included;
+   * in replay and imported playback its stored list.
+   */
+  getShownObservations: (callsign: string) => AircraftObservation[] | undefined
 
   /**
    * Get the data loading status for the overlay.
@@ -421,31 +417,111 @@ function pruneObservations(
 // DYNAMIC DISPLAY DELAY
 // ============================================================================
 
+/** The cadence-carrying intervals of a drawn list. */
+interface CadenceIntervals {
+  /** Intervals in milliseconds (most recent last) */
+  intervals: number[]
+  /** At least one interval counted, and each was a still interval of a stopped aircraft (counted as VNAS_CADENCE_MS) */
+  allStill: boolean
+}
+
 /**
  * The receive intervals between consecutive observations among the last `maxIntervals` that carry the source's
- * cadence (`carriesCadence`).
+ * cadence (`carriesCadence`). While the newest sample is stopped, an interval between two vNAS samples the aircraft
+ * stood still across, up to VNAS_PREFERENCE_THRESHOLD_MS, counts as VNAS_CADENCE_MS.
  *
  * @param observations - Array of observations (oldest first), the list the aircraft is drawn from
  *                       (`filterObservationsForSource`)
  * @param maxIntervals - Number of consecutive pairs, newest last, to look at
- * @returns Array of intervals in milliseconds (most recent last)
+ * @param newestStopped - Whether the list's newest sample is a stopped vNAS sample (`isNewestStopped`)
+ * @returns The intervals, and whether every one was a stopped aircraft's still interval
  */
-function calculateObservationIntervals(observations: AircraftObservation[], maxIntervals: number): number[] {
-  if (observations.length < 2) return []
-
+function calculateObservationIntervals(
+  observations: AircraftObservation[],
+  maxIntervals: number,
+  newestStopped: boolean,
+): CadenceIntervals {
   const intervals: number[] = []
+  let stillCount = 0
   const startIdx = Math.max(0, observations.length - maxIntervals - 1)
 
   for (let i = startIdx; i < observations.length - 1; i++) {
     const previous = observations[i]
     const next = observations[i + 1]
     const interval = next.receivedAt - previous.receivedAt
-    if (interval > 0 && carriesCadence(previous, next, interval)) {
+    if (interval <= 0) continue
+    if (newestStopped && interval <= VNAS_PREFERENCE_THRESHOLD_MS && isStillVnasInterval(previous, next)) {
+      intervals.push(VNAS_CADENCE_MS)
+      stillCount++
+    } else if (carriesCadence(previous, next, interval)) {
       intervals.push(interval)
     }
   }
 
-  return intervals
+  return { intervals, allStill: stillCount > 0 && stillCount === intervals.length }
+}
+
+/** Whether two consecutive observations are vNAS samples the aircraft stood still across (under STOPPED_SPEED_KTS). */
+function isStillVnasInterval(previous: AircraftObservation, next: AircraftObservation): boolean {
+  return previous.source === 'vnas' && next.source === 'vnas' && stepSpeedKts(previous, next) < STOPPED_SPEED_KTS
+}
+
+/**
+ * Whether the newest observation of a list is a stopped vNAS sample for the display-delay rules: it is one
+ * (`isStoppedVnasSample`), or it stood still since one, reached back over still vNAS steps of any length (a parked
+ * silence included) within the last DYNAMIC_DELAY_INTERVAL_WINDOW intervals. The stop test looks back only
+ * VNAS_STOP_WINDOW_MS, so it misses a parked aircraft's stop after a longer still gap. A moving step ends the walk.
+ */
+function isNewestStopped(observations: AircraftObservation[], callsign: string, aircraftType: string | null): boolean {
+  const newest = observations.length - 1
+  const oldest = Math.max(0, newest - DYNAMIC_DELAY_INTERVAL_WINDOW)
+  for (let i = newest; i >= oldest; i--) {
+    if (isStoppedVnasSample(observations, i, callsign, aircraftType)) return true
+    if (i === oldest || !isStillVnasInterval(observations[i - 1], observations[i])) return false
+  }
+  return false
+}
+
+/**
+ * Per sample, its still run's start (`stillRunStartAt`) and the observed time of the sample before it in the list that
+ * start was found in. A value holds no observation: each sample keeping the one before it alive would keep every pruned
+ * sample of a parked run. Exported for tests.
+ */
+export const stillRunStartCache = new WeakMap<
+  AircraftObservation,
+  { previousObservedAt: number | null; startAt: number }
+>()
+
+/**
+ * Where a list's trailing still run starts, the place the aircraft came to rest: the observed time of the run's first
+ * sample, going back from the newest sample over still vNAS steps (`isStillVnasInterval`). Display time before it
+ * still shows the aircraft moving, so the stopped delay rules wait for display time to reach it. A run back to the
+ * list's oldest sample starts at -Infinity, since before that sample the aircraft is drawn held there, at rest. Found
+ * once per sample and the sample before it in the list. Exported for tests.
+ */
+export function stillRunStartAt(observations: AircraftObservation[]): number {
+  const walked: number[] = []
+  let startAt = Number.NEGATIVE_INFINITY
+  for (let i = observations.length - 1; i >= 0; i--) {
+    const previous = i > 0 ? observations[i - 1] : null
+    const cached = stillRunStartCache.get(observations[i])
+    if (cached !== undefined && cached.previousObservedAt === (previous?.observedAt ?? null)) {
+      startAt = cached.startAt
+      break
+    }
+    walked.push(i)
+    if (previous !== null && !isStillVnasInterval(previous, observations[i])) {
+      startAt = observations[i].observedAt
+      break
+    }
+  }
+  for (const i of walked) {
+    stillRunStartCache.set(observations[i], {
+      previousObservedAt: i > 0 ? observations[i - 1].observedAt : null,
+      startAt,
+    })
+  }
+  return startAt
 }
 
 /**
@@ -678,15 +754,47 @@ function lastObservationOfSource(
  * would return [obs, null] and extrapolate from a stationary point, freezing the
  * aircraft until the second vNAS observation arrives. Mixing in VATSIM until then
  * gives us a valid bracketing pair and continuous motion.
+ *
+ * A mixed list leaves out every other source's late report (`withoutLateReports`), so display time never moves back on
+ * one. A report received before vNAS started for the aircraft is drawn.
  */
 function filterObservationsForSource(observations: AircraftObservation[], now: number): AircraftObservation[] {
   const vnasOnly = observations.filter((o) => o.source === 'vnas')
-  if (vnasOnly.length < 2) return observations
+  if (vnasOnly.length === 0) return observations
 
   const newestVnasObs = vnasOnly[vnasOnly.length - 1]
-  if (now - newestVnasObs.receivedAt >= VNAS_PREFERENCE_THRESHOLD_MS) return observations
+  if (vnasOnly.length >= 2 && now - newestVnasObs.receivedAt < VNAS_PREFERENCE_THRESHOLD_MS) return vnasOnly
 
-  return vnasOnly
+  return withoutLateReports(observations)
+}
+
+/**
+ * The observations less every other source's late report: one received after a vNAS sample observed later than it.
+ * Observations are stored in receive order, so one pass keeps the newest observed time of the vNAS samples before
+ * each report.
+ */
+function withoutLateReports(observations: AircraftObservation[]): AircraftObservation[] {
+  const drawn: AircraftObservation[] = []
+  let newestVnasObservedAt = Number.NEGATIVE_INFINITY
+  for (const obs of observations) {
+    if (obs.source === 'vnas') {
+      newestVnasObservedAt = Math.max(newestVnasObservedAt, obs.observedAt)
+      drawn.push(obs)
+    } else if (obs.observedAt >= newestVnasObservedAt) {
+      drawn.push(obs)
+    }
+  }
+  return drawn
+}
+
+/**
+ * Whether a VATSIM report is not newer (by observedAt) than the newest stored observation, so storing it would put
+ * stale data into the middle of the timeline.
+ */
+function isStaleVatsimReport(existing: AircraftTimeline | undefined, observation: AircraftObservation): boolean {
+  if (observation.source !== 'vatsim' || !existing) return false
+  const newestExisting = existing.observations[existing.observations.length - 1]
+  return newestExisting !== undefined && observation.observedAt <= newestExisting.observedAt
 }
 
 /** The newest observation that carries a height above ground, or null when none does. */
@@ -788,15 +896,20 @@ function drawingGroundFlag(flagSource: AircraftObservation, heightAboveGround: n
  * window carries cadence (a still aircraft, a change of source), the current target stays; a new aircraft takes the
  * source's delay.
  *
+ * While the newest sample is stopped, a measured target is at least the vNAS cadence's (VNAS_CADENCE_MS plus the
+ * jitter buffer).
+ *
  * @param observations - Observations the intervals were measured from (the drawn list)
  * @param intervals - Recent observation intervals in ms that carry cadence
  * @param currentTarget - The aircraft's target delay so far, or null for a new aircraft
+ * @param newestStopped - Whether the drawn list's newest sample is a stopped vNAS sample
  * @returns Target delay in milliseconds
  */
 function calculateTargetDelay(
   observations: AircraftObservation[],
   intervals: number[],
   currentTarget: number | null,
+  newestStopped: boolean,
 ): number {
   const tooFew = observations.length < DYNAMIC_DELAY_MIN_OBSERVATIONS
   if (!tooFew && intervals.length === 0 && currentTarget !== null) return currentTarget
@@ -807,7 +920,7 @@ function calculateTargetDelay(
   }
 
   // Use max interval to handle worst-case timing
-  const maxInterval = Math.max(...intervals)
+  const maxInterval = Math.max(...intervals, newestStopped ? VNAS_CADENCE_MS : 0)
 
   // Add jitter buffer and clamp to bounds
   const targetDelay = maxInterval + DYNAMIC_DELAY_JITTER_BUFFER_MS
@@ -820,24 +933,42 @@ function calculateTargetDelay(
  * Called when adding observations to update the interval history
  * and recalculate the target delay.
  *
+ * A stopped aircraft whose every counted interval is a still one takes its target at once when the delay is above it,
+ * since nothing in its window moved: an aircraft first seen parked at VATSIM's delay drops to the vNAS one as soon as
+ * its vNAS samples show the stop. It waits until display time (estimated from the last live frame's anchor
+ * offset) reaches the first sample of the still run (`stillRunStartAt`), so a taxi still being drawn is not cut short.
+ * A drop hold and the last anchor offset carry over.
+ *
  * @param existingState - Current dynamic delay state (or undefined for new aircraft)
  * @param observations - Current observation array (after adding new observation)
  * @param now - Current timestamp
+ * @param aircraft - The aircraft's callsign and type, which decide whether its newest sample is stopped
  * @returns Updated dynamic delay state
  */
 function updateDynamicDelayState(
   existingState: DynamicDelayState | undefined,
   observations: AircraftObservation[],
   now: number,
+  aircraft: { callsign: string; aircraftType: string | null },
 ): DynamicDelayState {
   // Filter observations to prefer vNAS when active (same logic as interpolation)
   const filteredObs = filterObservationsForSource(observations, now)
+  const newestStopped = isNewestStopped(filteredObs, aircraft.callsign, aircraft.aircraftType)
 
   // Calculate intervals from filtered observations
-  const intervals = calculateObservationIntervals(filteredObs, DYNAMIC_DELAY_INTERVAL_WINDOW)
+  const { intervals, allStill } = calculateObservationIntervals(
+    filteredObs,
+    DYNAMIC_DELAY_INTERVAL_WINDOW,
+    newestStopped,
+  )
 
   // Calculate target delay
-  const targetDelayMs = calculateTargetDelay(filteredObs, intervals, existingState?.targetDelayMs ?? null)
+  const targetDelayMs = calculateTargetDelay(
+    filteredObs,
+    intervals,
+    existingState?.targetDelayMs ?? null,
+    newestStopped,
+  )
 
   if (!existingState) {
     // New aircraft - start at the target (the source's display delay until intervals can be measured),
@@ -852,12 +983,19 @@ function updateDynamicDelayState(
   }
 
   // Return updated state (currentDelayMs and extrapolationBumpMs will be smoothed at interpolation time)
+  const anchor = filteredObs[0]
+  const anchorOffsetMs = existingState.lastAnchorOffsetMs ?? anchor.observedAt - anchor.receivedAt
+  const displayTime = now + anchorOffsetMs - existingState.currentDelayMs
+  const snaps = allStill && displayTime >= stillRunStartAt(filteredObs)
   return {
-    currentDelayMs: existingState.currentDelayMs,
+    currentDelayMs: snaps ? Math.min(existingState.currentDelayMs, targetDelayMs) : existingState.currentDelayMs,
     targetDelayMs,
     lastUpdateTime: existingState.lastUpdateTime,
     intervalHistory: intervals,
     extrapolationBumpMs: existingState.extrapolationBumpMs,
+    dropHold: existingState.dropHold,
+    lastAnchorOffsetMs: existingState.lastAnchorOffsetMs,
+    lastDisplayTime: existingState.lastDisplayTime,
   }
 }
 
@@ -871,6 +1009,8 @@ function updateDynamicDelayState(
  *     It becomes the newest observation (replacing any stored point at or after its
  *     observedAt), so the aircraft carries on from VATSIM's latest position with that
  *     batch's receive time instead of timing out on older points.
+ *     Every observation of the dropped source goes; a hold at its newest sample lives in the delay state
+ *     (`dropHoldPoint`), never in the timeline.
  *
  * Returns:
  *   The stripped timeline with lastSource and lastReceivedAt re-derived from its newest
@@ -899,6 +1039,27 @@ function withoutSource(
     lastSource: newest.source,
     lastReceivedAt: newest.receivedAt,
   }
+}
+
+/**
+ * The point a source drop holds an aircraft at (`DropHold`), when its VATSIM pilot record (the seed) is older by
+ * observed time than the dropped source's newest sample: that sample, and for an aircraft the last frame drew past it,
+ * that sample at the frame's display time and position, so the hold freezes display time where it is and neither moves
+ * back. Null without a pilot record, where the drop strips the source and holds nothing, and when the record is at
+ * least as new.
+ */
+function dropHoldPoint(
+  timeline: AircraftTimeline,
+  source: AircraftDataSource,
+  vatsimEntry: VatsimTimelineEntry | undefined,
+  lastFrame: { displayTime: number | undefined; position: PriorFrameState['lastRenderedPos'] },
+): AircraftObservation | null {
+  if (!vatsimEntry) return null
+  const newestDropped = lastObservationOfSource(timeline.observations, source)
+  if (!newestDropped || vatsimEntry.observation.observedAt >= newestDropped.observedAt) return null
+  const { displayTime, position } = lastFrame
+  if (displayTime === undefined || !position || displayTime <= newestDropped.observedAt) return newestDropped
+  return { ...newestDropped, ...position, observedAt: displayTime }
 }
 
 /**
@@ -941,15 +1102,20 @@ function announceRemovals(callsigns: string[]): void {
  * The elapsed time is clamped to [0, DYNAMIC_DELAY_MAX_ELAPSED_MS], so a backward scrub never runs the
  * limit in reverse and a long gap between frames (a return to live, a hidden tab) never snaps the delay.
  *
+ * While the newest drawn sample is stopped, decreases run at DYNAMIC_DELAY_STOPPED_DECREASE_RATE instead.
+ *
  * @param state - Current dynamic delay state
  * @param now - Current timestamp
  * @param isExtrapolating - Whether we're currently extrapolating
+ * @param newestStopped - Whether the drawn list's newest sample is a stopped vNAS sample and display time has reached
+ *                        the first sample of its still run
  * @returns Updated current delay and new state
  */
 export function applyDelayTransition(
   state: DynamicDelayState,
   now: number,
   isExtrapolating: boolean,
+  newestStopped: boolean,
 ): { delayMs: number; updatedState: DynamicDelayState } {
   const { currentDelayMs, targetDelayMs, lastUpdateTime, extrapolationBumpMs } = state
   const elapsed = Math.max(0, Math.min(DYNAMIC_DELAY_MAX_ELAPSED_MS, now - lastUpdateTime))
@@ -983,7 +1149,8 @@ export function applyDelayTransition(
     newDelay = Math.min(effectiveTarget, currentDelayMs + maxIncrease)
   } else {
     // Decreasing delay - rate limit to avoid running out of buffer.
-    const maxDecrease = (elapsed / 1000) * DYNAMIC_DELAY_MAX_DECREASE_RATE
+    const rate = newestStopped ? DYNAMIC_DELAY_STOPPED_DECREASE_RATE : DYNAMIC_DELAY_MAX_DECREASE_RATE
+    const maxDecrease = (elapsed / 1000) * rate
     newDelay = Math.max(effectiveTarget, currentDelayMs - maxDecrease)
   }
 
@@ -995,6 +1162,101 @@ export function applyDelayTransition(
       lastUpdateTime: now,
       extrapolationBumpMs: newExtrapolationBump,
     },
+  }
+}
+
+/**
+ * The drop hold a live frame draws with: the state's, until VNAS_PREFERENCE_THRESHOLD_MS has passed since the drop.
+ * Null outside live playback.
+ */
+function activeDropHold(liveState: DynamicDelayState | null, now: number): DropHold | null {
+  const hold = liveState?.dropHold
+  if (!hold || now - hold.since >= VNAS_PREFERENCE_THRESHOLD_MS) return null
+  return hold
+}
+
+/**
+ * The list a frame draws an aircraft from: the stored observations `filterObservationsForSource` picks, and in front of
+ * those observed after it, a live drop hold's point.
+ */
+function drawnList(
+  allObservations: AircraftObservation[],
+  now: number,
+  liveState: DynamicDelayState | null,
+): { stored: AircraftObservation[]; hold: DropHold | null; observations: AircraftObservation[] } {
+  const stored = filterObservationsForSource(allObservations, now)
+  const hold = activeDropHold(liveState, now)
+  const observations = hold ? [hold.point, ...stored.filter((o) => o.observedAt > hold.point.observedAt)] : stored
+  return { stored, hold, observations }
+}
+
+/**
+ * The anchor offset a live frame draws with. An offset at or over the last frame's (`lastAnchorOffsetMs`) is taken at
+ * once; a lower one, which would move display time back, is reached by lowering the last one by at most
+ * (1 - DISPLAY_TIME_MIN_RATE) of the elapsed time, so display time keeps moving forward at DISPLAY_TIME_MIN_RATE or
+ * faster. The elapsed time is clamped as the delay's is (DYNAMIC_DELAY_MAX_ELAPSED_MS).
+ */
+function carriedAnchorOffset(liveState: DynamicDelayState, rawOffsetMs: number, now: number): number {
+  const last = liveState.lastAnchorOffsetMs
+  if (last === undefined || rawOffsetMs >= last) return rawOffsetMs
+  const elapsed = Math.max(0, Math.min(DYNAMIC_DELAY_MAX_ELAPSED_MS, now - liveState.lastUpdateTime))
+  return Math.max(rawOffsetMs, last - (1 - DISPLAY_TIME_MIN_RATE) * elapsed)
+}
+
+/**
+ * The displayed instant of a frame.
+ *
+ * Display time is anchored to the oldest sample of the stored drawn list, never to a drop hold's point: the anchor's
+ * observed time plus the time since its receipt, less the delay. In live playback (`liveState` set) a backward change
+ * of the anchor's offset is carried (`carriedAnchorOffset`), and display time stops at `holdUntil`, a drop hold's
+ * point while nothing newer is drawn, so the lag behind now grows 1:1 while the aircraft is held.
+ */
+function frameDisplayTime(
+  anchor: AircraftObservation,
+  now: number,
+  delayMs: number,
+  liveState: DynamicDelayState | null,
+  holdUntil: number | null,
+): number {
+  const rawOffsetMs = anchor.observedAt - anchor.receivedAt
+  const rawDisplayTime = anchor.observedAt + (now - anchor.receivedAt) - delayMs
+  const offsetMs = liveState ? carriedAnchorOffset(liveState, rawOffsetMs, now) : rawOffsetMs
+  return Math.min(rawDisplayTime + (offsetMs - rawOffsetMs), holdUntil ?? Number.POSITIVE_INFINITY)
+}
+
+/**
+ * Where a frame draws an aircraft a drop holds while the bracket has the hold's point on one side only: eased from the
+ * last rendered position until display time reaches the point (so the step at the drop is not a jump), then at it.
+ * The reconciliation toward the point carries on from the frame before when it has the same target.
+ */
+function heldAtDropPosition(
+  point: AircraftObservation,
+  displayTime: number,
+  reconciliation: ReconciliationState | undefined,
+  lastRenderedPos: PriorFrameState['lastRenderedPos'],
+  anchorObservedAt: number,
+): { position: { latitude: number; longitude: number; altitude: number }; reconciliation: ReconciliationState } {
+  const start = lastRenderedPos ?? point
+  const toPoint =
+    reconciliation?.targetObservedAt === point.observedAt
+      ? reconciliation
+      : {
+          targetObservedAt: point.observedAt,
+          startLat: start.latitude,
+          startLon: start.longitude,
+          startAlt: start.altitude,
+          startDisplayTime: displayTime,
+          anchorObservedAt,
+        }
+  const duration = point.observedAt - toPoint.startDisplayTime
+  const t = duration > 0 ? Math.max(0, Math.min(1, (displayTime - toPoint.startDisplayTime) / duration)) : 1
+  return {
+    position: {
+      latitude: lerp(toPoint.startLat, point.latitude, t),
+      longitude: lerp(toPoint.startLon, point.longitude, t),
+      altitude: lerp(toPoint.startAlt, point.altitude, t),
+    },
+    reconciliation: toPoint,
   }
 }
 
@@ -1101,6 +1363,53 @@ type ReconciliationState = {
   startAlt: number
   startDisplayTime: number // displayTime when we started
   anchorObservedAt: number // Anchor (oldest obs) when this reconciliation was created
+  holdGap?: HoldGap // Set on the reconciliation an expired drop hold starts, whose target is the extrapolated position
+}
+
+/** A position an aircraft is drawn at. */
+type DrawnPosition = { latitude: number; longitude: number; altitude: number }
+
+/** How far where an expired drop hold last drew an aircraft is off its first extrapolated position, and since when. */
+type HoldGap = DrawnPosition & { startedAt: number }
+
+/**
+ * The reconciliation of an aircraft whose drop hold expired with no report past it: however far the reports extrapolate
+ * off where the hold drew it, it starts there.
+ */
+function holdRelease(
+  held: DrawnPosition,
+  extrapolated: DrawnPosition,
+  from: AircraftObservation,
+  times: { now: number; displayTime: number; anchorObservedAt: number },
+): ReconciliationState {
+  return {
+    targetObservedAt: from.observedAt,
+    startLat: held.latitude,
+    startLon: held.longitude,
+    startAlt: held.altitude,
+    startDisplayTime: times.displayTime,
+    anchorObservedAt: times.anchorObservedAt,
+    holdGap: {
+      latitude: held.latitude - extrapolated.latitude,
+      longitude: held.longitude - extrapolated.longitude,
+      altitude: held.altitude - extrapolated.altitude,
+      startedAt: times.now,
+    },
+  }
+}
+
+/**
+ * Where an expired drop hold's release draws an aircraft: the extrapolated position plus what is left of the gap, which
+ * closes at a constant rate over DROP_HOLD_RELEASE_MS of host time, while display time may jump. Null once it has closed.
+ */
+function positionClosingHoldGap(extrapolated: DrawnPosition, gap: HoldGap, now: number): DrawnPosition | null {
+  const left = 1 - (now - gap.startedAt) / DROP_HOLD_RELEASE_MS
+  if (left <= 0) return null
+  return {
+    latitude: extrapolated.latitude + left * gap.latitude,
+    longitude: extrapolated.longitude + left * gap.longitude,
+    altitude: extrapolated.altitude + left * gap.altitude,
+  }
 }
 
 /** What earlier frames left for one aircraft, read by the next interpolation. */
@@ -1146,10 +1455,13 @@ function interpolateTimeline(
   // VNAS_PREFERENCE_THRESHOLD_MS), we use only vNAS observations for interpolation.
   // This provides smooth 1Hz interpolation when vNAS is active, and seamless fallback
   // to VATSIM's 15s updates when vNAS goes quiet.
-  const observations = filterObservationsForSource(allObservations, now)
+  // A drop hold and a carried anchor are live only: replay, imported playback and buffer-replay seeks draw without
+  const liveState = dynamicDelay && useReplayStore.getState().playbackMode === 'live' ? dynamicDelay : null
+  const { stored, hold, observations } = drawnList(allObservations, now, liveState)
+  const holdExpired = hold === null && liveState?.dropHold !== undefined
 
   const newestObs = observations[observations.length - 1]
-  const oldestObs = observations[0]
+  const oldestObs = stored[0]
 
   // Display delay always comes from the dynamic-delay state, which adapts to per-aircraft
   // observation cadence and rate-limits both increases and decreases for smooth transitions.
@@ -1178,9 +1490,12 @@ function interpolateTimeline(
   // By anchoring to oldestObs, displayTime advances smoothly with local time:
   //   displayTime = oldestObs.observedAt + (now - oldestObs.receivedAt) - displayDelay
   //
-  // As observations are pruned (MAX_OBSERVATIONS_PER_AIRCRAFT), the anchor stays fresh.
-  const timeSinceOldestReceived = now - oldestObs.receivedAt
-  const displayTime = oldestObs.observedAt + timeSinceOldestReceived - displayDelay
+  // As observations are pruned (MAX_OBSERVATIONS_PER_AIRCRAFT), the anchor stays fresh. A live aircraft's display
+  // time is carried over a backward change of the anchor, and held at a drop's point while nothing newer is drawn
+  // (`frameDisplayTime`). Display time reaching the first report drawn after a hold's point releases the hold.
+  const holdUntil = hold && observations.length === 1 ? hold.point.observedAt : null
+  const displayTime = frameDisplayTime(oldestObs, now, displayDelay, liveState, holdUntil)
+  const releasesHold = hold !== null && observations.length > 1 && displayTime >= observations[1].observedAt
 
   // Find bracketing observations
   const [before, after] = findBracketingObservations(observations, displayTime)
@@ -1514,6 +1829,20 @@ function interpolateTimeline(
     } else {
       verticalRate = null
     }
+  } else if (hold && (before ?? after) === hold.point) {
+    // HELD AT A DROP: the hold's point with nothing on its other side, drawn as the aircraft last moved there: its
+    // speed, track and attitude. Holding is not extrapolation, so it does not bump the display delay.
+    const held = heldAtDropPosition(hold.point, displayTime, reconciliation, lastRenderedPos, oldestObs.observedAt)
+    newReconciliation = held.reconciliation
+    latitude = held.position.latitude
+    longitude = held.position.longitude
+    altitude = held.position.altitude
+    groundspeed = hold.point.groundspeed
+    groundTrack = hold.point.groundTrack
+    groundFlagSource = hold.point
+    pitch = hold.point.pitch
+    roll = hold.point.roll
+    verticalRate = hold.point.verticalRate
   } else if (
     before &&
     before === observations[observations.length - 1] &&
@@ -1537,9 +1866,14 @@ function interpolateTimeline(
     const clampedExtrapolation = Math.min(extrapolationTime, MAX_EXTRAPOLATION_TIME)
 
     const extrapolated = extrapolatePosition(before, clampedExtrapolation)
-    latitude = extrapolated.latitude
-    longitude = extrapolated.longitude
-    altitude = extrapolated.altitude
+    // The frame a drop hold expires on starts its release from where the hold drew the aircraft, never in one frame
+    const times = { now, displayTime, anchorObservedAt: oldestObs.observedAt }
+    const running = liveState && reconciliation?.holdGap ? reconciliation : null
+    const release = holdExpired && lastRenderedPos ? holdRelease(lastRenderedPos, extrapolated, before, times) : running
+    const closing = release?.holdGap ? positionClosingHoldGap(extrapolated, release.holdGap, now) : null
+    latitude = (closing ?? extrapolated).latitude
+    longitude = (closing ?? extrapolated).longitude
+    altitude = (closing ?? extrapolated).altitude
     groundspeed = before.groundspeed
     groundTrack = before.groundTrack
 
@@ -1568,9 +1902,9 @@ function interpolateTimeline(
     pitch = before.pitch
     roll = before.roll
 
-    // Clear reconciliation during extrapolation - we'll start fresh when new data arrives
+    // Clear reconciliation during extrapolation, but for a drop hold's release - we'll start fresh when new data arrives
     // The lastRenderedPos (tracked by caller) will tell us where we were
-    newReconciliation = null
+    newReconciliation = closing ? release : null
 
     // Vertical rate: prefer ADS-B data, otherwise estimate from recent observations
     if (before.verticalRate !== null) {
@@ -1658,11 +1992,19 @@ function interpolateTimeline(
   // The updated state is returned so the caller can persist it for next frame.
   let newDynamicDelay: DynamicDelayState | null = null
   if (currentDynamicDelayState) {
-    const { updatedState } = applyDelayTransition(currentDynamicDelayState, now, isExtrapolating)
-    newDynamicDelay = updatedState
+    // The stopped rate waits until display time reaches where the aircraft came to rest
+    const newestStopped =
+      isNewestStopped(observations, callsign, metadata.aircraftType) && displayTime >= stillRunStartAt(observations)
+    const { updatedState } = applyDelayTransition(currentDynamicDelayState, now, isExtrapolating, newestStopped)
+    newDynamicDelay = {
+      ...updatedState,
+      dropHold: hold && !releasesHold ? hold : undefined,
+      lastAnchorOffsetMs: liveState ? displayTime - now + updatedState.currentDelayMs : undefined,
+      lastDisplayTime: liveState ? displayTime : undefined,
+    }
   }
 
-  const heightAboveGround = heightAboveGroundAt(allObservations, before, after, displayTime, now)
+  const heightAboveGround = heightAboveGroundAt(observations, before, after, displayTime, now)
   // The run reads samples up to the bracket's `after`, never beyond; while extrapolating or held, up to `before`
   // and only lane B (no resting height learned) reads it
   const laneB = heightAboveGround !== null && restingHeightFor(callsign, metadata.aircraftType) === null
@@ -1683,7 +2025,8 @@ function interpolateTimeline(
       heightAboveGround,
       settleRun,
       bracketStartStopped: bracketStartsStopped(observations, before, after),
-      displayAnchorOffsetMs: oldestObs.observedAt - oldestObs.receivedAt,
+      displayAnchorOffsetMs: displayTime - now,
+      heldAtDrop: hold !== null,
       pitch,
       roll,
       verticalRate,
@@ -1736,6 +2079,14 @@ export const useAircraftTimelineStore = create<AircraftTimelineStore>((set, get)
     if (existing) {
       oldestBefore = existing.observations[0]?.observedAt ?? null
 
+      // A VATSIM report not newer than the newest stored observation: keep the metadata only, as the batch path does
+      if (isStaleVatsimReport(existing, observation)) {
+        const updated = new Map(timelines)
+        updated.set(callsign, { ...existing, metadata: mergedMetadata })
+        set({ timelines: updated })
+        return
+      }
+
       // Check if this observation is too close to the last one from the same source
       const lastObs = lastObservationOfSource(existing.observations, observation.source)
       if (lastObs && observation.receivedAt - lastObs.receivedAt < MIN_OBSERVATION_INTERVAL) {
@@ -1772,7 +2123,10 @@ export const useAircraftTimelineStore = create<AircraftTimelineStore>((set, get)
 
     // Update dynamic delay state
     const { dynamicDelays } = get()
-    const dynamicDelay = updateDynamicDelayState(dynamicDelays.get(callsign), observations, observation.receivedAt)
+    const dynamicDelay = updateDynamicDelayState(dynamicDelays.get(callsign), observations, observation.receivedAt, {
+      callsign,
+      aircraftType: mergedMetadata.aircraftType,
+    })
 
     // Debug: Log observation additions for tracked aircraft
     if (import.meta.env.DEV) {
@@ -1844,20 +2198,17 @@ export const useAircraftTimelineStore = create<AircraftTimelineStore>((set, get)
       //
       // However, don't insert VATSIM observations that are older than our newest
       // observation - that would insert stale data into the middle of the timeline.
-      if (observation.source === 'vatsim' && existing) {
-        const newestExisting = existing.observations[existing.observations.length - 1]
-        if (newestExisting && observation.observedAt <= newestExisting.observedAt) {
-          // VATSIM observation is older than what we have - skip position but update metadata.
-          // Don't bump lastReceivedAt: we didn't actually accept new data. Bumping it would
-          // hide the staleness from the prune timer and let aircraft persist indefinitely
-          // while extrapolating from old vNAS data. Subsequent VATSIM cycles will produce
-          // observedAt > newestExisting.observedAt and refresh lastReceivedAt naturally.
-          updated.set(callsign, {
-            ...existing,
-            metadata: mergedMetadata,
-          })
-          continue
-        }
+      if (existing && isStaleVatsimReport(existing, observation)) {
+        // VATSIM observation is older than what we have - skip position but update metadata.
+        // Don't bump lastReceivedAt: we didn't actually accept new data. Bumping it would
+        // hide the staleness from the prune timer and let aircraft persist indefinitely
+        // while extrapolating from old vNAS data. Subsequent VATSIM cycles will produce
+        // observedAt > newestExisting.observedAt and refresh lastReceivedAt naturally.
+        updated.set(callsign, {
+          ...existing,
+          metadata: mergedMetadata,
+        })
+        continue
       }
 
       let observations: AircraftObservation[]
@@ -1898,7 +2249,10 @@ export const useAircraftTimelineStore = create<AircraftTimelineStore>((set, get)
       recordObservationRest(callsign, observation, mergedMetadata.aircraftType)
 
       // Update dynamic delay state
-      const dynamicDelay = updateDynamicDelayState(updatedDelays.get(callsign), observations, observation.receivedAt)
+      const dynamicDelay = updateDynamicDelayState(updatedDelays.get(callsign), observations, observation.receivedAt, {
+        callsign,
+        aircraftType: mergedMetadata.aircraftType,
+      })
       updatedDelays.set(callsign, dynamicDelay)
 
       // Debug: Log observation additions for tracked aircraft
@@ -2045,14 +2399,24 @@ export const useAircraftTimelineStore = create<AircraftTimelineStore>((set, get)
       if (!timeline?.observations.some((observation) => observation.source === source)) continue
       changed = true
 
-      const stripped = withoutSource(timeline, source, findVatsimEntry(callsign))
+      const vatsimEntry = findVatsimEntry(callsign)
+      const stripped = withoutSource(timeline, source, vatsimEntry)
       if (stripped) {
         const newest = stripped.observations[stripped.observations.length - 1]
         updatedTimelines.set(callsign, stripped)
-        updatedDelays.set(
+        const lastDelay = dynamicDelays.get(callsign)
+        const delay = updateDynamicDelayState(lastDelay, stripped.observations, newest.receivedAt, {
           callsign,
-          updateDynamicDelayState(dynamicDelays.get(callsign), stripped.observations, newest.receivedAt),
-        )
+          aircraftType: stripped.metadata.aircraftType,
+        })
+        const holdPoint = dropHoldPoint(timeline, source, vatsimEntry, {
+          displayTime: lastDelay?.lastDisplayTime,
+          position: lastRenderedPositions.get(callsign),
+        })
+        updatedDelays.set(callsign, {
+          ...delay,
+          dropHold: holdPoint ? { point: holdPoint, since: Date.now() } : undefined,
+        })
         continue
       }
 
@@ -2308,6 +2672,13 @@ export const useAircraftTimelineStore = create<AircraftTimelineStore>((set, get)
    */
   getTimeline: (callsign) => {
     return get().timelines.get(callsign)
+  },
+
+  getShownObservations: (callsign) => {
+    const timeline = get().timelines.get(callsign)
+    if (!timeline) return undefined
+    if (useReplayStore.getState().playbackMode !== 'live') return timeline.observations
+    return drawnList(timeline.observations, Date.now(), get().dynamicDelays.get(callsign) ?? null).observations
   },
 
   /**

@@ -25,7 +25,7 @@ import {
   STICKY_PHASE_EXIT_TIMES,
   SUSTAINED_APPROACH_THRESHOLD_MS,
 } from '@/constants'
-import type { AircraftObservation, AircraftTimeline } from '../../types/aircraft-timeline'
+import type { AircraftObservation } from '../../types/aircraft-timeline'
 import type { InterpolatedAircraftState } from '../../types/vatsim'
 import { haversineDistanceNm } from './geoMath'
 import type { FlightPhase, PhaseDetectionResult, RunwayProximity, SmartSortContext } from './types'
@@ -143,36 +143,36 @@ export function clearStabilizationStates(): void {
 // ============================================================================
 
 /**
- * Compute acceleration from a window of timeline observations ending at the display time.
+ * Compute acceleration from a window of the shown observations ending at the display time.
  * This is much more stable than frame-to-frame acceleration.
  *
  * The window holds the observations of the ACCEL_WINDOW_MS before `displayTime`; when it holds fewer than two, it
  * widens to the two newest observations at or before `displayTime` if they span at most ACCEL_WINDOW_MAX_SPAN_MS.
  * Observations newer than `displayTime` are not yet shown and are left out.
  *
- * @param timeline Aircraft timeline, observations oldest first
+ * @param shown The aircraft's shown observations, oldest first (`getShownObservations`)
  * @param displayTime The displayed instant, in the observations' `observedAt` domain (ms)
  * @returns Acceleration in knots/second and a confidence value (0-1)
  */
 export function computeWindowedAcceleration(
-  timeline: AircraftTimeline | undefined,
+  shown: AircraftObservation[] | undefined,
   displayTime: number,
 ): {
   acceleration: number
   confidence: number
 } {
-  if (!timeline) {
+  if (!shown) {
     return { acceleration: 0, confidence: 0 }
   }
 
-  const shown = timeline.observations.filter((obs) => obs.observedAt <= displayTime)
-  if (shown.length < 2) {
+  const reached = shown.filter((obs) => obs.observedAt <= displayTime)
+  if (reached.length < 2) {
     return { acceleration: 0, confidence: 0 }
   }
 
   const windowStart = displayTime - ACCEL_WINDOW_MS
-  const recent = shown.filter((obs) => obs.observedAt >= windowStart)
-  const inWindow = recent.length >= 2 ? recent : shown.slice(-2)
+  const recent = reached.filter((obs) => obs.observedAt >= windowStart)
+  const inWindow = recent.length >= 2 ? recent : reached.slice(-2)
 
   // Get oldest and newest in window
   const oldest = inWindow[0]
@@ -199,14 +199,14 @@ export function computeWindowedAcceleration(
  * Get the observations of the `windowMs` up to the display time; newer ones are not yet shown.
  */
 function getRecentObservations(
-  timeline: AircraftTimeline | undefined,
+  shown: AircraftObservation[] | undefined,
   windowMs: number,
   displayTime: number,
 ): AircraftObservation[] {
-  if (!timeline) return []
+  if (!shown) return []
 
   const windowStart = displayTime - windowMs
-  return timeline.observations.filter((obs) => obs.observedAt >= windowStart && obs.observedAt <= displayTime)
+  return shown.filter((obs) => obs.observedAt >= windowStart && obs.observedAt <= displayTime)
 }
 
 // ============================================================================
@@ -273,7 +273,7 @@ function analyzeDistanceTrajectory(
  */
 function isValidGoAround(
   aircraft: InterpolatedAircraftState,
-  timeline: AircraftTimeline | undefined,
+  shown: AircraftObservation[] | undefined,
   nearestRunway: RunwayProximity | null,
   state: PhaseStabilizationState,
   context: SmartSortContext,
@@ -284,9 +284,9 @@ function isValidGoAround(
   // 2. Must be near runway (within 3nm)
   if (!nearestRunway || nearestRunway.distanceNm > GO_AROUND_DISTANCE_NM) return false
 
-  // 3. Check vertical trajectory from timeline
-  if (timeline) {
-    const recentObs = getRecentObservations(timeline, GO_AROUND_APPROACH_WINDOW_MS, aircraft.displayTime)
+  // 3. Check vertical trajectory from the shown observations
+  if (shown) {
+    const recentObs = getRecentObservations(shown, GO_AROUND_APPROACH_WINDOW_MS, aircraft.displayTime)
     if (recentObs.length >= MIN_OBSERVATIONS_FOR_ANALYSIS) {
       // Split observations: first half for approach verification, last few for current state
       const midpoint = Math.floor(recentObs.length / 2)
@@ -323,7 +323,7 @@ function isValidGoAround(
  */
 function classifyRollPhase(
   aircraft: InterpolatedAircraftState,
-  timeline: AircraftTimeline | undefined,
+  shown: AircraftObservation[] | undefined,
   state: PhaseStabilizationState,
   context: SmartSortContext,
 ): 'departure_roll' | 'landing_roll' | 'ambiguous' {
@@ -331,7 +331,7 @@ function classifyRollPhase(
   let landingScore = 0
 
   // 1. Windowed acceleration (primary signal, but requires confidence)
-  const { acceleration, confidence } = computeWindowedAcceleration(timeline, aircraft.displayTime)
+  const { acceleration, confidence } = computeWindowedAcceleration(shown, aircraft.displayTime)
   if (confidence > 0.5) {
     if (acceleration > ACCELERATION_HYSTERESIS.accelerating.exit) {
       departureScore += ROLL_PHASE_SCORES.acceleratingPositive
@@ -518,7 +518,7 @@ function holdLandingRoll(confirmedPhase: FlightPhase, rawPhase: FlightPhase, gro
  * @param rawResult Raw detection result from detectRawFlightPhase
  * @param aircraft Current interpolated aircraft state; its `displayTime` is the clock for every timer and window
  * @param context Smart sort context (airport info, runways)
- * @param timeline Aircraft timeline for trajectory analysis
+ * @param shown The aircraft's shown observations for trajectory analysis (`getShownObservations`)
  * @param nearestRunway Nearest runway proximity info
  * @returns Stabilized phase
  */
@@ -527,7 +527,7 @@ export function stabilizePhase(
   rawResult: PhaseDetectionResult,
   aircraft: InterpolatedAircraftState,
   context: SmartSortContext,
-  timeline: AircraftTimeline | undefined,
+  shown: AircraftObservation[] | undefined,
   nearestRunway: RunwayProximity | null,
 ): FlightPhase {
   // Dwell, sticky exits and approach tracking run on the phase clock (the displayed instant), not the wall clock
@@ -540,7 +540,7 @@ export function stabilizePhase(
   updateApproachTracking(state, rawPhase, now)
 
   // Update acceleration state with hysteresis
-  const { acceleration } = computeWindowedAcceleration(timeline, now)
+  const { acceleration } = computeWindowedAcceleration(shown, now)
   state.accelState = updateAccelState(state.accelState, acceleration)
 
   // Update distance state with hysteresis (for final approach phases)
@@ -550,7 +550,7 @@ export function stabilizePhase(
   // Handle roll phase with multi-signal classification
   let effectiveRawPhase = rawPhase
   if (rawPhase === 'departure_roll' || rawPhase === 'landing_roll') {
-    const rollClass = classifyRollPhase(aircraft, timeline, state, context)
+    const rollClass = classifyRollPhase(aircraft, shown, state, context)
     if (rollClass !== 'ambiguous') {
       effectiveRawPhase = rollClass
     } else {
@@ -575,7 +575,7 @@ export function stabilizePhase(
 
   // Enhanced go-around detection using trajectory
   if (effectiveRawPhase === 'go_around') {
-    if (!isValidGoAround(aircraft, timeline, nearestRunway, state, context)) {
+    if (!isValidGoAround(aircraft, shown, nearestRunway, state, context)) {
       // Not a valid go-around - might be a normal departure
       if (state.confirmedPhase === 'departure_roll' || state.confirmedPhase === 'departing_climb') {
         effectiveRawPhase = state.confirmedPhase

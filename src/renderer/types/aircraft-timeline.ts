@@ -182,6 +182,36 @@ export interface DynamicDelayState {
    * Decays over time as observations arrive reliably.
    */
   extrapolationBumpMs: number
+  /**
+   * A vNAS drop's hold: live only, absent when there is none. Never written to a replay export.
+   */
+  dropHold?: DropHold
+  /**
+   * The display-time anchor offset the last live frame drew with: its display time less its time, plus the delay the
+   * next frame uses, so a backward anchor change is carried from it. Live only, absent until a live frame sets it and
+   * after a frame outside live playback. Never written to a replay export.
+   */
+  lastAnchorOffsetMs?: number
+  /**
+   * The display time the last live frame drew with, where a drop freezes it. Live only, absent until a live frame sets
+   * it and after a frame outside live playback. Never written to a replay export.
+   */
+  lastDisplayTime?: number
+}
+
+/**
+ * Where a vNAS drop (hub disconnect or session end) holds an aircraft whose VATSIM pilot record is older by observed
+ * time than its last vNAS sample: drawn first, ahead of the stored reports observed after it, until display time
+ * reaches the first of those or VNAS_PREFERENCE_THRESHOLD_MS has passed since the drop.
+ */
+export interface DropHold {
+  /**
+   * The aircraft's last vNAS sample before the drop, or, for an aircraft already drawn past that sample, the sample
+   * moved to where and when the last frame drew it, so neither moves back. Never stored in its timeline.
+   */
+  point: AircraftObservation
+  /** When the drop happened (ms, the host clock) */
+  since: number
 }
 
 /**
@@ -266,11 +296,17 @@ export interface TimelineInterpolationResult {
   bracketStartStopped: boolean
 
   /**
-   * The observed time less the received time (ms) of the sample display time is anchored to, the drawn list's oldest:
-   * display time is the frame's time plus this, less the display delay. When the drawn list switches source (vNAS
-   * alone or mixed with VATSIM), its oldest sample can change source and display time moves by this offset's change.
+   * Display time less the frame's time (ms). Every move display time makes of its own goes through it: the sample it is
+   * anchored to changing (the drawn list switching source), its delay moving (a stopped aircraft's snap included), a
+   * live aircraft's carried anchor (DISPLAY_TIME_MIN_RATE) and a drop hold. A move beyond what this moved is a seek.
    */
   displayAnchorOffsetMs: number
+
+  /**
+   * Whether a vNAS drop holds the aircraft (`DropHold`): it is drawn from the hold's point, so it is drawn even when
+   * that point is the only sample in its drawn list.
+   */
+  heldAtDrop: boolean
 
   /**
    * Pitch angle in degrees (interpolated from observations if available).
