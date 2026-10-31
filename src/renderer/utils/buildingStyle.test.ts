@@ -316,6 +316,7 @@ describe('shape fallback', () => {
           scene as unknown as Cesium.Scene,
           () => ({ destroy: () => {} }),
           () => false,
+          () => 0,
         ),
       )
       tileset.tileLoad.raiseEvent({ content })

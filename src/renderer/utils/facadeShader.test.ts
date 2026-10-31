@@ -1,6 +1,7 @@
 import * as Cesium from 'cesium'
 import { describe, expect, it } from 'vitest'
 import {
+  BUILDING_FACES_SAMPLER,
   BUILDING_LOOKUP_DEFINE,
   BUILDING_LOOKUP_SAMPLER,
   featureHash,
@@ -236,6 +237,16 @@ describe('createFacadeShader', () => {
     expect(text).toContain('facadeWallLinear(building.x, paletteIndex)')
     expect(decode).not.toContain(`${PACK_HASH_STATES}.0`)
     expect(decode).toContain('return vec4(code.r, code.g,')
+  })
+
+  // The patched stage declares the sampler (installBuildingLookupStage), as it does the lookup's; a
+  // second declaration in the shader text would not compile.
+  it('declares the face table sampler and reads nothing from it', () => {
+    const text = createFacadeShader().fragmentShaderText ?? ''
+
+    expect(BUILDING_FACES_SAMPLER).toBe('tc3d_buildingFaces')
+    expect(text).not.toContain(`texelFetch(${BUILDING_FACES_SAMPLER}`)
+    expect(text).not.toContain(`uniform sampler2D ${BUILDING_FACES_SAMPLER}`)
   })
 
   it('clamps the feature id into the lookup on both sides', () => {

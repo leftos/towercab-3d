@@ -21,6 +21,7 @@ import {
   FACADE_FADE_START,
   FACADE_FLOOR_HEIGHT_M,
   FACADE_LIT_SHARE,
+  FACADE_ROOF_COS,
   FACADE_WINDOW_HI,
   FACADE_WINDOW_LO,
 } from '@/constants'
@@ -501,7 +502,7 @@ void fragmentMain(FragmentInput fsInput, inout czm_modelMaterial material) {
   float detail = mix(1.0, fadeDetail, u_fade) * step(0.0, ground.w);
   float ribDetail = 1.0 - smoothstep(0.25, 0.6, ribAa);
 
-  if (dot(normalWC, upWC) > 0.6) {
+  if (dot(normalWC, upWC) > ${glslFloat(FACADE_ROOF_COS)}) {
     return;
   }
 

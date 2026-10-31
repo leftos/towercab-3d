@@ -745,7 +745,9 @@ function CesiumViewer({ viewportId = 'main', isInset = false, isActivated = true
                 error,
               )
             })
-          detachLookup = attachBuildingLookup(tileset, viewer.scene, createLookupTexture, isShapeFallbackOn)
+          detachLookup = attachBuildingLookup(tileset, viewer.scene, createLookupTexture, isShapeFallbackOn, () =>
+            performance.now(),
+          )
 
           viewer.scene.primitives.add(tileset)
           currentTileset = tileset

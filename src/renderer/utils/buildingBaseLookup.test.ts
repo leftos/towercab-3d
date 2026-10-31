@@ -1,11 +1,18 @@
 import * as Cesium from 'cesium'
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import { BUILDING_LOOKUP_BUILD_BUDGET_MS } from '@/constants'
+import {
+  BUILDING_LOOKUP_BUILD_BUDGET_MS,
+  FACE_BUILD_CHUNK_PLANE_TESTS,
+  FACE_BUILD_CHUNK_TRIANGLES,
+  FACE_LINK_CHUNK_PAIRS,
+} from '@/constants'
 import {
   attachBuildingLookup,
+  BUILDING_FACES_SAMPLER,
   BUILDING_LOOKUP_DEFINE,
   BUILDING_LOOKUP_SAMPLER,
   computeFeatureStats,
+  emptyFaceTexels,
   emptyLookupTexels,
   type FeatureProperties,
   featureGroundOffset,
@@ -21,8 +28,27 @@ import {
   type PrimitiveGeometry,
   readTileGeometry,
 } from '@/utils/buildingBaseLookup'
-import { BOX_TRIANGLES, ENU, type FakeContext, fakeContext, fakeModel } from '@/utils/buildingLookupFakes.test-support'
+import { FaceBuilder, type FaceStepWork } from '@/utils/buildingFaces'
+import {
+  BOX_TRIANGLES,
+  ENU,
+  type FakeContext,
+  fakeContext,
+  fakeModel,
+  farOrigin,
+  prismGeometry,
+  regularPolygon,
+} from '@/utils/buildingLookupFakes.test-support'
 import { PACK_HASH_STATES } from '@/utils/buildingStyle'
+
+// The module again with a per-tile face cap of 8, for the cap warning's test.
+vi.doMock('@/constants', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('@/constants')>()),
+  FACES_PER_TILE_MAX: 8,
+}))
+vi.resetModules()
+const smallFaceCap = await import('@/utils/buildingBaseLookup')
+vi.doUnmock('@/constants')
 
 interface Box {
   id: number
@@ -53,6 +79,7 @@ function geometry(boxes: readonly Box[]): PrimitiveGeometry {
 
 const TERMINAL: Box = { id: 0, x: [0, 10], y: [0, 20], z: [5, 17] }
 const TOWER: Box = { id: 1, x: [30, 40], y: [0, 5], z: [0, 30] }
+const SHED: Box = { id: 2, x: [50, 60], y: [0, 10], z: [0, 10] }
 
 function properties(values: Record<string, unknown>): FeatureProperties {
   return { getProperty: (name) => values[name] }
@@ -70,28 +97,7 @@ describe('computeFeatureStats', () => {
   })
 
   it('measures base and roof along the local up of a building about 70 km from the model origin', () => {
-    // At the equator the geodetic and geocentric up agree. The model frame sits 0.63° of longitude
-    // (about 70 km) west of the building, raised so the building's ground is at 0 along its own up.
-    const radius = Cesium.Ellipsoid.WGS84.maximumRadius
-    const theta = Cesium.Math.toRadians(0.63)
-    const origin = Cesium.Cartesian3.fromDegrees(0, 0, radius / Math.cos(theta) - radius)
-    const modelMatrix = Cesium.Transforms.eastNorthUpToFixedFrame(origin)
-    const site = Cesium.Transforms.eastNorthUpToFixedFrame(Cesium.Cartesian3.fromDegrees(0.63, 0, 0))
-    const siteToModel = Cesium.Matrix4.multiply(
-      Cesium.Matrix4.inverse(modelMatrix, new Cesium.Matrix4()),
-      site,
-      new Cesium.Matrix4(),
-    )
-    const box = geometry([{ id: 0, x: [0, 10], y: [0, 20], z: [0, 30] }])
-    const positions = new Float32Array(box.positions.length)
-    const point = new Cesium.Cartesian3()
-    for (let v = 0; v < positions.length; v += 3) {
-      Cesium.Cartesian3.fromElements(box.positions[v], box.positions[v + 1], box.positions[v + 2], point)
-      Cesium.Matrix4.multiplyByPoint(siteToModel, point, point)
-      positions.set([point.x, point.y, point.z], v)
-    }
-
-    const stats = computeFeatureStats([{ ...box, positions, modelMatrix }], 1)
+    const stats = computeFeatureStats([farOrigin(geometry([{ id: 0, x: [0, 10], y: [0, 20], z: [0, 30] }]))], 1)
 
     expect(Math.abs(stats.base[0])).toBeLessThan(0.01)
     expect(Math.abs(stats.roof[0] - 30)).toBeLessThan(0.01)
@@ -143,6 +149,18 @@ describe('fillTwins', () => {
     expect([stats.base[1], stats.roof[1], stats.area[1]]).toEqual([stats.base[0], stats.roof[0], stats.area[0]])
     expect(stats.hasGeometry[1]).toBe(0)
     expect(stats.area[2]).toBe(0)
+  })
+
+  it("gives a vertex-less twin its owner's face range, and a keyless feature none", () => {
+    const stats = computeFeatureStats([geometry([TERMINAL, TOWER])], 4)
+    stats.faceFirst.set([0, 4])
+    stats.faceCount.set([4, 6])
+
+    fillTwins(stats, ['w1', 'w2', 'w2', ''])
+
+    expect([stats.faceFirst[2], stats.faceCount[2]]).toEqual([4, 6])
+    expect([stats.faceFirst[3], stats.faceCount[3]]).toEqual([0, 0])
+    expect([stats.faceFirst[0], stats.faceCount[0]]).toEqual([0, 4])
   })
 
   it('never matches features without an element id', () => {
@@ -221,6 +239,20 @@ describe('lookupTexels', () => {
     expect(row1.slice(5, 8)).toEqual([0.75, 0, 0])
     expect(row1[8]).toBeCloseTo(17 - 5 + 2, 3)
     expect(row1.slice(9, 12)).toEqual([0.25, 0, 0])
+  })
+})
+
+describe('lookupTexels face range', () => {
+  it("writes each feature's first face and face count in row 1", () => {
+    const stats = computeFeatureStats([geometry([TERMINAL, TOWER])], 3)
+    stats.faceFirst.set([0, 4, 4])
+    stats.faceCount.set([4, 6, 0])
+
+    const row1 = [...lookupTexels(stats).subarray(3 * 4)]
+
+    expect([row1[2], row1[3]]).toEqual([0, 4])
+    expect([row1[6], row1[7]]).toEqual([4, 6])
+    expect([row1[10], row1[11]]).toEqual([4, 0])
   })
 })
 
@@ -343,6 +375,24 @@ describe('installBuildingLookupStage', () => {
     )
   })
 
+  it('binds the face table beside the lookup, once, and nothing on WebGL1', () => {
+    installBuildingLookupStage()
+    installBuildingLookupStage()
+    const fragment = PRIVATE.ShaderDestination.FRAGMENT
+
+    const webgl2 = processWith(true)
+    const webgl1 = processWith(false)
+
+    const faceUniforms = webgl2.shaderBuilder.addUniform.mock.calls.filter((call) => call[1] === BUILDING_FACES_SAMPLER)
+    expect(faceUniforms).toEqual([['highp sampler2D', BUILDING_FACES_SAMPLER, fragment]])
+    expect(BUILDING_FACES_SAMPLER).toBe('tc3d_buildingFaces')
+    expect(Object.keys(webgl2.uniformMap)).toEqual(
+      expect.arrayContaining([BUILDING_LOOKUP_SAMPLER, BUILDING_FACES_SAMPLER]),
+    )
+    expect(webgl1.shaderBuilder.addUniform.mock.calls.map((call) => call[1])).not.toContain(BUILDING_FACES_SAMPLER)
+    expect(webgl1.uniformMap[BUILDING_FACES_SAMPLER]).toBeUndefined()
+  })
+
   it('binds nothing on WebGL1, where the shader keeps the no-lookup sentinel', () => {
     installBuildingLookupStage()
 
@@ -356,7 +406,12 @@ describe('installBuildingLookupStage', () => {
 
 /** A ready model drawing the terminal box. */
 function terminalModel(fake: FakeContext, nodes: 'dense' | 'sparse' = 'dense') {
-  const { positions, featureIds, indices } = geometry([TERMINAL])
+  return boxesModel(fake, [TERMINAL], nodes)
+}
+
+/** A ready model drawing `boxes`. */
+function boxesModel(fake: FakeContext, boxes: readonly Box[], nodes: 'dense' | 'sparse' = 'dense') {
+  const { positions, featureIds, indices } = geometry(boxes)
   return fakeModel(fake, { positions, featureIds: featureIds as Float32Array, indices: indices as Uint16Array }, nodes)
 }
 
@@ -415,8 +470,23 @@ function applyStyleOf(tile: Cesium.Cesium3DTile) {
   return (tile.content as unknown as { applyStyle: ReturnType<typeof vi.fn> }).applyStyle
 }
 
-/** Attaches the lookup to fakes; `restyleWhen` is the lookup's restyle predicate. */
-function attachFakes(restyleWhen: () => boolean = () => true) {
+/** A clock that stands still, so a pass's budget never runs out. */
+const STILL = () => 0
+
+/**
+ * A clock that moves a little over half the budget at each read, so each render's pass takes one
+ * build step: the pass reads it once as it starts and once before each step.
+ */
+function oneStepPerRender(): () => number {
+  let time = 0
+  return () => {
+    time += (BUILDING_LOOKUP_BUILD_BUDGET_MS + 1) / 2
+    return time
+  }
+}
+
+/** Attaches the lookup to fakes; `restyleWhen` is the lookup's restyle predicate and `now` its clock. */
+function attachFakes(restyleWhen: () => boolean, now: () => number) {
   const fake = fakeContext()
   const tileset = {
     tileLoad: new Cesium.Event(),
@@ -436,9 +506,20 @@ function attachFakes(restyleWhen: () => boolean = () => true) {
     scene as unknown as Cesium.Scene,
     createTexture,
     restyleWhen,
+    now,
   )
   const render = () => scene.postRender.raiseEvent()
   return { fake, tileset, render, createTexture, textures, detach }
+}
+
+/** Renders until the tile's stats are published, at most `limit` times; returns the renders taken. */
+function renderUntilPublished(render: () => void, tile: Cesium.Cesium3DTile, limit: number): number {
+  let renders = 0
+  while (renders < limit && getTileFeatureStats(tile.content) === undefined) {
+    render()
+    renders++
+  }
+  return renders
 }
 
 describe('attachBuildingLookup', () => {
@@ -446,26 +527,33 @@ describe('attachBuildingLookup', () => {
     vi.restoreAllMocks()
   })
 
-  it("builds a loaded tile's two-row lookup at the next render, and releases it when the tile unloads", () => {
-    const { fake, tileset, render, createTexture, textures } = attachFakes()
+  it("builds a tile's lookup and face table together and releases both when it unloads", () => {
+    const { fake, tileset, render, createTexture, textures } = attachFakes(() => true, STILL)
     const tile = fakeTile(terminalModel(fake), 'a.glb')
 
     tileset.tileLoad.raiseEvent(tile)
     expect(getTileFeatureStats(tile.content)).toBeUndefined()
     render()
 
+    // The terminal box: one feature, a two-row lookup, and four wall faces of three texels each.
+    expect(createTexture).toHaveBeenCalledTimes(2)
     expect(createTexture).toHaveBeenCalledWith(fake.context, 1, 2, expect.any(Float32Array))
     expect((createTexture.mock.calls[0] as unknown[])[3]).toHaveLength(1 * 2 * 4)
-    expect(getTileFeatureStats(tile.content)?.base[0]).toBeCloseTo(5, 3)
+    expect(createTexture).toHaveBeenCalledWith(fake.context, 12, 1, expect.any(Float32Array))
+    expect((createTexture.mock.calls[1] as unknown[])[3]).toHaveLength(12 * 4)
+    const stats = getTileFeatureStats(tile.content)
+    expect(stats?.base[0]).toBeCloseTo(5, 3)
+    expect([stats?.faceFirst[0], stats?.faceCount[0]]).toEqual([0, 4])
 
     tileset.tileUnload.raiseEvent(tile)
 
     expect(textures[0].destroy).toHaveBeenCalledTimes(1)
+    expect(textures[1].destroy).toHaveBeenCalledTimes(1)
     expect(getTileFeatureStats(tile.content)).toBeUndefined()
   })
 
   it("fills each feature's hash from its position and carries it in row 1 of the texture", () => {
-    const { fake, tileset, render, createTexture } = attachFakes()
+    const { fake, tileset, render, createTexture } = attachFakes(() => true, STILL)
     const feature = properties({ elementId: 'w1', 'cesium#latitude': 37.61568, 'cesium#longitude': -122.38905 })
     const tile = fakeTile(terminalModel(fake), 'a.glb', () => feature)
 
@@ -480,7 +568,7 @@ describe('attachBuildingLookup', () => {
   })
 
   it('builds the empty texture of a tile without a lookup through the same factory, 1 wide and 2 high', () => {
-    const { fake, createTexture } = attachFakes()
+    const { fake, createTexture } = attachFakes(() => true, STILL)
     installBuildingLookupStage()
     const resources = fakeRenderResources()
     PRIVATE.BatchTexturePipelineStage.process(resources, {}, { context: fake.context })
@@ -491,8 +579,23 @@ describe('attachBuildingLookup', () => {
     expect(createTexture).toHaveBeenCalledWith(fake.context, 1, 2, emptyLookupTexels())
   })
 
+  it('binds the empty face table to a tile without a lookup', () => {
+    const { fake, createTexture } = attachFakes(() => true, STILL)
+    installBuildingLookupStage()
+    const resources = fakeRenderResources()
+    PRIVATE.BatchTexturePipelineStage.process(resources, {}, { context: fake.context })
+
+    const first = resources.uniformMap[BUILDING_FACES_SAMPLER]()
+    const again = resources.uniformMap[BUILDING_FACES_SAMPLER]()
+
+    expect(again).toBe(first)
+    expect(createTexture).toHaveBeenCalledTimes(1)
+    expect(createTexture).toHaveBeenCalledWith(fake.context, 3, 1, emptyFaceTexels())
+    expect([...emptyFaceTexels()]).toEqual(Array<number>(12).fill(0))
+  })
+
   it('releases every lookup on detach and stops listening', () => {
-    const { fake, tileset, render, createTexture, textures, detach } = attachFakes()
+    const { fake, tileset, render, createTexture, textures, detach } = attachFakes(() => true, STILL)
     tileset.tileLoad.raiseEvent(fakeTile(terminalModel(fake), 'a.glb'))
     render()
 
@@ -501,11 +604,12 @@ describe('attachBuildingLookup', () => {
     render()
 
     expect(textures[0].destroy).toHaveBeenCalledTimes(1)
-    expect(createTexture).toHaveBeenCalledTimes(1)
+    expect(textures[1].destroy).toHaveBeenCalledTimes(1)
+    expect(createTexture).toHaveBeenCalledTimes(2)
   })
 
   it('keeps a tile whose model is not ready queued until it is', () => {
-    const { fake, tileset, render, createTexture } = attachFakes()
+    const { fake, tileset, render, createTexture } = attachFakes(() => true, STILL)
     const model = { ...terminalModel(fake), ready: false }
     const tile = fakeTile(model, 'a.glb')
 
@@ -515,12 +619,12 @@ describe('attachBuildingLookup', () => {
 
     model.ready = true
     render()
-    expect(createTexture).toHaveBeenCalledTimes(1)
+    expect(createTexture).toHaveBeenCalledTimes(2)
   })
 
   it('drops a tile whose build throws, logs it once naming the tile, and builds the rest', () => {
     const error = vi.spyOn(console, 'error').mockImplementation(() => {})
-    const { fake, tileset, render, createTexture } = attachFakes()
+    const { fake, tileset, render, createTexture } = attachFakes(() => true, STILL)
     const broken = fakeTile(terminalModel(fake), 'broken.glb', () => {
       throw new Error('no feature')
     })
@@ -532,12 +636,12 @@ describe('attachBuildingLookup', () => {
 
     expect(error).toHaveBeenCalledTimes(1)
     expect(String(error.mock.calls[0][0])).toContain('broken.glb')
-    expect(createTexture).toHaveBeenCalledTimes(1)
+    expect(createTexture).toHaveBeenCalledTimes(2)
     expect(getTileFeatureStats(broken.content)).toBeUndefined()
   })
 
   it('restyles each tile a pass built, and only those', () => {
-    const { fake, tileset, render, createTexture } = attachFakes(() => true)
+    const { fake, tileset, render, createTexture } = attachFakes(() => true, STILL)
     const a = fakeTile(terminalModel(fake), 'a.glb')
     const b = fakeTile(terminalModel(fake), 'b.glb')
     const waiting = fakeTile({ ...terminalModel(fake), ready: false }, 'waiting.glb')
@@ -545,7 +649,7 @@ describe('attachBuildingLookup', () => {
 
     render()
 
-    expect(createTexture).toHaveBeenCalledTimes(2)
+    expect(createTexture).toHaveBeenCalledTimes(4)
     for (const built of [a, b]) {
       expect(applyStyleOf(built)).toHaveBeenCalledTimes(1)
       expect(applyStyleOf(built)).toHaveBeenCalledWith(tileset.style)
@@ -556,7 +660,7 @@ describe('attachBuildingLookup', () => {
 
   it("keeps restyling the other built tiles when one tile's applyStyle throws", () => {
     const error = vi.spyOn(console, 'error').mockImplementation(() => {})
-    const { fake, tileset, render } = attachFakes(() => true)
+    const { fake, tileset, render } = attachFakes(() => true, STILL)
     const first = fakeTile(terminalModel(fake), 'a.glb')
     const second = fakeTile(terminalModel(fake), 'b.glb')
     applyStyleOf(first).mockImplementation(() => {
@@ -572,45 +676,237 @@ describe('attachBuildingLookup', () => {
   })
 
   it('restyles nothing while the shape fallback is off', () => {
-    const { fake, tileset, render, createTexture } = attachFakes(() => false)
+    const { fake, tileset, render, createTexture } = attachFakes(() => false, STILL)
     const tile = fakeTile(terminalModel(fake), 'a.glb')
     tileset.tileLoad.raiseEvent(tile)
 
     render()
 
-    expect(createTexture).toHaveBeenCalledTimes(1)
+    expect(createTexture).toHaveBeenCalledTimes(2)
     expect(applyStyleOf(tile)).not.toHaveBeenCalled()
     expect(tileset.makeStyleDirty).not.toHaveBeenCalled()
   })
 
   it('restyles the tile it built when a pass runs out of budget', () => {
-    const { fake, tileset, render, createTexture } = attachFakes(() => true)
+    let time = 0
+    const { fake, tileset, render, createTexture } = attachFakes(
+      () => true,
+      () => time,
+    )
+    // Each texture takes the whole budget, so the pass ends with the first tile's publish.
+    createTexture.mockImplementation(() => {
+      time += BUILDING_LOOKUP_BUILD_BUDGET_MS + 1
+      return { destroy: vi.fn() }
+    })
     const first = fakeTile(terminalModel(fake), 'a.glb')
     const second = fakeTile(terminalModel(fake), 'b.glb')
     tileset.tileLoad.raiseEvent(first)
     tileset.tileLoad.raiseEvent(second)
-    // The pass starts at 0 and checks the budget at 0 before the first tile, then past it.
-    vi.spyOn(performance, 'now')
-      .mockReturnValueOnce(0)
-      .mockReturnValueOnce(0)
-      .mockReturnValue(BUILDING_LOOKUP_BUILD_BUDGET_MS + 1)
 
     render()
 
-    expect(createTexture).toHaveBeenCalledTimes(1)
+    expect(createTexture).toHaveBeenCalledTimes(2)
     expect(applyStyleOf(first)).toHaveBeenCalledTimes(1)
     expect(applyStyleOf(second)).not.toHaveBeenCalled()
   })
 
+  it('takes the pass budget from the clock it is given, never the wall clock', () => {
+    const { fake, tileset, render, createTexture } = attachFakes(() => true, STILL)
+    const tile = fakeTile(terminalModel(fake), 'a.glb')
+    tileset.tileLoad.raiseEvent(tile)
+    // A wall clock past the budget at every read: a pass reading it would never take a step.
+    let wall = 0
+    vi.spyOn(performance, 'now').mockImplementation(() => {
+      wall += BUILDING_LOOKUP_BUILD_BUDGET_MS + 1
+      return wall
+    })
+
+    renderUntilPublished(render, tile, 20)
+
+    expect(createTexture).toHaveBeenCalled()
+    expect(getTileFeatureStats(tile.content)).toBeDefined()
+  })
+
+  it('publishes a tile whose face build passes the budget once, on the render that finishes it', () => {
+    const { fake, tileset, render, createTexture } = attachFakes(() => true, oneStepPerRender())
+    const resources = fakeRenderResources()
+    // The tile's model, carrying the property table Cesium's own stage reads.
+    const model = Object.assign(resources.model, terminalModel(fake))
+    const tile = fakeTile(model, 'a.glb')
+    installBuildingLookupStage()
+    PRIVATE.BatchTexturePipelineStage.process(resources, {}, { context: fake.context })
+    tileset.tileLoad.raiseEvent(tile)
+
+    // The terminal box builds in five steps: read-back, collecting its wall triangles, grouping
+    // them into faces, linking its runs, publish.
+    for (let pass = 0; pass < 4; pass++) {
+      render()
+      expect(getTileFeatureStats(tile.content)).toBeUndefined()
+    }
+    const emptyFaces = resources.uniformMap[BUILDING_FACES_SAMPLER]()
+    const emptyLookup = resources.uniformMap[BUILDING_LOOKUP_SAMPLER]()
+    expect(createTexture.mock.calls.map((call) => (call as unknown[]).slice(1, 3))).toEqual([
+      [3, 1],
+      [1, 2],
+    ])
+    render()
+
+    expect(createTexture).toHaveBeenCalledTimes(4)
+    expect(getTileFeatureStats(tile.content)?.faceCount[0]).toBe(4)
+    expect(resources.uniformMap[BUILDING_FACES_SAMPLER]()).not.toBe(emptyFaces)
+    expect(resources.uniformMap[BUILDING_LOOKUP_SAMPLER]()).not.toBe(emptyLookup)
+    expect(applyStyleOf(tile)).toHaveBeenCalledTimes(1)
+  })
+
+  it('publishes nothing for a tile that unloads mid-build', () => {
+    const { fake, tileset, render, createTexture } = attachFakes(() => true, oneStepPerRender())
+    const tile = fakeTile(terminalModel(fake), 'a.glb')
+    tileset.tileLoad.raiseEvent(tile)
+
+    render()
+    render()
+    tileset.tileUnload.raiseEvent(tile)
+    for (let pass = 0; pass < 10; pass++) render()
+
+    expect(createTexture).not.toHaveBeenCalled()
+    expect(getTileFeatureStats(tile.content)).toBeUndefined()
+    expect(applyStyleOf(tile)).not.toHaveBeenCalled()
+  })
+
+  it('rebuilds a tile reloaded with new content after it unloaded mid-build', () => {
+    const { fake, tileset, render } = attachFakes(() => true, oneStepPerRender())
+    const tile = fakeTile(terminalModel(fake), 'a.glb')
+    const before = tile.content
+    tileset.tileLoad.raiseEvent(tile)
+    render()
+    render()
+    tileset.tileUnload.raiseEvent(tile)
+
+    const after = fakeTile(boxesModel(fake, [{ ...TOWER, id: 0 }]), 'a.glb').content
+    Object.assign(tile, { content: after })
+    tileset.tileLoad.raiseEvent(tile)
+    renderUntilPublished(render, tile, 20)
+
+    expect(getTileFeatureStats(after)?.base[0]).toBeCloseTo(0, 3)
+    expect(getTileFeatureStats(after)?.faceCount[0]).toBe(4)
+    expect(getTileFeatureStats(before)).toBeUndefined()
+  })
+
+  it('builds faces in chunks of 1,000 wall triangles', () => {
+    const { fake, tileset, render, createTexture } = attachFakes(() => true, oneStepPerRender())
+    const pentagon = prismGeometry([{ id: 0, outer: regularPolygon(5, 20), z: [0, 10] }], {
+      walls: { cols: 25, rows: 10 },
+    })
+    const tile = fakeTile(fakeModel(fake, pentagon), 'pentagon.glb')
+    tileset.tileLoad.raiseEvent(tile)
+
+    // 2,500 wall triangles and a small roof: one read-back step, three steps collecting the wall
+    // triangles, three grouping them into faces, one linking the runs, one publish step.
+    for (let pass = 0; pass < 8; pass++) render()
+    expect(createTexture).not.toHaveBeenCalled()
+    render()
+
+    expect(createTexture).toHaveBeenCalledTimes(2)
+    expect(getTileFeatureStats(tile.content)?.faceCount[0]).toBe(5)
+  })
+
+  it('bounds the counted work of every step of a 3,000-face building, one step per render', () => {
+    const step = vi.spyOn(FaceBuilder.prototype, 'step')
+    const { fake, tileset, render } = attachFakes(() => true, oneStepPerRender())
+    // Each 31 m facet's neighbour leans more than the plane tolerance off it, so every facet is a face.
+    const round = prismGeometry([{ id: 0, outer: regularPolygon(3000, 15000), z: [0, 10] }], { roof: 'none' })
+    const tile = fakeTile(fakeModel(fake, round), 'round.glb')
+    tileset.tileLoad.raiseEvent(tile)
+
+    const renders = renderUntilPublished(render, tile, 5000)
+
+    const work = step.mock.results.map((result) => result.value as FaceStepWork)
+    expect(getTileFeatureStats(tile.content)).toBeDefined()
+    // One step per render: the read-back, the face builder's steps, the publish.
+    expect(renders).toBe(work.length + 2)
+    expect(work.length).toBeGreaterThan(10)
+    for (const done of work) {
+      expect(done.sourceTriangles).toBeLessThanOrEqual(FACE_BUILD_CHUNK_TRIANGLES)
+      expect(done.wallTriangles).toBeLessThanOrEqual(FACE_BUILD_CHUNK_TRIANGLES)
+      expect(done.planeTests).toBeLessThanOrEqual(FACE_BUILD_CHUNK_PLANE_TESTS)
+      expect(done.facePairs - done.lastFeaturePairs).toBeLessThanOrEqual(FACE_LINK_CHUNK_PAIRS)
+    }
+    expect(work.reduce((sum, done) => sum + done.facePairs, 0)).toBe(3000 * 3000)
+  })
+
+  it('destroys the lookup texture and publishes nothing when the face table texture cannot be made', () => {
+    const error = vi.spyOn(console, 'error').mockImplementation(() => {})
+    const { fake, tileset, render, createTexture, textures } = attachFakes(() => true, STILL)
+    const make = createTexture.getMockImplementation()
+    if (make === undefined) throw new Error('attachFakes gives createTexture an implementation')
+    createTexture.mockImplementationOnce(make).mockImplementationOnce(() => {
+      throw new Error('out of texture memory')
+    })
+    const tile = fakeTile(terminalModel(fake), 'a.glb')
+    tileset.tileLoad.raiseEvent(tile)
+
+    render()
+
+    expect(createTexture).toHaveBeenCalledTimes(2)
+    expect(textures).toHaveLength(1)
+    expect(textures[0].destroy).toHaveBeenCalledTimes(1)
+    expect(getTileFeatureStats(tile.content)).toBeUndefined()
+    expect(error).toHaveBeenCalledTimes(1)
+  })
+
+  it("gives a vertex-less twin its owner's face range in the published lookup", () => {
+    const { fake, tileset, render, createTexture } = attachFakes(() => true, STILL)
+    // Feature 1 draws nothing and shares feature 0's element id.
+    const tile = fakeTile(terminalModel(fake), 'a.glb')
+    Object.assign(tile.content, { featuresLength: 2 })
+    tileset.tileLoad.raiseEvent(tile)
+
+    render()
+
+    const row1 = ((createTexture.mock.calls[0] as unknown[])[3] as Float32Array).subarray(2 * 4)
+    expect([row1[2], row1[3]]).toEqual([0, 4])
+    expect([row1[4 + 2], row1[4 + 3]]).toEqual([0, 4])
+  })
+
+  it('warns once per tileset when the per-tile face cap cuts features', () => {
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {})
+    const fake = fakeContext()
+    const tileset = { tileLoad: new Cesium.Event(), tileUnload: new Cesium.Event(), makeStyleDirty: vi.fn() }
+    const scene = { postRender: new Cesium.Event(), context: fake.context }
+    const detach = smallFaceCap.attachBuildingLookup(
+      tileset as unknown as Cesium.Cesium3DTileset,
+      scene as unknown as Cesium.Scene,
+      () => ({ destroy: vi.fn() }),
+      () => false,
+      STILL,
+    )
+    // Three boxes of four wall faces each: the third passes the cap of 8.
+    const tiles = ['a.glb', 'b.glb'].map((url) => fakeTile(boxesModel(fake, [TERMINAL, TOWER, SHED]), url))
+    for (const tile of tiles) {
+      Object.assign(tile.content, { featuresLength: 3 })
+      tileset.tileLoad.raiseEvent(tile)
+    }
+
+    scene.postRender.raiseEvent()
+    const shedFaces = tiles.map((tile) => smallFaceCap.getTileFeatureStats(tile.content)?.faceCount[2])
+    detach()
+
+    expect(shedFaces).toEqual([0, 0])
+    expect(warn).toHaveBeenCalledTimes(1)
+    expect(String(warn.mock.calls[0][0])).toContain(
+      '[buildingBaseLookup] a building tile has more wall faces than the face table holds',
+    )
+  })
+
   it('skips the empty slots of a sparse runtime-node list', () => {
     const error = vi.spyOn(console, 'error').mockImplementation(() => {})
-    const { fake, tileset, render, createTexture } = attachFakes()
+    const { fake, tileset, render, createTexture } = attachFakes(() => true, STILL)
 
     tileset.tileLoad.raiseEvent(fakeTile(terminalModel(fake, 'sparse'), 'a.glb'))
     render()
 
     expect(error).not.toHaveBeenCalled()
-    expect(createTexture).toHaveBeenCalledTimes(1)
+    expect(createTexture).toHaveBeenCalledTimes(2)
   })
 })
 

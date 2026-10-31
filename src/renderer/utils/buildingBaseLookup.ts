@@ -13,18 +13,28 @@
  * feature's lowest vertex in the tile's model coordinates and the metres from the building's
  * ground to that vertex (a raised part's `min_height`). Row 1 holds the metres from the building's
  * ground to the lowest vertex of the feature's upward faces (its wall top: the eave of a sloped
- * roof, the roof of a flat one; -1 when unknown) and the feature's hash (`featureHash`),
- * which picks its wall colour variant; its last two floats are 0. A tile without a lookup (not
- * built yet, or skipped) binds a single column whose ground offset is -1, the sentinel on which
- * the shader draws no floor lines, whose wall top is -1 (unknown) and whose hash is 0. The base
- * and roof heights and the footprint area stay on the CPU (`getTileFeatureStats`).
+ * roof, the roof of a flat one; -1 when unknown), the feature's hash (`featureHash`), which picks
+ * its wall colour variant, and the feature's first face and face count in the tile's face table.
+ * A tile without a lookup (not built yet, or skipped) binds a single column whose ground offset is
+ * -1, the sentinel on which the shader draws no floor lines, whose wall top is -1 (unknown), whose
+ * hash is 0 and whose face count is 0. The base and roof heights and the footprint area stay on
+ * the CPU (`getTileFeatureStats`).
+ *
+ * Beside the lookup each tile binds its face table (`buildingFaces.ts`): every wall face of every
+ * feature, three RGBA float texels per face. Both are built over several frames, a step at a time
+ * within the frame budget, and are bound, recorded and released together; a tile without them
+ * binds a shared empty face table.
  */
 import * as Cesium from 'cesium'
-import { BUILDING_LOOKUP_BUILD_BUDGET_MS } from '@/constants'
+import { BUILDING_LOOKUP_BUILD_BUDGET_MS, FACADE_ROOF_COS, FACE_BUILD_CHUNK_TRIANGLES } from '@/constants'
+import { capTileRuns, FACE_TEXELS, FaceBuilder, faceTexels, type Run } from '@/utils/buildingFaces'
 import { isBuildingPart, tagValueNumber } from '@/utils/buildingTags'
 
 /** The sampler the patched stage declares and the facade shader reads. */
 export const BUILDING_LOOKUP_SAMPLER = 'tc3d_buildingLookup'
+
+/** The face-table sampler the patched stage declares beside the lookup's. */
+export const BUILDING_FACES_SAMPLER = 'tc3d_buildingFaces'
 
 /** The define the patched stage adds to the fragment shader where it binds the lookup (WebGL2 only). */
 export const BUILDING_LOOKUP_DEFINE = 'TC3D_BUILDING_LOOKUP'
@@ -56,6 +66,11 @@ export function glslBuildingLookupRead(id: string, row: string): string {
  */
 export function emptyLookupTexels(): Float32Array {
   return Float32Array.of(0, 0, 0, -1, -1, 0, 0, 0)
+}
+
+/** The face table bound where a tile has none: one face of zeros, which no feature's range reaches. */
+export function emptyFaceTexels(): Float32Array {
+  return new Float32Array(FACE_TEXELS * 4)
 }
 
 /** One triangle-list primitive of a tile, read back from the GPU. */
@@ -93,6 +108,14 @@ export interface TileFeatureStats {
   readonly hasGeometry: Uint8Array
   /** The feature's `featureHash`, in [0, 1). */
   readonly hash: Float64Array
+  /** The feature's up: the geocentric up at its first vertex, a unit vector in model coordinates, xyz per feature. */
+  readonly up: Float64Array
+  /** The feature's north: the Earth's axis made level at its first vertex, a unit vector in model coordinates, xyz per feature. */
+  readonly north: Float64Array
+  /** The feature's first face in the tile's face table; a twin's is its owner's. */
+  readonly faceFirst: Uint32Array
+  /** The feature's faces in the table; 0 without faces, and for a vertex-less feature without a twin. */
+  readonly faceCount: Uint32Array
 }
 
 /** The property reader a tile feature offers. */
@@ -111,7 +134,22 @@ function emptyStats(count: number): TileFeatureStats {
     groundOffset: new Float64Array(count),
     hasGeometry: new Uint8Array(count),
     hash: new Float64Array(count),
+    up: new Float64Array(count * 3),
+    north: new Float64Array(count * 3),
+    faceFirst: new Uint32Array(count),
+    faceCount: new Uint32Array(count),
   }
+}
+
+/** The Earth's axis at a model-space point with up `up`, made level and unit, in model coordinates. */
+function northAt(inverse: Cesium.Matrix4, up: Cesium.Cartesian3): Cesium.Cartesian3 {
+  const axis = Cesium.Matrix4.multiplyByPointAsVector(inverse, Cesium.Cartesian3.UNIT_Z, new Cesium.Cartesian3())
+  const level = Cesium.Cartesian3.subtract(
+    axis,
+    Cesium.Cartesian3.multiplyByScalar(up, Cesium.Cartesian3.dot(axis, up), new Cesium.Cartesian3()),
+    axis,
+  )
+  return Cesium.Cartesian3.normalize(level, level)
 }
 
 /** The geocentric up at a model-space point, as a unit vector in model coordinates. */
@@ -122,9 +160,10 @@ function upAt(primitive: PrimitiveGeometry, inverse: Cesium.Matrix4, point: Cesi
   return Cesium.Cartesian3.normalize(up, up)
 }
 
-function scanVertices(primitive: PrimitiveGeometry, stats: TileFeatureStats, up: Float64Array): void {
+function scanVertices(primitive: PrimitiveGeometry, stats: TileFeatureStats): void {
   const inverse = Cesium.Matrix4.inverse(primitive.modelMatrix, new Cesium.Matrix4())
   const { positions, featureIds } = primitive
+  const { up } = stats
   const point = new Cesium.Cartesian3()
   for (let v = 0; v < featureIds.length; v++) {
     const f = featureIds[v]
@@ -135,6 +174,8 @@ function scanVertices(primitive: PrimitiveGeometry, stats: TileFeatureStats, up:
     if (stats.hasGeometry[f] === 0) {
       const u = upAt(primitive, inverse, point)
       up.set([u.x, u.y, u.z], f * 3)
+      const north = northAt(inverse, u)
+      stats.north.set([north.x, north.y, north.z], f * 3)
       stats.base[f] = Number.POSITIVE_INFINITY
       stats.roof[f] = Number.NEGATIVE_INFINITY
       stats.eave[f] = Number.POSITIVE_INFINITY
@@ -187,12 +228,6 @@ function doubleArea(positions: Float32Array, a: number, b: number, c: number): n
   return Math.hypot(e1y * e2z - e1z * e2y, e1z * e2x - e1x * e2z, e1x * e2y - e1y * e2x)
 }
 
-/**
- * A face counts as a roof for the eave when its normal is within this cosine of up, the facade
- * shader's roof test; walls tilted a little toward up by the Earth's curvature across a tile stay walls.
- */
-const ROOF_MIN_UP = 0.6
-
 /** Lowers feature `f`'s eave to vertex `v`'s height along its up. */
 function lowerEave(stats: TileFeatureStats, positions: Float32Array, v: number, up: Float64Array, f: number): void {
   const h = positions[v * 3] * up[f * 3] + positions[v * 3 + 1] * up[f * 3 + 1] + positions[v * 3 + 2] * up[f * 3 + 2]
@@ -210,7 +245,9 @@ function sumFootprints(primitive: PrimitiveGeometry, stats: TileFeatureStats, up
     const doubled = projectedDoubleArea(positions, a, b, c, up, f)
     if (!(doubled > 0)) continue
     stats.area[f] += doubled / 2
-    if (doubled <= ROOF_MIN_UP * doubleArea(positions, a, b, c)) continue
+    // A roof by the facade shader's test; walls tilted a little toward up by the Earth's curvature
+    // across a tile stay walls.
+    if (doubled <= FACADE_ROOF_COS * doubleArea(positions, a, b, c)) continue
     lowerEave(stats, positions, a, up, f)
     lowerEave(stats, positions, b, up, f)
     lowerEave(stats, positions, c, up, f)
@@ -230,9 +267,8 @@ function sumFootprints(primitive: PrimitiveGeometry, stats: TileFeatureStats, up
  */
 export function computeFeatureStats(primitives: readonly PrimitiveGeometry[], count: number): TileFeatureStats {
   const stats = emptyStats(count)
-  const up = new Float64Array(count * 3)
-  for (const primitive of primitives) scanVertices(primitive, stats, up)
-  for (const primitive of primitives) sumFootprints(primitive, stats, up)
+  for (const primitive of primitives) scanVertices(primitive, stats)
+  for (const primitive of primitives) sumFootprints(primitive, stats, stats.up)
   for (let f = 0; f < count; f++) {
     if (stats.eave[f] === Number.POSITIVE_INFINITY) stats.eave[f] = stats.roof[f]
   }
@@ -290,6 +326,8 @@ export function fillTwins(stats: TileFeatureStats, keys: readonly string[]): voi
     stats.roof[f] = stats.roof[twin]
     stats.eave[f] = stats.eave[twin]
     stats.area[f] = stats.area[twin]
+    stats.faceFirst[f] = stats.faceFirst[twin]
+    stats.faceCount[f] = stats.faceCount[twin]
     stats.baseMC.set(stats.baseMC.subarray(twin * 3, twin * 3 + 3), f * 3)
   }
 }
@@ -309,7 +347,7 @@ export function lookupTexels(stats: TileFeatureStats): Float32Array {
     texels.set([stats.baseMC[f * 3], stats.baseMC[f * 3 + 1], stats.baseMC[f * 3 + 2], offset], ground + f * 4)
     const eave = stats.eave[f]
     const wallTop = Number.isNaN(eave) ? -1 : eave - stats.base[f] + offset
-    texels.set([wallTop, stats.hash[f], 0, 0], top + f * 4)
+    texels.set([wallTop, stats.hash[f], stats.faceFirst[f], stats.faceCount[f]], top + f * 4)
   }
   return texels
 }
@@ -401,9 +439,13 @@ interface CesiumPrivate {
 
 const PRIVATE = Cesium as unknown as CesiumPrivate
 
-/** Each built lookup, by model: other code reads the stats through `getTileFeatureStats`. */
-const lookups = new WeakMap<object, { stats: TileFeatureStats; texture: LookupTexture }>()
+/**
+ * Each built lookup and face table, by model: other code reads the stats through
+ * `getTileFeatureStats`. A tile with no faces has no face table of its own.
+ */
+const lookups = new WeakMap<object, { stats: TileFeatureStats; texture: LookupTexture; faces?: LookupTexture }>()
 const emptyTextures = new WeakMap<LookupContext, LookupTexture>()
+const emptyFaceTextures = new WeakMap<LookupContext, LookupTexture>()
 /**
  * The texture factory `attachBuildingLookup` was given, by context, so the empty texture is made
  * the same way as each tile's. A model of a tileset without an attached lookup (any other tileset
@@ -469,6 +511,15 @@ function emptyTexture(context: LookupContext, createTexture: LookupTextureFactor
   return texture
 }
 
+function emptyFaceTexture(context: LookupContext, createTexture: LookupTextureFactory): LookupTexture {
+  let texture = emptyFaceTextures.get(context)
+  if (texture === undefined) {
+    texture = createTexture(context, FACE_TEXELS, 1, emptyFaceTexels())
+    emptyFaceTextures.set(context, texture)
+  }
+  return texture
+}
+
 /**
  * Binds each tile's lookup texture to the facade shader by wrapping Cesium's private
  * `BatchTexturePipelineStage.process` (`Source/Scene/Model/BatchTexturePipelineStage.js`), which
@@ -501,10 +552,12 @@ export function installBuildingLookupStage(): void {
     if (!context.webgl2) return
     shaderBuilder.addDefine(BUILDING_LOOKUP_DEFINE, undefined, fragment)
     shaderBuilder.addUniform('highp sampler2D', BUILDING_LOOKUP_SAMPLER, fragment)
+    shaderBuilder.addUniform('highp sampler2D', BUILDING_FACES_SAMPLER, fragment)
+    const factory = () => factories.get(context) ?? createLookupTexture
     renderResources.uniformMap = {
       ...renderResources.uniformMap,
-      [BUILDING_LOOKUP_SAMPLER]: () =>
-        lookups.get(model)?.texture ?? emptyTexture(context, factories.get(context) ?? createLookupTexture),
+      [BUILDING_LOOKUP_SAMPLER]: () => lookups.get(model)?.texture ?? emptyTexture(context, factory()),
+      [BUILDING_FACES_SAMPLER]: () => lookups.get(model)?.faces ?? emptyFaceTexture(context, factory()),
     }
   }
   wrapper[WRAPPED] = original
@@ -628,11 +681,11 @@ export function readTileGeometry(model: PrivateModel, gl: WebGL2RenderingContext
   return geometry
 }
 
-/** The stats of a tile's features, their properties included. */
+/** The stats of a tile's features, their properties and twins included, and each feature's `featureKey`. */
 export function tileFeatureStats(
   content: Cesium.Cesium3DTileContent,
   primitives: readonly PrimitiveGeometry[],
-): TileFeatureStats {
+): { stats: TileFeatureStats; keys: string[] } {
   const count = content.featuresLength
   const stats = computeFeatureStats(primitives, count)
   const keys: string[] = new Array<string>(count)
@@ -643,18 +696,33 @@ export function tileFeatureStats(
     stats.hash[f] = featureHash(feature)
   }
   fillTwins(stats, keys)
-  return stats
+  return { stats, keys }
 }
 
-type BuildOutcome = 'built' | 'skipped' | 'waiting'
+/** What one build step did: started or advanced a tile's build, finished it, gave up on it, or found it not ready. */
+type StepOutcome = 'progress' | 'built' | 'skipped' | 'waiting'
+
+/** A tile's lookup and face table in the making, kept across frames until its last step publishes both. */
+interface BuildJob {
+  readonly model: object
+  readonly stats: TileFeatureStats
+  readonly keys: readonly string[]
+  readonly faces: FaceBuilder
+}
 
 interface Attachment {
   readonly context: LookupContext
   readonly maxTextureSize: number
   readonly built: Set<object>
+  /** Each tile whose build has started and not yet published. */
+  readonly jobs: Map<Cesium.Cesium3DTile, BuildJob>
   readonly createTexture: LookupTextureFactory
+  /** The clock each frame's build budget is measured on. */
+  readonly now: () => number
   /** Set once a tile of this tileset had no readable primitive, so that is logged once. */
   unreadableLogged: boolean
+  /** Set once a tile of this tileset passed the per-tile face cap, so that is logged once. */
+  faceCapLogged: boolean
 }
 
 /** The model's readable primitives; undefined while it is not ready, empty when none can be read. */
@@ -672,7 +740,50 @@ function readableGeometry(model: PrivateModel, attachment: Attachment): Primitiv
   return geometry.primitives
 }
 
-function buildLookup(tile: Cesium.Cesium3DTile, attachment: Attachment): BuildOutcome {
+/** Logs, once per tileset, that a tile's features past the per-tile face cap draw walls without openings. */
+function warnFaceCap(cut: number, attachment: Attachment): void {
+  if (cut === 0 || attachment.faceCapLogged) return
+  attachment.faceCapLogged = true
+  console.warn(
+    `[buildingBaseLookup] a building tile has more wall faces than the face table holds; ${cut} of its ` +
+      'features keep none, and their walls show no windows',
+  )
+}
+
+/**
+ * Lays the tile's capped runs into its face table, gives each feature (and each twin) its face
+ * range, and creates the lookup and the face table together.
+ */
+function publishTables(
+  model: object,
+  stats: TileFeatureStats,
+  keys: readonly string[],
+  runs: readonly (readonly Run[])[],
+  attachment: Attachment,
+): void {
+  const capped = capTileRuns(runs)
+  warnFaceCap(capped.cut, attachment)
+  const table = faceTexels(capped.runs, attachment.maxTextureSize)
+  stats.faceFirst.set(table.first)
+  stats.faceCount.set(table.count)
+  fillTwins(stats, keys)
+  const { context, createTexture } = attachment
+  const texture = createTexture(context, stats.count, LOOKUP_ROWS, lookupTexels(stats))
+  let faces: LookupTexture | undefined
+  try {
+    faces = table.count.some((count) => count > 0)
+      ? createTexture(context, table.width, table.height, table.texels)
+      : undefined
+  } catch (error) {
+    texture.destroy()
+    throw error
+  }
+  lookups.set(model, { stats, texture, faces })
+  attachment.built.add(model)
+}
+
+/** The first step of a tile's build: read-back, stats, tags, twins, and the face builder that steps through the rest. */
+function startBuild(tile: Cesium.Cesium3DTile, attachment: Attachment): BuildJob | 'skipped' | 'waiting' {
   const model = modelOf(tile.content)
   const count = tile.content?.featuresLength ?? 0
   if (model === undefined || count === 0 || lookups.has(model)) return 'skipped'
@@ -685,20 +796,40 @@ function buildLookup(tile: Cesium.Cesium3DTile, attachment: Attachment): BuildOu
   const primitives = readableGeometry(model, attachment)
   if (primitives === undefined) return 'waiting'
   if (primitives.length === 0) return 'skipped'
-  const stats = tileFeatureStats(tile.content, primitives)
-  const texture = attachment.createTexture(attachment.context, count, LOOKUP_ROWS, lookupTexels(stats))
-  lookups.set(model, { stats, texture })
-  attachment.built.add(model)
+  const { stats, keys } = tileFeatureStats(tile.content, primitives)
+  return { model, stats, keys, faces: new FaceBuilder(primitives, stats) }
+}
+
+/**
+ * One step of a tile's build: the start (`startBuild`), then the face builder's steps over chunks
+ * of `FACE_BUILD_CHUNK_TRIANGLES` triangles (`FaceBuilder.step`) until its runs are done, then the
+ * publish, which lays the face table and creates, records and binds both textures together.
+ */
+function buildStep(tile: Cesium.Cesium3DTile, attachment: Attachment): StepOutcome {
+  const job = attachment.jobs.get(tile)
+  if (job === undefined) {
+    const started = startBuild(tile, attachment)
+    if (typeof started === 'string') return started
+    attachment.jobs.set(tile, started)
+    return 'progress'
+  }
+  if (!job.faces.done) {
+    job.faces.step(FACE_BUILD_CHUNK_TRIANGLES)
+    return 'progress'
+  }
+  attachment.jobs.delete(tile)
+  publishTables(job.model, job.stats, job.keys, job.faces.runs, attachment)
   return 'built'
 }
 
-/** Builds the tile's lookup; a throw is logged naming the tile, which then stays without one. */
-function tryBuildLookup(tile: Cesium.Cesium3DTile, attachment: Attachment): BuildOutcome {
+/** One step of the tile's build; a throw is logged naming the tile, which then stays without a lookup. */
+function tryBuildStep(tile: Cesium.Cesium3DTile, attachment: Attachment): StepOutcome {
   try {
-    return buildLookup(tile, attachment)
+    return buildStep(tile, attachment)
   } catch (error) {
+    attachment.jobs.delete(tile)
     console.error(
-      `[buildingBaseLookup] building the floor-line lookup of tile ${tile.content?.url ?? '(no content)'} failed; ` +
+      `[buildingBaseLookup] the building lookup or face table build failed for tile ${tile.content?.url ?? '(no content)'}; ` +
         'its facades show no floor lines',
       error,
     )
@@ -707,21 +838,40 @@ function tryBuildLookup(tile: Cesium.Cesium3DTile, attachment: Attachment): Buil
 }
 
 function release(model: object, attachment: Attachment): void {
-  lookups.get(model)?.texture.destroy()
+  const built = lookups.get(model)
+  built?.texture.destroy()
+  built?.faces?.destroy()
   lookups.delete(model)
   attachment.built.delete(model)
 }
 
 /**
- * Builds a lookup for each tile of the tileset as it loads, and releases it as the tile unloads.
- * `installBuildingLookupStage` must have run for the facade shader to see them. A tile shows no
- * floor lines until its lookup is built, and none at all on WebGL1.
+ * Steps a tile's build until it ends or the pass's budget, counted from `start` on the attachment's
+ * clock, runs out first.
+ *
+ * @returns The last step's outcome, or 'out of budget' with the build still pending
+ */
+function buildWithin(tile: Cesium.Cesium3DTile, attachment: Attachment, start: number): StepOutcome | 'out of budget' {
+  for (;;) {
+    if (attachment.now() - start > BUILDING_LOOKUP_BUILD_BUDGET_MS) return 'out of budget'
+    const outcome = tryBuildStep(tile, attachment)
+    if (outcome !== 'progress') return outcome
+  }
+}
+
+/**
+ * Builds a lookup and a face table for each tile of the tileset as it loads, a step at a time
+ * within each frame's budget, and releases both as the tile unloads. `installBuildingLookupStage`
+ * must have run for the facade shader to see them. A tile shows no floor lines until both are
+ * built, and none at all on WebGL1.
  *
  * @param tileset - The OSM Buildings tileset
  * @param scene - The scene drawing it
  * @param createTexture - Makes each tile's lookup texture (`createLookupTexture`)
  * @param restyleWhen - Whether new stats can change the style (`isShapeFallbackOn`); when it
  *   holds, each tile whose lookup a render pass built is restyled
+ * @param now - The clock, in milliseconds, each frame's build budget is measured on
+ *   (`performance.now`); the build reads no other
  * @returns A function that stops listening and releases every lookup it built
  */
 export function attachBuildingLookup(
@@ -729,6 +879,7 @@ export function attachBuildingLookup(
   scene: Cesium.Scene,
   createTexture: LookupTextureFactory,
   restyleWhen: () => boolean,
+  now: () => number,
 ): () => void {
   const context = (scene as unknown as { context: LookupContext }).context
   if (!context.webgl2) {
@@ -739,19 +890,22 @@ export function attachBuildingLookup(
     context,
     maxTextureSize: context._gl.getParameter(context._gl.MAX_TEXTURE_SIZE),
     built: new Set(),
+    jobs: new Map(),
     createTexture,
+    now,
     unreadableLogged: false,
+    faceCapLogged: false,
   }
   factories.set(context, createTexture)
   const pending = new Set<Cesium.Cesium3DTile>()
   // Restyles only the tiles a pass built, while `restyleWhen` holds, so the style's shape fallback
   // sees their new stats without re-evaluating every visible feature.
   const drain = () => {
-    const start = performance.now()
+    const start = now()
     const built: Cesium.Cesium3DTile[] = []
     for (const tile of pending) {
-      if (performance.now() - start > BUILDING_LOOKUP_BUILD_BUDGET_MS) break
-      const outcome = tryBuildLookup(tile, attachment)
+      const outcome = buildWithin(tile, attachment, start)
+      if (outcome === 'out of budget') break
       if (outcome !== 'waiting') pending.delete(tile)
       if (outcome === 'built') built.push(tile)
     }
@@ -763,6 +917,7 @@ export function attachBuildingLookup(
     tileset.tileLoad.addEventListener((tile: Cesium.Cesium3DTile) => pending.add(tile)),
     tileset.tileUnload.addEventListener((tile: Cesium.Cesium3DTile) => {
       pending.delete(tile)
+      attachment.jobs.delete(tile)
       const model = modelOf(tile.content)
       if (model !== undefined) release(model, attachment)
     }),
@@ -772,6 +927,7 @@ export function attachBuildingLookup(
     for (const remove of removers) remove()
     for (const model of [...attachment.built]) release(model, attachment)
     pending.clear()
+    attachment.jobs.clear()
     if (factories.get(context) === createTexture) factories.delete(context)
   }
 }

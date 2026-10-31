@@ -57,11 +57,56 @@ export const FACADE_FADE_END = 0.6
 export const FACADE_LIT_SHARE = 0.28
 
 /**
- * Milliseconds per frame, after the render, in which building tiles may start their floor-line
- * lookup build; the rest wait for the next frame. The tile in flight always finishes, so the worst
- * frame spends about this plus one tile (about 4 + 4.7 ms at the largest tiles seen).
+ * Milliseconds per frame, after the render, in which building tiles may take steps of their
+ * floor-line lookup and face table build; the rest wait for the next frame. The step in flight
+ * always finishes, so the worst frame spends about this plus one step.
  */
 export const BUILDING_LOOKUP_BUILD_BUDGET_MS = 4
+
+/** A face whose normal is within this cosine of up is a roof: the facade shader's roof test and the eave's. */
+export const FACADE_ROOF_COS = 0.6
+
+/** A wall face whose normal is within this cosine of horizontal is vertical, and only vertical faces join runs. */
+export const FACE_VERTICAL_COS = 0.2
+
+/** A wall triangle whose smallest altitude reaches this many metres is strong: it can start a face. */
+export const FACE_STRONG_ALTITUDE_M = 0.1
+
+/** Metres from a face's plane within which all three vertices of a triangle lie for it to join the face. */
+export const FACE_PLANE_MERGE_M = 0.05
+
+/** Cosine of the largest angle between a strong triangle's normal and a face's for it to join the face (30°). */
+export const FACE_GATE_COS = 0.866
+
+/** Metres of gap along a face across which two pieces of its plane still count as one face. */
+export const FACE_JOIN_GAP_M = 0.05
+
+/** Metres between one face's end and the next one's start within which the two link into a run. */
+export const RUN_LINK_M = 0.15
+
+/** Largest turn, in degrees, between two linked faces of a run. */
+export const RUN_TURN_DEG = 25
+
+/** Metres from a face's plane within which a wall fragment matches the face. */
+export const FACE_PLANE_TOL_M = 0.1
+
+/** Metres past a face's ends within which a wall fragment still matches the face. */
+export const FACE_S_TOL_M = 0.1
+
+/** Most faces one building feature keeps in the face table; whole runs past it are dropped. */
+export const FACES_PER_FEATURE_MAX = 256
+
+/** Most faces one tile keeps in the face table; features past it in id order keep none. */
+export const FACES_PER_TILE_MAX = 65536
+
+/** Source triangles one collect step reads, and wall triangles one grouping step groups, before the frame budget is checked again. */
+export const FACE_BUILD_CHUNK_TRIANGLES = 1000
+
+/** Wall-triangle-against-plane tests one step of a tile's face build makes before the frame budget is checked again. */
+export const FACE_BUILD_CHUNK_PLANE_TESTS = 16000
+
+/** Face pairs one step of a tile's run linking passes before it ends, after the feature that passes them. */
+export const FACE_LINK_CHUNK_PAIRS = 4000
 
 // ============================================================================
 // SHADOW CONFIGURATION
