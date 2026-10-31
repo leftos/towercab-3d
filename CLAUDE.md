@@ -127,7 +127,7 @@ The optional `vnas` feature enables 1Hz real-time aircraft updates via the priva
 - **Location (local):** `../towercab-3d-vnas/` (sibling directory)
 - **Documentation:** `docs/vnas-udp-integration-plan.md` in the private repo
 - **Build:** `cargo build` or `cargo check`
-- **CI:** GitHub Actions runs on push (check, test, fmt, clippy, doc)
+- **CI:** GitHub Actions runs on push and pull requests to `main` and weekly on Mondays (check, test, fmt, clippy, doc)
 
 **vNAS Implementation Details:**
 - SignalR WebSocket client for real-time aircraft updates

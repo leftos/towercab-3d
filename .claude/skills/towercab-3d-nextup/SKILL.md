@@ -52,7 +52,7 @@ linear: towercab-3d
 
 - Worktrees: a towercab-only item gets `../towercab-3d.wt/<slug>/towercab-3d` (`git worktree add ../towercab-3d.wt/<slug>/towercab-3d -b <slug> <base>`); an item that touches the crate gets the pair, adding `git -C ../towercab-3d-vnas worktree add "$(cd .. && pwd)/towercab-3d.wt/<slug>/towercab-3d-vnas" -b <slug> <crate base>` (the crate's `main` when it has no `<base>`), with `TC3D_VNAS_CRATE_PATH` pointing at that half. Record `branch.<slug>.base` / `branch.<slug>.landOn` in each half as the user-level `nextup` §3 **Base and target** says.
 - Ceiling: **three** implementers, as two main slots plus one rotating (owner, TC3D-62): the main slots go to the `Babylon to Cesium migration` and `OSM buildings` projects, the rotating slot to every other queued item in turn. A main slot whose project has no item ready takes the next queued item. Each worktree compiles the Tauri app into its own `target/` (minutes cold), and most items share a hotspot above.
-- Context: read `bash ~/.claude/tools/context-usage/context-usage.sh` at every landing; past 400K the loop stops refilling, per the user-level `nextup`.
+- Context: read `bash ~/.claude/tools/context-usage/context-usage.sh` at every landing; past 600K the loop stops refilling, per the user-level `nextup`.
 - Depends on, where file lists hide it: a crate API one item adds and a host (`src-tauri/src/vnas.rs`) item consumes; a Tauri command one item adds and a frontend item invokes; two items that each bump the settings `version` (the second rebases its bump).
 
 ## Docs map
