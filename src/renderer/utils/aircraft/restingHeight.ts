@@ -3,18 +3,22 @@
  *
  * vNAS reports the height above ground of a reference point, not of the wheels, so an aircraft standing on the
  * ground reads a steady height near its resting height, which differs by type and by simulator. Each vNAS sample of a
- * slow aircraft low over the ground is a sample of that aircraft's resting height and of its type's; once either has
- * enough samples its resting height is their median. An aircraft is drawn by its own resting height, by its type's
- * until it has learned its own. An aircraft's own value lives as long as its timeline (`forgetCallsign`); the type
- * table is kept for the session.
+ * slow fixed-wing aircraft low over the ground is a sample of that aircraft's resting height and of its type's; once
+ * either has enough samples its resting height is their median. An aircraft's resting height is its own, else its
+ * type's until it has learned its own; contact and the drawn height take the type's only once two of the aircraft's
+ * own samples confirm it (`useAircraftInterpolation`). An aircraft's own value lives as long as its timeline
+ * (`forgetCallsign`); the type table is kept for the session.
  */
 
 import {
+  isRotorcraftType,
   RESTING_HEIGHT_MAX_GROUNDSPEED_KTS,
   RESTING_HEIGHT_MAX_SAMPLE_METERS,
+  RESTING_HEIGHT_MAX_TALL_SAMPLE_METERS,
   RESTING_HEIGHT_MIN_SAMPLE_METERS,
   RESTING_HEIGHT_MIN_SAMPLES,
   RESTING_HEIGHT_SAMPLE_WINDOW,
+  VERY_TALL_TYPES,
 } from '@/constants'
 import type { AircraftDataSource } from '@/types/aircraft-timeline'
 
@@ -34,7 +38,7 @@ const samplesByCallsign = new Map<string, number[]>()
 const restByCallsign = new Map<string, number>()
 
 /** The table key for a type code, or null for a missing or placeholder type. */
-function typeKey(type: string | null | undefined): string | null {
+export function typeKey(type: string | null | undefined): string | null {
   if (type === null || type === undefined) return null
   const key = type.trim().toUpperCase()
   return PLACEHOLDER_TYPES.has(key) ? null : key
@@ -68,16 +72,34 @@ function median(values: number[]): number {
 }
 
 /**
- * Whether an observation is a resting-height sample: a vNAS sample with a height above ground from
- * RESTING_HEIGHT_MIN_SAMPLE_METERS to RESTING_HEIGHT_MAX_SAMPLE_METERS, under RESTING_HEIGHT_MAX_GROUNDSPEED_KTS.
+ * The highest raw height a type's sample may teach: RESTING_HEIGHT_MAX_TALL_SAMPLE_METERS for a very tall type
+ * (`VERY_TALL_TYPES`), else RESTING_HEIGHT_MAX_SAMPLE_METERS, so another type's burst above it never teaches one.
  */
-function qualifies(heightM: number | undefined, groundspeedKt: number, source: AircraftDataSource): heightM is number {
+function maxSampleMeters(type: string | null | undefined): number {
+  const key = typeKey(type)
+  return key !== null && VERY_TALL_TYPES.has(key)
+    ? RESTING_HEIGHT_MAX_TALL_SAMPLE_METERS
+    : RESTING_HEIGHT_MAX_SAMPLE_METERS
+}
+
+/**
+ * Whether an observation is a resting-height sample: a vNAS sample of a type that is not a rotorcraft (a hover would
+ * teach a height above the ground) with a height above ground from RESTING_HEIGHT_MIN_SAMPLE_METERS to the type's
+ * `maxSampleMeters`, under RESTING_HEIGHT_MAX_GROUNDSPEED_KTS.
+ */
+function qualifies(
+  type: string | null | undefined,
+  heightM: number | undefined,
+  groundspeedKt: number,
+  source: AircraftDataSource,
+): heightM is number {
   return (
     source === 'vnas' &&
+    !isRotorcraftType(type) &&
     heightM !== undefined &&
     Number.isFinite(heightM) &&
     heightM >= RESTING_HEIGHT_MIN_SAMPLE_METERS &&
-    heightM <= RESTING_HEIGHT_MAX_SAMPLE_METERS &&
+    heightM <= maxSampleMeters(type) &&
     groundspeedKt < RESTING_HEIGHT_MAX_GROUNDSPEED_KTS
   )
 }
@@ -93,8 +115,9 @@ function addSample(samplesByKey: Map<string, number[]>, restByKey: Map<string, n
 
 /**
  * Record one observation as a resting-height sample of its aircraft and of its type when it qualifies: a vNAS sample
- * with a height above ground from RESTING_HEIGHT_MIN_SAMPLE_METERS to RESTING_HEIGHT_MAX_SAMPLE_METERS, under
- * RESTING_HEIGHT_MAX_GROUNDSPEED_KTS. A placeholder type feeds only the aircraft's own samples.
+ * of a type that is not a rotorcraft, with a height above ground from RESTING_HEIGHT_MIN_SAMPLE_METERS to the type's
+ * `maxSampleMeters` (16 ft, 25 ft for a very tall type), under RESTING_HEIGHT_MAX_GROUNDSPEED_KTS. A placeholder type
+ * feeds only the aircraft's own samples.
  *
  * @param callsign - The aircraft's callsign
  * @param type - The aircraft type code as the metadata carries it
@@ -109,26 +132,42 @@ export function recordRestingSample(
   groundspeedKt: number,
   source: AircraftDataSource,
 ): void {
-  if (!qualifies(heightM, groundspeedKt, source)) return
+  if (!qualifies(type, heightM, groundspeedKt, source)) return
   const ownKey = callsignKey(callsign)
   if (ownKey !== null) addSample(samplesByCallsign, restByCallsign, ownKey, heightM)
   const key = typeKey(type)
   if (key !== null) addSample(samplesByType, restByType, key, heightM)
 }
 
+/** Where an aircraft's resting height comes from: its own samples, or only other aircraft of its type */
+export type RestingHeightSource = 'own' | 'type'
+
 /**
- * The resting height an aircraft is drawn by (metres): the median of its own last RESTING_HEIGHT_SAMPLE_WINDOW
- * samples once it has RESTING_HEIGHT_MIN_SAMPLES, else its type's likewise.
+ * An aircraft's resting height (metres): the median of its own last RESTING_HEIGHT_SAMPLE_WINDOW samples once it has
+ * RESTING_HEIGHT_MIN_SAMPLES, else its type's likewise, with which of the two it is.
+ *
+ * @returns The resting height and its source, or null while neither the aircraft nor its type has learned one
+ */
+export function restingHeightSourceFor(
+  callsign: string,
+  type: string | null | undefined,
+): { meters: number; source: RestingHeightSource } | null {
+  const ownKey = callsignKey(callsign)
+  const own = ownKey === null ? undefined : restByCallsign.get(ownKey)
+  if (own !== undefined) return { meters: own, source: 'own' }
+  const key = typeKey(type)
+  const typeRest = key === null ? undefined : restByType.get(key)
+  return typeRest === undefined ? null : { meters: typeRest, source: 'type' }
+}
+
+/**
+ * An aircraft's resting height (metres): its own, else its type's (`restingHeightSourceFor`). The parked test and the
+ * flare take it as it is; contact and the drawn height take the type's only once the aircraft's own samples confirm it.
  *
  * @returns The resting height, or null while neither the aircraft nor its type has learned one
  */
 export function restingHeightFor(callsign: string, type: string | null | undefined): number | null {
-  const ownKey = callsignKey(callsign)
-  const own = ownKey === null ? undefined : restByCallsign.get(ownKey)
-  if (own !== undefined) return own
-  const key = typeKey(type)
-  if (key === null) return null
-  return restByType.get(key) ?? null
+  return restingHeightSourceFor(callsign, type)?.meters ?? null
 }
 
 /**

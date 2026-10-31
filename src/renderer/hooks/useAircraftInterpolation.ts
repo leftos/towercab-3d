@@ -34,13 +34,15 @@ import {
   ROLL_RATE_MULTIPLIER,
   STOPPED_SPEED_KTS,
   TERRAIN_SMOOTHING_LERP_FACTOR,
+  TYPE_REST_CONFIRM_MAX_OFFSET_METERS,
+  TYPE_REST_CONFIRM_MAX_STEP_METERS,
 } from '@/constants'
-import { heightOverRest, restingHeightFor } from '@/utils/aircraft/restingHeight'
+import { heightOverRest, restingHeightSourceFor, typeKey } from '@/utils/aircraft/restingHeight'
 import { geoidService } from '../services/GeoidService'
 import { useAircraftTimelineStore } from '../stores/aircraftTimelineStore'
 import { useSettingsStore } from '../stores/settingsStore'
 import { useVatsimStore } from '../stores/vatsimStore'
-import type { SettleRun, TimelineInterpolationResult } from '../types/aircraft-timeline'
+import type { HeightPair, SettleRun, TimelineInterpolationResult } from '../types/aircraft-timeline'
 import type { InterpolatedAircraftState } from '../types/vatsim'
 import { angleDifference, calculateDistanceNM, calculateFlarePitch } from '../utils/geoMath'
 import { performanceMonitor } from '../utils/performanceMonitor'
@@ -118,7 +120,20 @@ const sharedTimelineRateStateRef = { current: new Map<string, TimelineRateState>
 /** Ground contact per aircraft with a height above ground, kept for the hysteresis */
 const sharedContactStateRef = { current: new Map<string, boolean>() }
 
-/** What lane B remembers of an aircraft that has no resting height of its own or of its type */
+/** A type's resting height an aircraft's own samples confirmed (`typeRestConfirmed`) */
+interface TypeRestConfirmation {
+  /** The type's table key (`typeKey`) when confirmed */
+  typeKey: string | null
+  /** The type's resting height when confirmed (m) */
+  meters: number
+  /** Display time of the last frame that kept it */
+  lastTime: number
+}
+
+/** Per aircraft whose resting height is only its type's and whose own samples confirmed it, the confirmation */
+const sharedTypeRestConfirmedRef = { current: new Map<string, TypeRestConfirmation>() }
+
+/** What lane B remembers of an aircraft that has no resting height of its own or a confirmed one of its type */
 interface LaneBState {
   /**
    * Descent memory: the lowest height (m) since the height last turned down while `descending`, else the highest since
@@ -132,7 +147,7 @@ interface LaneBState {
   lastTime: number
 }
 
-/** Per aircraft with a height above ground and no resting height, lane B's memory */
+/** Per aircraft with a height above ground and no resting height of its own, lane B's memory */
 const sharedLaneBStateRef = { current: new Map<string, LaneBState>() }
 
 /**
@@ -352,11 +367,15 @@ function stillHeld(
   return true
 }
 
-/** What `updateContact` reads of a frame: the timeline's fields of the same names. */
+/**
+ * What `updateContact` reads of a frame: the timeline's fields of the same names. A frame without `lastTwoHeights`
+ * never confirms a type's resting height.
+ */
 export type ContactFrame = Pick<
   TimelineInterpolationResult,
   'heightAboveGround' | 'aircraftType' | 'displayTime' | 'settleRun' | 'bracketStartStopped' | 'displayAnchorOffsetMs'
->
+> &
+  Partial<Pick<TimelineInterpolationResult, 'lastTwoHeights'>>
 
 /** One frame's contact decision with a height. */
 interface ContactDecision {
@@ -412,10 +431,97 @@ function startsInContact(callsign: string, hold: ContactHoldState | null, frame:
 }
 
 /**
+ * Whether two consecutive height samples sit within TYPE_REST_CONFIRM_MAX_OFFSET_METERS of a type's resting height
+ * and no more than TYPE_REST_CONFIRM_MAX_STEP_METERS apart.
+ */
+function settlesOnTypeRest(pair: HeightPair | undefined, typeRest: number): boolean {
+  return (
+    pair !== undefined &&
+    Math.abs(pair.newest - typeRest) <= TYPE_REST_CONFIRM_MAX_OFFSET_METERS &&
+    Math.abs(pair.previous - typeRest) <= TYPE_REST_CONFIRM_MAX_OFFSET_METERS &&
+    Math.abs(pair.newest - pair.previous) <= TYPE_REST_CONFIRM_MAX_STEP_METERS
+  )
+}
+
+/**
+ * Whether a confirmation still stands for the aircraft's type and that type's resting height now: the type is the one
+ * confirmed, and its resting height is within TYPE_REST_CONFIRM_MAX_OFFSET_METERS of the one confirmed.
+ */
+function confirmationHolds(
+  confirmation: TypeRestConfirmation,
+  aircraftType: string | null | undefined,
+  typeRest: number,
+): boolean {
+  return (
+    confirmation.typeKey === typeKey(aircraftType) &&
+    Math.abs(typeRest - confirmation.meters) <= TYPE_REST_CONFIRM_MAX_OFFSET_METERS
+  )
+}
+
+/**
+ * Whether the aircraft's own samples have confirmed a resting height learned only from its type: on the frame whose
+ * last two heights settle on it (`settlesOnTypeRest`), and from then on while the confirmation holds
+ * (`confirmationHolds`: the same type, its resting height not moved over 1 ft) until a null height, a seek (display
+ * time moving more than DROP_CONTACT_SEEK_MS from the last frame), a playback mode change or removal. A confirmation
+ * that no longer holds is dropped; the aircraft's own samples can confirm the type's resting height again.
+ */
+function typeRestConfirmed(callsign: string, typeRest: number, frame: ContactFrame): boolean {
+  const confirmed = sharedTypeRestConfirmedRef.current
+  const confirmation = confirmed.get(callsign)
+  if (
+    confirmation !== undefined &&
+    confirmationHolds(confirmation, frame.aircraftType, typeRest) &&
+    Math.abs(frame.displayTime - confirmation.lastTime) <= DROP_CONTACT_SEEK_MS
+  ) {
+    confirmation.lastTime = frame.displayTime
+    return true
+  }
+  if (!settlesOnTypeRest(frame.lastTwoHeights, typeRest)) {
+    confirmed.delete(callsign)
+    return false
+  }
+  confirmed.set(callsign, { typeKey: typeKey(frame.aircraftType), meters: typeRest, lastTime: frame.displayTime })
+  return true
+}
+
+/**
+ * The resting height contact is decided over: the aircraft's own, else its type's once its own samples confirm it
+ * (`typeRestConfirmed`), either of which ends lane B's memory; null while lane B decides.
+ */
+function contactRestFor(callsign: string, frame: ContactFrame): number | null {
+  const known = restingHeightSourceFor(callsign, frame.aircraftType)
+  if (known === null) {
+    sharedTypeRestConfirmedRef.current.delete(callsign)
+    return null
+  }
+  if (known.source === 'type') {
+    if (!typeRestConfirmed(callsign, known.meters, frame)) return null
+    sharedLaneBStateRef.current.delete(callsign)
+    return known.meters
+  }
+  sharedTypeRestConfirmedRef.current.delete(callsign)
+  sharedLaneBStateRef.current.delete(callsign)
+  return known.meters
+}
+
+/**
+ * The resting height an aircraft is drawn by (m): its own, else its type's once its own samples confirmed it
+ * (`typeRestConfirmed`, as of the last frame `updateContact` decided) while the confirmation holds
+ * (`confirmationHolds`); null otherwise.
+ */
+function confirmedRestingHeight(callsign: string, aircraftType: string | null): number | null {
+  const known = restingHeightSourceFor(callsign, aircraftType)
+  if (known === null) return null
+  if (known.source === 'own') return known.meters
+  const confirmation = sharedTypeRestConfirmedRef.current.get(callsign)
+  return confirmation !== undefined && confirmationHolds(confirmation, aircraftType, known.meters) ? known.meters : null
+}
+
+/**
  * Ground contact for this frame from the height above ground at the displayed instant, with hysteresis.
- * Once the aircraft has a resting height (its own, else its type's), contact is entered below the entry height over it
- * and left above the exit height over it; until then lane B decides (`laneBContact`). An aircraft with no earlier
- * contact state from its height starts as `startsInContact` says.
+ * Once the aircraft has a resting height (its own, else its type's once its own samples confirm it, `contactRestFor`),
+ * contact is entered below the entry height over it and left above the exit height over it; until then lane B decides
+ * (`laneBContact`). An aircraft with no earlier contact state from its height starts as `startsInContact` says.
  *
  * An aircraft that leaves contact on a bracket whose earlier sample is stopped is held in contact until its height has
  * stayed over the exit height for CONTACT_HOLD_MS (`stillHeld`), unless its type is a rotorcraft's. A null height
@@ -433,11 +539,11 @@ export function updateContact(callsign: string, frame: ContactFrame): boolean | 
   if (height === null) {
     sharedContactStateRef.current.delete(callsign)
     sharedLaneBStateRef.current.delete(callsign)
+    sharedTypeRestConfirmedRef.current.delete(callsign)
     if (hold !== null) hold.heldSince = null
     return null
   }
-  const rest = restingHeightFor(callsign, frame.aircraftType)
-  if (rest !== null) sharedLaneBStateRef.current.delete(callsign)
+  const rest = contactRestFor(callsign, frame)
   const wasInContact = sharedContactStateRef.current.get(callsign) ?? startsInContact(callsign, hold, frame)
   const inContact = heldOrRuledContact(hold, { callsign, height, rest, wasInContact, frame })
   sharedContactStateRef.current.set(callsign, inContact)
@@ -484,17 +590,17 @@ export function transitionProgress(
 
 /**
  * What is taken off an aircraft's drawn reported height this frame, before any ease: `share` of `rest`. When the source
- * reports a height above ground, all of its resting height (its own, else its type's) once one is learned, else lane
- * B's provisional resting height, its share fading with the raw height (`provisionalRestShare`), else 0; without that
- * height, 0.
+ * reports a height above ground, all of its resting height: its own, else its type's once its own samples confirm it
+ * (`confirmedRestingHeight`), else lane B's provisional resting height, its share fading with the raw height
+ * (`provisionalRestShare`), else 0; without that height, 0. Exported for tests.
  */
-function restOffsetTarget(
+export function restOffsetTarget(
   callsign: string,
-  entry: InterpolatedAircraftState,
+  entry: Pick<InterpolatedAircraftState, 'heightAboveGround' | 'aircraftType'>,
 ): { rest: number; fades: boolean; share: number } {
   const height = entry.heightAboveGround
   if (height === null) return { rest: 0, fades: false, share: 1 }
-  const learned = restingHeightFor(callsign, entry.aircraftType)
+  const learned = confirmedRestingHeight(callsign, entry.aircraftType)
   if (learned !== null) return { rest: learned, fades: false, share: 1 }
   return { rest: provisionalRestFor(callsign) ?? 0, fades: true, share: provisionalRestShare(height) }
 }
@@ -535,6 +641,7 @@ function drawnRestOffset(callsign: string, entry: InterpolatedAircraftState, now
  * its type's; never below 0) once one is learned, the raw height until then.
  */
 function flareHeightAboveGround(callsign: string, aircraftType: string | null, heightAboveGround: number): number {
+  // The flare takes the type's resting height before the aircraft's own samples confirm it (owner ruling, TC3D-397)
   const overRest = heightOverRest(callsign, aircraftType, heightAboveGround)
   return overRest === null ? heightAboveGround : Math.max(0, overRest)
 }
@@ -868,6 +975,7 @@ function runInterpolationFrame() {
     for (const state of sharedInterpolatedStates.values()) state.inContact = null
     sharedContactStateRef.current.clear()
     sharedLaneBStateRef.current.clear()
+    sharedTypeRestConfirmedRef.current.clear()
     sharedRestOffsetStateRef.current.clear()
     sharedContactHoldStateRef.current.clear()
 
@@ -1182,12 +1290,12 @@ function runInterpolationFrame() {
           // New transition: use previous frame's corrected height
           sourceHeight = terrainState.prevCorrectedHeight
         }
-        // A change of contact while the aircraft has no resting height moves it by that unknown height: eased over
-        // DROP_CONTACT_EASE_MS of display time rather than a few frames
+        // A change of contact while the aircraft has no resting height of its own or a confirmed one of its type
+        // moves it by an unknown height: eased over DROP_CONTACT_EASE_MS of display time rather than a few frames
         const contactWithoutRest =
           entry.heightAboveGround !== null &&
           entry.inContact === shouldClampToTerrain &&
-          restingHeightFor(callsign, entry.aircraftType) === null
+          confirmedRestingHeight(callsign, entry.aircraftType) === null
         terrainState.transition = {
           source: sourceHeight,
           target: targetHeight,
@@ -1371,6 +1479,7 @@ function runInterpolationFrame() {
       sharedTimelineRateStateRef.current.delete(callsign)
       sharedContactStateRef.current.delete(callsign)
       sharedLaneBStateRef.current.delete(callsign)
+      sharedTypeRestConfirmedRef.current.delete(callsign)
       sharedRestOffsetStateRef.current.delete(callsign)
       sharedContactHoldStateRef.current.delete(callsign)
     }

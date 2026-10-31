@@ -6,6 +6,7 @@
  * aircraft sits on the drawn runway through the roll.
  */
 import { describe, expect, it, vi } from 'vitest'
+import { RESTING_HEIGHT_MAX_GROUNDSPEED_KTS } from '@/constants'
 import { type FrameRecord, runScenario, type ScenarioResult } from './harness'
 
 vi.mock('react', () => {
@@ -21,6 +22,13 @@ vi.mock('react', () => {
 const TERRAIN_MISMATCH_M = 1.5
 const GROUND_OFFSET_M = 0.1 // GROUND_AIRCRAFT_TERRAIN_OFFSET: the clamp draws the wheels this far above the terrain
 const ROLLOUT_HEIGHT_ERR_MAX_M = 0.05 // measured 0.000 m
+// Owner ruling, TC3D-397: an arrival with only its type's resting height enters contact once two of its own samples
+// settle on it, after touchdown (measured 0.18 s), and eases onto the drawn runway until 0.38 s; one with its own
+// resting height is held to the runway from its first rollout frame
+const TYPE_REST_ENTRY_ALLOWANCE_S = 0.4
+const ROLLOUT_TITLE =
+  `the arrival is drawn on the drawn runway through the rollout, within ${ROLLOUT_HEIGHT_ERR_MAX_M} m, ` +
+  `from ${TYPE_REST_ENTRY_ALLOWANCE_S} s after touchdown with only its type's resting height`
 // Wider than the 2 ft (0.61 m) between the 3 ft entry and the 5 ft exit only together with the sink between samples
 const HEIGHT_JITTER_M = 0.5
 // The reference airport sits this far below a field the aircraft rolls on without a terrain sample
@@ -74,10 +82,15 @@ describe.each([TERRAIN_MISMATCH_M, -TERRAIN_MISMATCH_M])('drawn terrain %f m fro
     expect(contactChanges(recs)).toBe(1)
   })
 
-  it(`the arrival is drawn on the drawn runway through the rollout, within ${ROLLOUT_HEIGHT_ERR_MAX_M} m`, () => {
-    const recs = ((scenarios.get(offset) as ScenarioResult).frames.get('ARR1') ?? []).filter(
-      (r) => r.truth.segment === 'rollout',
-    )
+  it(ROLLOUT_TITLE, () => {
+    const result = scenarios.get(offset) as ScenarioResult
+    const arrival = result.flights.find((f) => f.callsign === 'ARR1')
+    expect(arrival, 'ARR1').toBeDefined()
+    const touchdown = arrival?.events.rollout ?? Number.NaN
+    // An aircraft learns its own resting height only from samples under 5 kt; without one it lands on its type's
+    const ownRest = (arrival?.samples ?? []).some((s) => s.t < touchdown && s.gs < RESTING_HEIGHT_MAX_GROUNDSPEED_KTS)
+    const checkedFrom = touchdown + (ownRest ? 0 : TYPE_REST_ENTRY_ALLOWANCE_S)
+    const recs = (result.frames.get('ARR1') ?? []).filter((r) => r.truth.segment === 'rollout' && r.tLocal >= checkedFrom)
     expect(recs.length).toBeGreaterThan(100)
     const worst = recs.reduce((m, r) => Math.max(m, Math.abs(r.agl - (offset + GROUND_OFFSET_M))), 0)
     expect(worst, `rollout height off the drawn runway by ${worst.toFixed(3)} m`).toBeLessThanOrEqual(

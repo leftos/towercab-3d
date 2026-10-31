@@ -46,10 +46,11 @@ export interface AircraftObservation {
   /**
    * Height above the ground under it, in metres, raw as the source reports it (vNAS: the simulator's AGL of the
    * aircraft's reference point, so an aircraft at rest reads its resting height, which varies by type and simulator).
-   * Absent for VATSIM and RealTraffic; replay carries what was recorded. Slow vNAS samples from -3 to 16 ft teach the
-   * aircraft's own resting height and its type's; ground contact, the parked test and the flare use the height over the
-   * aircraft's own, else its type's (`heightOverRest`). While it has neither, lane B decides contact and the
-   * parked test and the flare take the raw height.
+   * Absent for VATSIM and RealTraffic; replay carries what was recorded. Slow vNAS samples from -3 to 16 ft (25 ft for
+   * a very tall type, `VERY_TALL_TYPES`) of a type that is not a rotorcraft teach the aircraft's own resting height and
+   * its type's. The parked test and the flare use the height over the aircraft's own, else its type's
+   * (`heightOverRest`), and the raw height while it has neither. Ground contact and the drawn height use its own, else
+   * its type's once two consecutive samples of its own sit within 1 ft of it; until then lane B decides contact.
    */
   heightAboveGround?: number
 
@@ -212,6 +213,12 @@ export interface SettleRun {
   highest: number
 }
 
+/** Heights above ground (metres) of two consecutive samples of the drawn list */
+export interface HeightPair {
+  newest: number
+  previous: number
+}
+
 /**
  * Result of timeline interpolation/extrapolation.
  * Contains the computed position and debug info.
@@ -255,6 +262,13 @@ export interface TimelineInterpolationResult {
    * when the samples do not span it or a sample in it carries no height.
    */
   settleRun: SettleRun | undefined
+
+  /**
+   * The heights of the sample the settle run ends at and of the sample before it in the drawn list, on which a resting
+   * height learned only from the aircraft's type is confirmed. Undefined while the aircraft has its own resting height,
+   * and when either sample carries no height or the first has none before it.
+   */
+  lastTwoHeights: HeightPair | undefined
 
   /**
    * Whether the bracket's earlier sample shows the aircraft stopped and the bracket's horizontal step is under

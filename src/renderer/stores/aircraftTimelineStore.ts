@@ -62,6 +62,7 @@ import {
   namesType,
   recordRestingSample,
   restingHeightFor,
+  restingHeightSourceFor,
 } from '@/utils/aircraft/restingHeight'
 import { knotsToMps, mpsToKnots } from '@/utils/coordinates'
 import type {
@@ -70,6 +71,7 @@ import type {
   AircraftObservation,
   AircraftTimeline,
   DynamicDelayState,
+  HeightPair,
   SettleRun,
   TimelineInterpolationResult,
 } from '../types/aircraft-timeline'
@@ -754,6 +756,27 @@ export function settleRunEndingAt(
     if (spans && endIndex - i + 1 >= DROP_CONTACT_SETTLE_MIN_SAMPLES) return run
   }
   return undefined
+}
+
+/**
+ * The heights of `end` and of the sample before it in the drawn list, on which a resting height learned only from
+ * the aircraft's type is confirmed.
+ *
+ * @param observations - The drawn list, oldest first
+ * @param end - The bracket's `after` sample while interpolating, else its `before` sample; null for no pair
+ * @returns The pair, or undefined when `end` is not in the list or is its first sample, or either carries no height
+ */
+function lastTwoHeightsEndingAt(
+  observations: AircraftObservation[],
+  end: AircraftObservation | null,
+): HeightPair | undefined {
+  if (end === null) return undefined
+  const endIndex = observations.lastIndexOf(end)
+  if (endIndex < 1) return undefined
+  const newest = end.heightAboveGround
+  const previous = observations[endIndex - 1].heightAboveGround
+  if (newest === undefined || previous === undefined) return undefined
+  return { newest, previous }
 }
 
 /** Take one more sample's height into a run's lowest, second-lowest and highest heights. */
@@ -1663,10 +1686,13 @@ function interpolateTimeline(
   }
 
   const heightAboveGround = heightAboveGroundAt(allObservations, before, after, displayTime, now)
-  // The run reads samples up to the bracket's `after`, never beyond; while extrapolating or held, up to `before`
-  // and only lane B (no resting height learned) reads it
-  const laneB = heightAboveGround !== null && restingHeightFor(callsign, metadata.aircraftType) === null
-  const settleRun = laneB ? settleRunEndingAt(observations, before && after ? after : before) : undefined
+  // The run and the last two heights read samples up to the bracket's `after`, never beyond; while extrapolating or
+  // held, up to `before`. Only an aircraft without a resting height of its own reads them: lane B reads the run, and
+  // the pair confirms a resting height learned only from its type
+  const laneB = heightAboveGround !== null && restingHeightSourceFor(callsign, metadata.aircraftType)?.source !== 'own'
+  const runEnd = before && after ? after : before
+  const settleRun = laneB ? settleRunEndingAt(observations, runEnd) : undefined
+  const lastTwoHeights = laneB ? lastTwoHeightsEndingAt(observations, runEnd) : undefined
 
   return {
     result: {
@@ -1682,6 +1708,7 @@ function interpolateTimeline(
       onGround: drawingGroundFlag(groundFlagSource, heightAboveGround),
       heightAboveGround,
       settleRun,
+      lastTwoHeights,
       bracketStartStopped: bracketStartsStopped(observations, before, after),
       displayAnchorOffsetMs: oldestObs.observedAt - oldestObs.receivedAt,
       pitch,

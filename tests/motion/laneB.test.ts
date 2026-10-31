@@ -14,6 +14,7 @@ import {
   DROP_CONTACT_SEEK_MS,
   RESTING_HEIGHT_EASE_MS,
   RESTING_HEIGHT_MIN_SAMPLES,
+  RESTING_HEIGHT_SAMPLE_WINDOW,
   VNAS_PREFERENCE_THRESHOLD_MS,
 } from '@/constants'
 import type { AircraftObservation, SettleRun } from '@/types/aircraft-timeline'
@@ -408,13 +409,13 @@ interface ClimbOut {
   frame: number
 }
 
-/** Start drawing an aircraft of `type` over CLIMB_OUT_FT, with nothing else in the timeline store. */
-function startClimbOut(callsign: string, type: string): ClimbOut {
+/** Start drawing an aircraft of `type` over `heightsFt` at 1 Hz, with nothing else in the timeline store. */
+function startClimbOut(callsign: string, type: string, heightsFt: number[]): ClimbOut {
   useAircraftTimelineStore.getState().clear()
   useVatsimStore.setState({ referencePosition: { latitude: 37.72, longitude: -122.22 } })
   // biome-ignore lint/correctness/useHookAtTopLevel: this is the interpolation singleton, driven outside React
   const map = useAircraftInterpolation()
-  const pending = CLIMB_OUT_FT.map((ft, i) => climbOutSample(i * 1000, ft))
+  const pending = heightsFt.map((ft, i) => climbOutSample(i * 1000, ft))
   return { map, callsign, metadata: { ...METADATA, aircraftType: type }, pending, frame: 0 }
 }
 
@@ -455,7 +456,7 @@ function teachType(type: string): void {
 function climbOutLive(callsign: string, event: 'teach' | 'loseFeed', tailMs: number) {
   vi.useFakeTimers({ toFake: ['Date'] })
   try {
-    const climbOut = startClimbOut(callsign, event === 'teach' ? TAUGHT_TYPE : UNLEARNED_TYPE)
+    const climbOut = startClimbOut(callsign, event === 'teach' ? TAUGHT_TYPE : UNLEARNED_TYPE, CLIMB_OUT_FT)
     const recs = liveToMidFade(climbOut)
     const eventIndex = recs.length
     if (event === 'teach') teachType(TAUGHT_TYPE)
@@ -471,6 +472,71 @@ function climbOutLive(callsign: string, event: 'teach' | 'loseFeed', tailMs: num
   }
 }
 
+// Constructed: an arrival of a type taught 13.6 ft that first settles at 15.2 ft, which lane B takes as its provisional
+// resting height, then steps down onto the type's 13.6 ft, where two of its own samples confirm the type's
+const CONFIRM_FT = [25, 20, 15.2, 15.2, 15.2, 15.2, 13.6, 13.6, 13.6, 13.6, 13.6]
+const CONFIRM_PROVISIONAL_M = 15.2 * FT
+// Taught 13.6 ft before the arrival is first drawn; nothing else here uses it
+const CONFIRMED_TYPE = 'B763'
+// Frames drawn past the last sample, so the display delay has passed it
+const CONFIRM_TAIL_FRAMES = 3 * 60
+// Drawn time of the last sample: the frames checked end there, before the drawing extrapolates past it
+const CONFIRM_LAST_SAMPLE_MS = (CONFIRM_FT.length - 1) * 1000
+
+// Taught 13.6 ft before its climb-out is first drawn, which two of its own roll samples confirm; moved mid-fade
+const MOVED_TYPE = 'B764'
+// The type's resting height once moved: 1.4 ft over the one confirmed
+const MOVED_REST_FT = 15
+// CLIMB_OUT_FT after two samples that settle on nothing, so lane B decides its first frames
+const MOVED_FT = [20, 18, ...CLIMB_OUT_FT]
+// 140 kt east along the 37.72 degree parallel, in degrees of longitude a second
+const MOVED_LONGITUDE_DEG_PER_S = (140 * 1852) / 3600 / (111_320 * Math.cos((37.72 * Math.PI) / 180))
+
+/**
+ * Draw an aircraft of MOVED_TYPE, its type taught 13.6 ft first, live over MOVED_FT to its first frame mid-fade,
+ * then move the type's resting height to MOVED_REST_FT, as a full window of others of the type parked there would, and
+ * draw it 1 s more. The frames, and the index of the first after the move.
+ */
+function moveTypeLive(callsign: string) {
+  vi.useFakeTimers({ toFake: ['Date'] })
+  try {
+    teachType(MOVED_TYPE)
+    const climbOut = startClimbOut(callsign, MOVED_TYPE, MOVED_FT)
+    // Moving east at 140 kt, so no bracket starts stopped and no contact hold keeps it in contact once airborne
+    climbOut.pending = climbOut.pending.map((o, i) => ({ ...o, longitude: o.longitude + i * MOVED_LONGITUDE_DEG_PER_S }))
+    const recs = liveToMidFade(climbOut)
+    const eventIndex = recs.length
+    for (let i = 0; i < RESTING_HEIGHT_SAMPLE_WINDOW; i++) {
+      recordRestingSample(`${MOVED_TYPE}MOVED`, MOVED_TYPE, MOVED_REST_FT * FT, 0, 'vnas')
+    }
+    const end = climbOut.frame + 60
+    while (climbOut.frame < end) {
+      const rec = liveFrame(climbOut)
+      if (rec !== undefined) recs.push(rec)
+    }
+    return { recs, eventIndex }
+  } finally {
+    vi.useRealTimers()
+  }
+}
+
+/** Draw an arrival of CONFIRMED_TYPE live over CONFIRM_FT, its type taught first, to past its last sample. */
+function confirmLive(callsign: string): Drawn[] {
+  vi.useFakeTimers({ toFake: ['Date'] })
+  try {
+    teachType(CONFIRMED_TYPE)
+    const arrival = startClimbOut(callsign, CONFIRMED_TYPE, CONFIRM_FT)
+    const recs: Drawn[] = []
+    while (arrival.frame < CONFIRM_FT.length * 60 + CONFIRM_TAIL_FRAMES) {
+      const rec = liveFrame(arrival)
+      if (rec !== undefined) recs.push(rec)
+    }
+    return recs
+  } finally {
+    vi.useRealTimers()
+  }
+}
+
 /**
  * Draw an unlearned aircraft live over CLIMB_OUT_FT to its first frame mid-fade, then enter buffer replay at the
  * instant drawn and draw it 1 s on. The frames, and the index of the first replay frame.
@@ -478,7 +544,7 @@ function climbOutLive(callsign: string, event: 'teach' | 'loseFeed', tailMs: num
 function climbOutIntoReplay(callsign: string) {
   vi.useFakeTimers({ toFake: ['Date'] })
   try {
-    const climbOut = startClimbOut(callsign, UNLEARNED_TYPE)
+    const climbOut = startClimbOut(callsign, UNLEARNED_TYPE, CLIMB_OUT_FT)
     const recs = liveToMidFade(climbOut)
     const eventIndex = recs.length
     const start = T0 + Math.round(((climbOut.frame - 1) * 1000) / 60)
@@ -507,7 +573,7 @@ function climbOutIntoReplay(callsign: string) {
 function climbOutReplayed(callsign: string, stepMs: number) {
   vi.useFakeTimers({ toFake: ['Date'] })
   try {
-    const climbOut = startClimbOut(callsign, UNLEARNED_TYPE)
+    const climbOut = startClimbOut(callsign, UNLEARNED_TYPE, CLIMB_OUT_FT)
     const endMs = CLIMB_OUT_FT.length * 1000
     vi.setSystemTime(T0 + endMs)
     for (const observation of climbOut.pending) {
@@ -580,6 +646,8 @@ const replayed = liveThenReplay('REPLAY1')
 const [storeMidBracket, storeExtrapolating] = storeRunsAt('STORERUN', [5500, 9500])
 // The drawn offset's scenarios, each alone in the timeline store
 const taught = climbOutLive('TAUGHT1', 'teach', 1000)
+const confirmed = confirmLive('CONFIRM1')
+const typeMoved = moveTypeLive('MOVED1')
 const feedLost = climbOutLive('FEEDLOST1', 'loseFeed', VNAS_PREFERENCE_THRESHOLD_MS + 1000)
 const intoReplay = climbOutIntoReplay('INTOREPLAY1')
 const seeks = { forward: climbOutReplayed('SEEKFWD', SEEK_MS), back: climbOutReplayed('SEEKBACK', -SEEK_MS) }
@@ -767,23 +835,45 @@ it('samples 2.5 s apart need three for a run: two span 2.5 s but are too few', (
   expect(settleRunEndingAt(samples, samples[2]), 'three samples').toEqual(runOf(4, 4, 4.1))
 })
 
-it('a type resting height learned mid-fade eases what is taken off from the faded provisional one over 0.25 s, never in one frame', () => {
+it("a type resting height learned mid-fade, which the aircraft's own samples have not confirmed, leaves the faded provisional one taken off", () => {
   const { recs, eventIndex } = taught
   const before = recs[eventIndex - 1]
   expect(before.rawFt, 'raw height when the type is taught (ft)').toBeCloseTo(MID_FADE_FT, 0)
-  expect(before.offsetM, 'taken off before: the provisional resting height, faded (m)').toBeCloseTo(fadedRest(before), 6)
-  // On the frame it is learned only the fade moves what is taken off; from there the ease closes the gap left
-  const learned = recs[eventIndex]
-  const onto = Math.abs(learned.offsetM - before.offsetM)
-  expect(onto, `step onto the frame it is learned ${onto.toFixed(3)} m`).toBeLessThanOrEqual(FADE_STEP_MAX_M)
-  const after = recs.slice(eventIndex)
-  const gap = CLIMB_OUT_REST_M - learned.offsetM
+  const around = recs.slice(eventIndex - 1)
+  expect(around.length, 'frames from the type taught on').toBeGreaterThan(30)
+  const off = largestOffsetOff(around, fadedRest)
+  expect(off, 'taken off from the type taught on, off the faded provisional resting height (m)').toBeLessThanOrEqual(
+    OFFSET_ERR_MAX_M,
+  )
+})
+
+it("a type resting height the aircraft's own samples confirm replaces the provisional one taken off over 0.25 s, never in one frame", () => {
+  const from = confirmed.findIndex((r) => Math.abs(r.offsetM - CONFIRM_PROVISIONAL_M) <= OFFSET_ERR_MAX_M)
+  expect(from, 'a frame taking off the 15.2 ft provisional resting height').toBeGreaterThanOrEqual(0)
+  const after = confirmed.slice(from).filter((r) => r.time <= CONFIRM_LAST_SAMPLE_MS)
+  // The 0.25 s ease moves what is taken off by at most its frame's share of the swap a frame
+  const swapM = CONFIRM_PROVISIONAL_M - CLIMB_OUT_REST_M
   const step = largestOffsetStep(after)
-  expect(step, `largest step ${step.toFixed(3)} m`).toBeLessThanOrEqual((gap * FRAME_MS) / RESTING_HEIGHT_EASE_MS + 1e-6)
-  const eased = after.slice(EASE_FRAMES)
+  expect(step, `largest step ${step.toFixed(4)} m`).toBeLessThanOrEqual((swapM * FRAME_MS) / RESTING_HEIGHT_EASE_MS + 1e-6)
+  const last = after[after.length - 1]
+  expect(last.offsetM, "taken off at the end: the type's 13.6 ft, confirmed (m)").toBeCloseTo(CLIMB_OUT_REST_M, 6)
+})
+
+it("an airborne aircraft whose type's resting height moves over 1 ft from the confirmed one eases it out over 0.25 s, never in one frame", () => {
+  const { recs, eventIndex } = typeMoved
+  const before = recs[eventIndex - 1]
+  expect(before.time, 'drawn time of the move, long after the roll confirmed the type (ms)').toBeGreaterThan(
+    DROP_CONTACT_SEEK_MS + 1000,
+  )
+  expect(before.offsetM, "taken off before: the type's confirmed 13.6 ft (m)").toBeCloseTo(CLIMB_OUT_REST_M, 6)
+  // Lane B takes over with no provisional resting height: the 0.25 s ease moves its frame's share of 13.6 ft a frame
+  const step = largestOffsetStep(recs.slice(eventIndex - 1))
+  expect(step, `largest step ${step.toFixed(4)} m`).toBeLessThanOrEqual(
+    (CLIMB_OUT_REST_M * FRAME_MS) / RESTING_HEIGHT_EASE_MS + 1e-6,
+  )
+  const eased = recs.slice(eventIndex + EASE_FRAMES)
   expect(eased.length, 'frames once eased').toBeGreaterThan(30)
-  const off = largestOffsetOff(eased, () => CLIMB_OUT_REST_M)
-  expect(off, 'taken off once eased, off the learned resting height (m)').toBeLessThanOrEqual(OFFSET_ERR_MAX_M)
+  expect(largestOffsetOff(eased, () => 0), 'taken off once eased (m)').toBeLessThanOrEqual(OFFSET_ERR_MAX_M)
 })
 
 it('a vNAS feed lost mid-fade, drawn without a height 30 s on, eases the faded provisional resting height out over 0.25 s', () => {

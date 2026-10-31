@@ -95,14 +95,33 @@ export const RESTING_HEIGHT_MAX_GROUNDSPEED_KTS = 5
 /** A vNAS sample below this raw height above ground (-3 ft) is never a resting-height sample */
 export const RESTING_HEIGHT_MIN_SAMPLE_METERS = -3 * 0.3048
 
-/** A vNAS sample above this raw height above ground (16 ft) is never a resting-height sample */
+/**
+ * A vNAS sample above this raw height above ground (16 ft) is never a resting-height sample, unless of a very tall type
+ */
 export const RESTING_HEIGHT_MAX_SAMPLE_METERS = 16 * 0.3048
+
+/**
+ * A vNAS sample of a very tall type (`VERY_TALL_TYPES`) above this raw height (25 ft) is never a resting-height sample
+ */
+export const RESTING_HEIGHT_MAX_TALL_SAMPLE_METERS = 25 * 0.3048
+
+/** Type codes whose aircraft may rest above 16 ft, so they learn a resting height up to 25 ft */
+export const VERY_TALL_TYPES: ReadonlySet<string> = new Set(['MD11', 'B744', 'B748', 'A388', 'A124', 'C5M'])
 
 /** Resting-height samples kept per aircraft and per aircraft type; the resting height is their median */
 export const RESTING_HEIGHT_SAMPLE_WINDOW = 9
 
 /** Resting-height samples an aircraft or a type needs before its resting height is learned */
 export const RESTING_HEIGHT_MIN_SAMPLES = 3
+
+/**
+ * A resting height learned only from other aircraft of the type decides an aircraft's contact once two consecutive
+ * height samples of its own sit within this of it (1 ft)
+ */
+export const TYPE_REST_CONFIRM_MAX_OFFSET_METERS = 1 * 0.3048
+
+/** The two samples that confirm a type's resting height differ by no more than this (0.5 ft) */
+export const TYPE_REST_CONFIRM_MAX_STEP_METERS = 0.5 * 0.3048
 
 /** While an aircraft has no resting height, contact is entered only at or below this raw height (16 ft) */
 export const DROP_CONTACT_MAX_HEIGHT_METERS = 16 * 0.3048

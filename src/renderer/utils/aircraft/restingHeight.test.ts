@@ -1,8 +1,9 @@
 // @vitest-environment node
 /**
- * The resting height of each aircraft and of each aircraft type, learned from slow vNAS samples from -3 to 16 ft: the
- * median of the last 9, known once 3 exist. An aircraft reads its own, else its type's. Its own lives as long as its
- * timeline (forgotten on removal, pruning, clear and a change of type); the type's is kept for the session.
+ * The resting height of each aircraft and of each aircraft type, learned from slow vNAS samples from -3 to 16 ft (25 ft
+ * for a very tall type) of a type that is not a rotorcraft: the median of the last 9, known once 3 exist. An aircraft
+ * reads its own, else its type's. Its own lives as long as its timeline (forgotten on removal, pruning, clear and a
+ * change of type); the type's is kept for the session.
  */
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import type { AircraftDataSource, AircraftMetadata, AircraftObservation } from '@/types/aircraft-timeline'
@@ -86,6 +87,30 @@ describe('the samples it ignores', () => {
     expect(restFt('A320')).toBeNull()
     record('A320', [16, 16, 16])
     expect(restFt('A320')).toBeCloseTo(16, 9)
+  })
+
+  it('a B77L sample at 24.5 ft, as a parked reload burst reads', () => {
+    record('B77L', [24.5, 24.5, 24.5])
+    expect(restFt('B77L'), "the type's").toBeNull()
+    expect(restFt('B77L', 'AAL1'), 'its own').toBeNull()
+  })
+
+  it('above 25 ft of a very tall type', () => {
+    record('MD11', [25.1, 25.1, 25.1])
+    expect(restFt('MD11'), "the type's").toBeNull()
+    expect(restFt('MD11', 'AAL1'), 'its own').toBeNull()
+  })
+
+  it.each([16.44, 24.5])("but not a very tall type's at %s ft", (ft) => {
+    record('MD11', [ft, ft, ft])
+    expect(restFt('MD11'), "the type's").toBeCloseTo(ft, 9)
+    expect(restFt('MD11', 'AAL1'), 'its own').toBeCloseTo(ft, 9)
+  })
+
+  it('from a rotorcraft, even at 5 ft', () => {
+    record('R22', [5, 5, 5])
+    expect(restFt('R22'), "the type's").toBeNull()
+    expect(restFt('R22', 'AAL1'), 'its own').toBeNull()
   })
 
   it('samples below -3 ft or above 16 ft are ignored', () => {

@@ -2,8 +2,9 @@
 /**
  * vNAS reports the height above ground of a reference point, so an aircraft at rest reads its resting height, which
  * varies by type and by simulator (TC3D-316, TC3D-354): one A320 was measured live at 9.0 ft and another at -0.31 ft;
- * the scenarios here use A320 9.0 ft, B77L 13.6 ft and C17 5.9 ft. Contact is decided on the height over the
- * aircraft's own resting height, else its type's, once one is learned from slow vNAS samples. With neither, lane B
+ * the scenarios here use A320 9.0 ft, B77L 13.6 ft, C17 5.9 ft and MD11 16.44 ft. Contact is decided on the height over
+ * the aircraft's own resting height, once learned from slow vNAS samples, else its type's once two consecutive samples
+ * of its own sit within 1 ft of it (TC3D-397); only then is it taken off the drawn height. Until then lane B
  * decides (`laneB.test.ts`): contact at or below 16 ft once a run of samples has settled after a descent, then over a
  * provisional resting height taken from the run, the drawn height easing over 1 s of display time.
  */
@@ -90,6 +91,19 @@ const lateFeed: ScenarioResult = await runScenario({
   aircraftTypes: { DEP1: 'B77L', ARR1: 'A320', GA1: 'C17' },
   vnasFromS: { DEP1: dep.offset + dep.events.takeoff_roll + LATE_FEED_ROLL_S },
 })
+/** As `learned`, over drawn terrain 1.5 m below the simulator's ground: a change of contact moves the drawn height. */
+const learnedLowTerrain: ScenarioResult = await runScenario({
+  ...BASE,
+  aircraftTypes: { DEP1: 'A320', ARR1: 'A320', GA1: 'C17' },
+  terrainOffsetM: -1.5,
+})
+/** DEP1 and ARR1 are MD11s resting at 16.44 ft, over 16 ft, each first seen by VATSIM. */
+const TALL: ScenarioOptions = { ...BASE, aircraftTypes: { DEP1: 'MD11', ARR1: 'MD11' }, restingHeightsFt: { MD11: 16.44 } }
+const tallVatsimFirst: ScenarioResult = await runScenario(TALL)
+/** As `TALL`, each first seen by vNAS, as the live MD11s were: DEP1 teaches the type on its pushback. */
+const tall: ScenarioResult = await runScenario({ ...TALL, vnasFirst: true })
+/** DEP1's own resting height at the end of `tall` (metres), its type not consulted. */
+const tallDepOwnRest = (await import('@/utils/aircraft/restingHeight')).restingHeightFor('DEP1', null)
 /** GA1, an A320 reading 0 ft at rest whose type nothing teaches, holds a level pass at 18 ft before going around. */
 const levelPass: ScenarioResult = await runScenario({
   ...BASE,
@@ -130,6 +144,31 @@ it(LEARNED_ROLLOUT_TITLE, () => {
   )
 })
 
+describe('an MD11 resting at 16.44 ft (TC3D-395)', () => {
+  it(`its arrival enters contact within ${LEARNED_TOUCHDOWN_LAG_MAX_S} s of its reported touchdown`, () => {
+    const lag = touchdownLag(tall)
+    expect(Math.abs(lag), `contact ${lag.toFixed(2)} s after the reported touchdown`).toBeLessThanOrEqual(
+      LEARNED_TOUCHDOWN_LAG_MAX_S,
+    )
+  })
+
+  it.each([
+    ['first seen by vNAS on its pushback', () => tall],
+    ['first seen by VATSIM at the gate', () => tallVatsimFirst],
+  ])('%s, it stays in contact while taxiing', (_name, result) => {
+    const taxi = frames(result(), 'DEP1').filter((r) => TAXI_SEGMENTS.includes(r.truth.segment) && r.gs > 5)
+    expect(taxi.length).toBeGreaterThan(1000)
+    expect(taxi.filter((r) => r.inContact !== true).length, 'taxi frames out of contact').toBe(0)
+  })
+
+  it('parked, it learns its own resting height and is in contact', () => {
+    expect((tallDepOwnRest ?? Number.NaN) / 0.3048, 'its own resting height (ft)').toBeCloseTo(16.44, 6)
+    const parked = vnasFrames(tall, 'DEP1').filter((r) => r.truth.segment === 'lined_up' && r.truth.gs === 0)
+    expect(parked.length).toBeGreaterThan(300)
+    expect(parked.filter((r) => r.inContact !== true).length, 'parked frames out of contact').toBe(0)
+  })
+})
+
 it(`an unlearned type's first arrival enters contact by lane B within ${LANE_B_TOUCHDOWN_LAG_MAX_S} s of touchdown`, () => {
   const lag = touchdownLag(unlearned)
   expect(lag, 'contact before the reported touchdown').toBeGreaterThanOrEqual(0)
@@ -166,9 +205,6 @@ const A320_REST_M = RESTING_HEIGHTS_FT.A320 * FT
 const B77L_REST_M = RESTING_HEIGHTS_FT.B77L * FT
 const AIRBORNE_CHECK_MIN_AGL_M = 30 // above the 30 m over which the ground offset fades
 const DRAWN_HEIGHT_DIFF_MAX_M = 1e-6
-// The longest frame: the harness's 60 fps clock reads whole milliseconds, so frames are 16 or 17 ms apart
-const FRAME_MS = Math.ceil(1000 / 60)
-const EASE_MS = 250 // RESTING_HEIGHT_EASE_MS
 // Leaving contact 5 ft over rest, the clamp transition eases the 5 ft catch-up by 7% a frame, with the climb on top
 const LIFTOFF_STEP_MAX_M = 5 * FT * 0.07 + 0.1
 const HEIGHTLESS_ERR_MAX_M = 0.05
@@ -197,13 +233,14 @@ function drawnOverZeroRest(result: ScenarioResult, callsign: string): { rec: Fra
 }
 
 describe('lane C: drawn at the reported height less the resting height', () => {
-  it('an airborne vNAS A320 whose resting height is learned is drawn where an aircraft reading 0 ft at rest is', () => {
+  it("an airborne vNAS A320 with only its type's resting height, unconfirmed by its own samples, is drawn at its raw height", () => {
+    // The 0 ft aircraft reads its raw height too, so the A320 is drawn its 9 ft resting height over it
     const airborne = drawnOverZeroRest(learned, 'ARR1').filter(
       ({ rec }) => rec.truth.agl > AIRBORNE_CHECK_MIN_AGL_M && rec.inContact === false,
     )
     expect(airborne.length).toBeGreaterThan(1000)
-    const worst = airborne.reduce((m, { diff }) => Math.max(m, Math.abs(diff)), 0)
-    expect(worst, `drawn ${worst.toFixed(3)} m off`).toBeLessThanOrEqual(DRAWN_HEIGHT_DIFF_MAX_M)
+    const worst = airborne.reduce((m, { diff }) => Math.max(m, Math.abs(diff - A320_REST_M)), 0)
+    expect(worst, `drawn ${worst.toFixed(3)} m off its raw height`).toBeLessThanOrEqual(DRAWN_HEIGHT_DIFF_MAX_M)
   })
 
   it('leaving contact, the A320 catches up no more than an aircraft reading 0 ft at rest, eased', () => {
@@ -220,17 +257,13 @@ describe('lane C: drawn at the reported height less the resting height', () => {
     expect(maxStep, `largest step between frames ${maxStep.toFixed(3)} m`).toBeLessThanOrEqual(LIFTOFF_STEP_MAX_M)
   })
 
-  it('an airborne A320 drops by the resting height over 0.25 s when another A320 teaches it, never in one frame', () => {
+  it('an airborne A320 is not drawn lower when another A320 teaches its type', () => {
     const airborne = drawnOverZeroRest(learnedMidFlight, 'GA1').filter(
       ({ rec }) => rec.truth.agl > AIRBORNE_CHECK_MIN_AGL_M && rec.inContact === false,
     )
     expect(airborne.length).toBeGreaterThan(1000)
-    const offset = airborne.map(({ diff }) => diff)
-    expect(offset[0], 'drawn the resting height high before it is learned').toBeCloseTo(A320_REST_M, 6)
-    expect(offset[offset.length - 1], 'drawn at the true height once it is learned').toBeCloseTo(0, 6)
-    let maxStep = 0
-    for (let i = 1; i < offset.length; i++) maxStep = Math.max(maxStep, Math.abs(offset[i] - offset[i - 1]))
-    expect(maxStep, `largest step ${maxStep.toFixed(3)} m`).toBeLessThanOrEqual((A320_REST_M * FRAME_MS) / EASE_MS + 1e-6)
+    const worst = airborne.reduce((m, { diff }) => Math.max(m, Math.abs(diff - A320_REST_M)), 0)
+    expect(worst, `drawn ${worst.toFixed(3)} m off its raw height`).toBeLessThanOrEqual(DRAWN_HEIGHT_DIFF_MAX_M)
   })
 
   it('a climbing B77L whose resting height is learned shows its reported altitude and is drawn the resting height lower', () => {
@@ -286,6 +319,28 @@ it('an unlearned arrival eases down over 1 s once in contact', () => {
   expect(settled.length).toBeGreaterThan(100)
   const worst = settled.reduce((m, r) => Math.max(m, Math.abs(r.agl - CLAMPED_GROUND_M)), 0)
   expect(worst, `drawn ${worst.toFixed(3)} m off the clamped ground`).toBeLessThanOrEqual(EASED_ERR_MAX_M)
+})
+
+// The fast ease, HEIGHT_TRANSITION_LERP_FACTOR a frame, is done in about 15 frames; the 1 s smoothstep is 22% in here
+const FAST_EASE_DONE_S = 0.3
+const LOW_TERRAIN_GROUND_M = -1.5 + CLAMPED_GROUND_M
+
+const CONFIRMED_EASE_TITLE =
+  `an arrival whose own samples confirm its type's resting height eases onto the drawn runway within ` +
+  `${FAST_EASE_DONE_S} s of contact, as one with its own does`
+
+it(CONFIRMED_EASE_TITLE, () => {
+  const recs = frames(learnedLowTerrain, 'ARR1')
+  const entry = recs.findIndex((r) => r.inContact === true)
+  expect(entry, 'a frame in contact').toBeGreaterThan(0)
+  const contactAt = recs[entry].frameTime
+  const leave = recs.findIndex((r, i) => i > entry && r.inContact !== true)
+  const settled = recs
+    .slice(entry, leave < 0 ? recs.length : leave)
+    .filter((r) => r.frameTime >= contactAt + FAST_EASE_DONE_S)
+  expect(settled.length).toBeGreaterThan(100)
+  const worst = settled.reduce((m, r) => Math.max(m, Math.abs(r.agl - LOW_TERRAIN_GROUND_M)), 0)
+  expect(worst, `drawn ${worst.toFixed(3)} m off the drawn runway`).toBeLessThanOrEqual(EASED_ERR_MAX_M)
 })
 
 it.each([
@@ -372,6 +427,128 @@ async function teachType(type: string): Promise<void> {
   const store = await timelineStore()
   for (let t = 0; t < 9; t++) store.getState().addObservation(`TEACH${type}`, stoppedSample('vnas', t, 9), typed(type))
 }
+
+// 115 kt east along the 37.72 degree parallel, in degrees of longitude a second
+const LANDING_LONGITUDE_DEG_PER_S = (115 * 1852) / 3600 / (111_320 * Math.cos((37.72 * Math.PI) / 180))
+
+/**
+ * A vNAS sample at second `t` of an aircraft landing east at 115 kt, too fast to be a resting-height sample and moving,
+ * so no bracket starts stopped.
+ */
+const landingVnasSample = (t: number, heightFt: number): AircraftObservation => ({
+  ...stoppedVnasSample(t, heightFt),
+  longitude: -122.22 + t * LANDING_LONGITUDE_DEG_PER_S,
+  groundspeed: 115,
+})
+
+/** Teach `type` a resting height of `ft` through nine parked samples of `teacher`, which fill its sample window. */
+async function teachTypeAt(teacher: string, type: string, ft: number): Promise<void> {
+  const store = await timelineStore()
+  for (let t = 0; t < 9; t++) store.getState().addObservation(teacher, stoppedSample('vnas', t, ft), typed(type))
+}
+
+/**
+ * Land `callsign` of `type` on 1 Hz vNAS samples from second `fromS`, driving `updateContact` once per sample with the
+ * frame the timeline store draws at its instant (`getInterpolatedState`): the settle run and the last two heights
+ * ending at the sample.
+ *
+ * @returns Per sample, whether it is in contact and what is taken off its drawn height before any ease (m)
+ */
+async function landOnSamples(
+  callsign: string,
+  type: string,
+  heightsFt: number[],
+  fromS: number,
+): Promise<{ inContact: boolean; offset: number }[]> {
+  const store = await timelineStore()
+  const { restOffsetTarget, updateContact } = await import('@/hooks/useAircraftInterpolation')
+  const drawnAt = (now: number) => store.getState().getInterpolatedState(callsign, now)
+  return heightsFt.map((ft, i) => {
+    const observation = landingVnasSample(fromS + i, ft)
+    store.getState().addObservation(callsign, observation, typed(type))
+    // Display time trails the clock by the display delay, which a frame drawn at the sample's instant measures
+    const lag = observation.observedAt - (drawnAt(observation.observedAt)?.displayTime ?? Number.NaN)
+    const frame = drawnAt(observation.observedAt + lag)
+    if (frame === null || frame.displayTime !== observation.observedAt) {
+      throw new Error(`${callsign} is not drawn at its sample ${fromS + i} s in (display time ${frame?.displayTime})`)
+    }
+    const inContact = updateContact(callsign, frame) === true
+    const target = restOffsetTarget(callsign, frame)
+    return { inContact, offset: target.rest * target.share }
+  })
+}
+
+// QXE504's landing (tc3d246 live round 4): an E75L whose own simulator rests at 0.24 ft, while other E75Ls taught
+// 6.78 ft
+const QXE504_FT = [14.96, 8.5, 5.43, 2.87, 1.07, 0.77, 0.54]
+const E75L_TYPE_REST_FT = 6.78
+// An A320 resting at 9.1 ft lands, touching down on the 9.1 ft sample 3 s in
+const A320_LANDING_FT = [20, 15, 11, 9.1, 9.2, 9.1]
+
+describe("a resting height learned only from the aircraft's type (TC3D-397)", () => {
+  it('lets an aircraft resting elsewhere enter contact only once it settles, and is not taken off its drawn height', async () => {
+    const store = await timelineStore()
+    for (let t = 0; t < 9; t++) {
+      store.getState().addObservation('TEACHE75L', stoppedSample('vnas', t, E75L_TYPE_REST_FT), typed('E75L'))
+    }
+    const samples = await landOnSamples('QXE504', 'E75L', QXE504_FT, 0)
+    // 8.5 and 5.43 ft are under the type's 6.78 ft plus the 3 ft entry
+    expect(samples[1].inContact, 'in contact at 8.5 ft').toBe(false)
+    expect(samples[2].inContact, 'in contact at 5.43 ft').toBe(false)
+    // 0.77 and 0.54 ft are 0.23 ft apart but not within 1 ft of 6.78 ft, so lane B's settle on 2.87-0.54 ft enters
+    expect(samples[samples.length - 1].inContact, 'in contact at the last sample, 0.54 ft').toBe(true)
+    expect(samples[1].offset, 'taken off the drawn height at 8.5 ft (m)').toBe(0)
+    expect(samples[2].offset, 'taken off the drawn height at 5.43 ft (m)').toBe(0)
+  })
+
+  it(`lets an aircraft resting at it enter contact within ${LEARNED_TOUCHDOWN_LAG_MAX_S} s of touchdown`, async () => {
+    await teachType('A320')
+    // Touchdown on the 9.1 ft sample, 3 s in
+    const samples = await landOnSamples('ROLL397', 'A320', A320_LANDING_FT, 0)
+    const first = samples.findIndex((s) => s.inContact)
+    expect(first, 'a sample in contact').toBeGreaterThanOrEqual(0)
+    expect(first - 3, 'seconds from touchdown to contact').toBeLessThanOrEqual(LEARNED_TOUCHDOWN_LAG_MAX_S)
+    expect(samples[samples.length - 1].offset / FT, 'taken off the drawn height once settled (ft)').toBeCloseTo(9, 9)
+  })
+
+  it('drops a confirmation when the type changes, until two of its own samples confirm the new type', async () => {
+    await teachTypeAt('SWAPTEACHA', 'A320', 9)
+    await teachTypeAt('SWAPTEACHB', 'B77L', 13.6)
+    const landed = await landOnSamples('SWAP397', 'A320', A320_LANDING_FT, 0)
+    expect(landed[landed.length - 1].offset / FT, 'taken off as a confirmed A320 (ft)').toBeCloseTo(9, 9)
+    // The simulator swaps to a B77L on the runway, still resting at 9.1 ft, then lifts off past 15 ft
+    const swapped = await landOnSamples('SWAP397', 'B77L', [9.1, 15, 13.5, 13.6], A320_LANDING_FT.length)
+    expect(swapped[0].offset / FT, 'taken off at 9.1 ft as a B77L (ft)').toBeLessThanOrEqual(9.1 + 1e-6)
+    // 15 ft is 1.4 ft over the B77L's 13.6 ft but 5.9 ft over the 9.1 ft it rested at
+    expect(swapped[1].inContact, 'in contact at 15 ft as a B77L').toBe(false)
+    expect(swapped[1].offset / FT, 'taken off at 15 ft as a B77L (ft)').toBeLessThanOrEqual(9.1 + 1e-6)
+    expect(swapped[3].offset / FT, 'taken off once 13.5 and 13.6 ft confirm the B77L (ft)').toBeCloseTo(13.6, 9)
+  })
+
+  it("drops a confirmation when other aircraft of the type move the type's resting height over 1 ft", async () => {
+    await teachTypeAt('MOVETEACHA', 'A320', 9)
+    const landed = await landOnSamples('MOVE397', 'A320', A320_LANDING_FT, 0)
+    expect(landed[landed.length - 1].offset / FT, 'taken off as a confirmed A320 (ft)').toBeCloseTo(9, 9)
+    await teachTypeAt('MOVETEACHB', 'A320', 11)
+    const rolling = await landOnSamples('MOVE397', 'A320', [9.1, 9.1], A320_LANDING_FT.length)
+    // Its own 9.1 ft samples are 1.9 ft under the A320's 11 ft, so they confirm nothing
+    for (const [i, s] of rolling.entries()) {
+      expect(s.offset / FT, `taken off at its ${i + 1}th 9.1 ft sample after the move (ft)`).toBeLessThanOrEqual(9.1 + 1e-6)
+    }
+  })
+
+  it("drops a confirmation when the type changes to one whose resting height is within 1 ft of the confirmed one", async () => {
+    await teachTypeAt('KEYTEACHA', 'A320', 9)
+    await teachTypeAt('KEYTEACHB', 'A21N', 9.8)
+    const landed = await landOnSamples('KEY397', 'A320', A320_LANDING_FT, 0)
+    expect(landed[landed.length - 1].offset / FT, 'taken off as a confirmed A320 (ft)').toBeCloseTo(9, 9)
+    // The A21N's 9.8 ft is 0.8 ft over the A320's confirmed 9 ft; its own 8.6 ft samples are 1.2 ft under it
+    const swapped = await landOnSamples('KEY397', 'A21N', [8.6, 8.6], A320_LANDING_FT.length)
+    for (const [i, s] of swapped.entries()) {
+      expect(s.offset / FT, `taken off at its ${i + 1}th 8.6 ft sample as an A21N (ft)`).toBeLessThanOrEqual(9.2 + 1e-6)
+    }
+  })
+})
 
 /** Each case below flies its own callsign and types, which no scenario teaches. */
 describe("a vNAS aircraft's type while VATSIM files another", () => {
