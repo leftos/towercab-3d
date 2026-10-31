@@ -8,7 +8,8 @@
  * extent along the wall and its bottom and top. A run is a chain of vertical faces meeting end to
  * end through turns of at most `RUN_TURN_DEG`, so windows can fit along a whole curved or kinked
  * wall; a run that closes on itself is a closed loop. Every coordinate is relative to the feature's
- * lowest vertex (`baseMC`), along the feature's up, in the tile's model coordinates.
+ * lowest vertex (`baseMC`), along the feature's up, in the tile's model coordinates. A run's faces
+ * stop at the feature's eave, so the triangle of a gable end holds no rows.
  *
  * The table lays three RGBA float texels per face (`faceTexels`): (normal, plane offset),
  * (start, end, position along the run, run length, negative for a closed loop), (its run's highest
@@ -78,6 +79,10 @@ export interface FaceGeometry {
 export interface FaceStats {
   readonly count: number
   readonly baseMC: Float64Array
+  /** The lowest vertex's height along the feature's up. */
+  readonly base: Float64Array
+  /** The feature's wall top along its up (`TileFeatureStats.eave`). */
+  readonly eave: Float64Array
   readonly up: Float64Array
   readonly north: Float64Array
   readonly hasGeometry: Uint8Array
@@ -419,6 +424,14 @@ function seamFirst(loop: readonly number[], ends: readonly [Vec3, Vec3][], frame
 }
 
 /**
+ * A face stopped at the feature's eave, relative to the feature's base. A face that starts at or
+ * above the eave, the wall of a higher part of a stepped roof, keeps its top.
+ */
+function capAtEave(face: Face, eave: number): Face {
+  return face.h0 < eave && face.h1 > eave ? { ...face, h1: eave } : face
+}
+
+/**
  * Chains a feature's faces into runs: open runs from each unlinked start, then closed loops of
  * what is left. A face that is not vertical is a run of its own.
  *
@@ -675,7 +688,9 @@ export class FaceBuilder {
       if (this.planes[f].length === 0) continue
       const up = vec3(this.stats.up, f)
       this.faces[f] = this.planes[f].flatMap((plane) => planeFaces(plane, this.walls, up))
-      this.runs[f] = capFeatureRuns(faceRuns(this.faces[f], featureFrame(this.stats, f)))
+      const eave = this.stats.eave[f] - this.stats.base[f]
+      const walls = this.faces[f].map((face) => capAtEave(face, eave))
+      this.runs[f] = capFeatureRuns(faceRuns(walls, featureFrame(this.stats, f)))
       this.planes[f] = []
       work.lastFeaturePairs = this.faces[f].length ** 2
       work.facePairs += work.lastFeaturePairs

@@ -1,10 +1,11 @@
 import { describe, expect, it } from 'vitest'
-import { FACADE_BASE_BAND_M, FACADE_PARAPET_M, FACADE_PIER_M, FACE_BUILD_CHUNK_TRIANGLES } from '@/constants'
+import { FACADE_PIER_M, FACE_BUILD_CHUNK_TRIANGLES } from '@/constants'
 import { computeFeatureStats, type TileFeatureStats } from '@/utils/buildingBaseLookup'
 import { FACE_TEXELS, FaceBuilder, type FaceTable, faceTexels } from '@/utils/buildingFaces'
 import {
   ARC,
   COURTYARD,
+  GABLE,
   JOG,
   KINK,
   L,
@@ -19,8 +20,20 @@ import {
   wallSamples,
 } from '@/utils/buildingLookupFakes.test-support'
 import { FacadeClass } from '@/utils/buildingStyle'
-import { type FacadeFit, type FaceMatch, type FitGrammar, fitOpening, matchFace, windowHashes } from '@/utils/facadeFit'
-import { FACADE_GRAMMARS } from '@/utils/facadeShader'
+import {
+  type FacadeFit,
+  type FaceMatch,
+  type FitGrammar,
+  fitOpening,
+  fittedBands,
+  litGlow,
+  litMeanLinear,
+  matchFace,
+  tintFactor,
+  windowHashes,
+  windowLit,
+} from '@/utils/facadeFit'
+import { FACADE_GRAMMARS, FACADE_LIGHTS } from '@/utils/facadeShader'
 
 type Vec3 = readonly [number, number, number]
 
@@ -118,9 +131,10 @@ function expectWholeOpening(fit: FacadeFit, match: FaceMatch, grammar: FitGramma
     expect(pier + (i + grammar.lo[0]) * fit.bay, label).toBeGreaterThanOrEqual(pier - eps)
     expect(pier + (i + grammar.hi[0]) * fit.bay, label).toBeLessThanOrEqual(length - pier + eps)
   }
-  const bottom = match.h0 + FACADE_BASE_BAND_M
+  const bands = fittedBands(match.h1 - match.h0)
+  const bottom = match.h0 + bands.base
   expect(bottom + (j + grammar.lo[1]) * fit.pitch, label).toBeGreaterThanOrEqual(bottom - eps)
-  expect(bottom + (j + grammar.hi[1]) * fit.pitch, label).toBeLessThanOrEqual(match.h1 - FACADE_PARAPET_M + eps)
+  expect(bottom + (j + grammar.hi[1]) * fit.pitch, label).toBeLessThanOrEqual(match.h1 - bands.parapet + eps)
 }
 
 describe('matchFace', () => {
@@ -307,8 +321,40 @@ describe('fitOpening', () => {
     for (const [height, rows] of expected) expect(rowsOf(0, height), `${height} m`).toBe(rows)
   })
 
-  it('keeps one row on a 2.5 m wall and none on a 1.0 m wall', () => {
+  /** The fitted row pitch of a wall `height` metres high. */
+  function pitchOf(height: number): number {
+    return fitOpening({ u: 10, length: 20, h0: 0, h1: height, face: 0, run: 0 }, height / 2, GENERIC, 0).pitch
+  }
+
+  it('keeps the full bands on a wall tall enough for a full row', () => {
+    expect(fittedBands(3.6).base).toBeCloseTo(0.4, 10)
+    expect(fittedBands(3.6).parapet).toBeCloseTo(0.8, 10)
+    expect(fittedBands(30).base).toBeCloseTo(0.4, 10)
+    expect(pitchOf(3.6)).toBeCloseTo(2.4, 10)
+  })
+
+  it('shrinks the base band and parapet in proportion before a row loses height', () => {
+    expect(fittedBands(3).base).toBeCloseTo(0.2, 10)
+    expect(fittedBands(3).parapet).toBeCloseTo(0.4, 10)
+    expect(pitchOf(3)).toBeCloseTo(2.4, 10)
+  })
+
+  it('keeps one full row on a 2.5 m wall, with each band at its floor', () => {
+    expect(fittedBands(2.5).base).toBeCloseTo(0.1, 10)
+    expect(fittedBands(2.5).parapet).toBeCloseTo(0.1, 10)
     expect(rowsOf(0, 2.5)).toBe(1)
+    expect(pitchOf(2.5)).toBeCloseTo(2.3, 10)
+  })
+
+  it('keeps one full row on a 1.5 m wall', () => {
+    expect(rowsOf(0, 1.5)).toBe(1)
+    expect(pitchOf(1.5)).toBeCloseTo(1.3, 10)
+  })
+
+  it('keeps a 1.0 m row on a 1.2 m wall and draws no openings on a lower one', () => {
+    expect(rowsOf(0, 1.2)).toBe(1)
+    expect(pitchOf(1.2)).toBeGreaterThanOrEqual(1 - 1e-9)
+    expect(rowsOf(0, 1.19)).toBe(0)
     expect(rowsOf(0, 1)).toBe(0)
   })
 
@@ -362,12 +408,137 @@ describe('fitOpening', () => {
     expect(bays(20)).toBe(Math.round((20 - 2 * FACADE_PIER_M) / GENERIC.bayM))
   })
 
+  it('draws every opening of a gable end inside the wall below the gable triangle', () => {
+    const built = tableOf(GABLE)
+    const prism = GABLE[0]
+    const eave = 6
+    let openings = 0
+    for (let edge = 0; edge < 4; edge++) {
+      for (let along = 0.05; along < edgeLength(prism, 0, edge); along += 0.25) {
+        for (let z = 0.05; z < 9; z += 0.05) {
+          const { point, normal } = onEdge(prism, 0, edge, along, z)
+          const match = matchAt(built, point, normal)
+          if (match === undefined) continue
+          expect(match.h1, `edge ${edge} at ${z}`).toBeCloseTo(eave, 3)
+          const fit = fitOpening(match, heightAt(built, point), GENERIC, 0)
+          if (!fit.opening) continue
+          openings++
+          expect(z, `edge ${edge} at ${along}`).toBeLessThan(eave - fittedBands(eave).parapet)
+          expectWholeOpening(fit, match, GENERIC, `edge ${edge} at ${along}, ${z}`)
+        }
+      }
+    }
+    expect(openings).toBeGreaterThan(0)
+  })
+
   it('draws no opening where no face matches', () => {
     for (let h = 0; h < 10; h += 0.1) {
       const fit = fitOpening(undefined, h, GENERIC, 3)
       expect(fit.opening).toBe(false)
       expect(fit.inside).toBe(false)
     }
+  })
+})
+
+describe('windowLit', () => {
+  const cells = (each: (cell: readonly [number, number], run: number) => void) => {
+    for (let run = 0; run < 300; run++) {
+      for (let i = 0; i < 16; i++) for (let j = 0; j < 6; j++) each([i + 0.5, j + 0.5], run * 7)
+    }
+  }
+
+  it("keeps every class's lit share on average, clusters and all", () => {
+    for (const light of Object.values(FACADE_LIGHTS)) {
+      let lit = 0
+      let all = 0
+      cells((cell, run) => {
+        all++
+        if (windowLit(cell, run, light)) lit++
+      })
+      expect(Math.abs(lit / all - light.share), `share ${light.share}`).toBeLessThan(0.03)
+    }
+  })
+
+  it('lights nothing for a dark class', () => {
+    cells((cell, run) => expect(windowLit(cell, run, FACADE_LIGHTS[FacadeClass.WAREHOUSE])).toBe(false))
+  })
+
+  it('clusters lit windows by group: a group is mostly lit or mostly dark, never salt and pepper', () => {
+    const light = FACADE_LIGHTS[FacadeClass.GENERIC]
+    const mostly = [0, 0]
+    for (let run = 0; run < 300; run++) {
+      for (let row = 0; row < 6; row++) {
+        for (let group = 0; group < 3; group++) {
+          let lit = 0
+          for (let i = 0; i < 4; i++) if (windowLit([group * 4 + i + 0.5, row + 0.5], run * 7, light)) lit++
+          mostly[lit >= 3 ? 1 : 0]++
+        }
+      }
+    }
+    expect(mostly[1] / (mostly[0] + mostly[1])).toBeGreaterThan(0.15)
+    expect(mostly[1] / (mostly[0] + mostly[1])).toBeLessThan(0.4)
+  })
+
+  it('lights whole floors on an office: every row is on or off together', () => {
+    const light = FACADE_LIGHTS[FacadeClass.OFFICE]
+    const shares: number[] = []
+    for (let row = 0; row < 200; row++) {
+      let lit = 0
+      for (let i = 0; i < 40; i++) if (windowLit([i + 0.5, row + 0.5], 11, light)) lit++
+      shares.push(lit / 40)
+    }
+    expect(shares.filter((share) => share > 0.5).length).toBeGreaterThan(0)
+    expect(shares.every((share) => share > 0.6 || share < 0.3)).toBe(true)
+  })
+})
+
+describe('litGlow', () => {
+  it("averages to the far tint's lit colour for every lit class", () => {
+    for (const light of Object.values(FACADE_LIGHTS).filter(({ share }) => share > 0)) {
+      const sum = [0, 0, 0]
+      const samples = 90000
+      for (let n = 0; n < samples; n++) {
+        const glow = litGlow([n % 300, Math.floor(n / 300)], 5, light)
+        for (let k = 0; k < 3; k++) sum[k] += (glow[k] * (1 + 0.65)) / 2 / samples
+      }
+      const mean = litMeanLinear(light)
+      for (let k = 0; k < 3; k++) expect(Math.abs(sum[k] / mean[k] - 1), `share ${light.share}`).toBeLessThan(0.05)
+    }
+  })
+
+  it('mixes cool and neutral on offices, warm only on houses', () => {
+    const colours = (code: keyof typeof FACADE_LIGHTS) => {
+      const seen = new Set<string>()
+      for (let n = 0; n < 2000; n++) {
+        const glow = litGlow([n, 1], 3, { ...FACADE_LIGHTS[code], curtain: 0 })
+        seen.add((glow[1] / glow[0]).toFixed(3))
+      }
+      return seen.size
+    }
+
+    expect(colours(FacadeClass.OFFICE)).toBe(3)
+    expect(colours(FacadeClass.HOUSE)).toBe(1)
+  })
+
+  it('varies a lit window within the guide brightness range', () => {
+    const light = { ...FACADE_LIGHTS[FacadeClass.GENERIC], curtain: 0 }
+    const reds = Array.from({ length: 5000 }, (_, n) => litGlow([n, 2], 9, light)[0])
+
+    expect(Math.min(...reds)).toBeGreaterThanOrEqual(1.3 * 0.5 * 0.8)
+    expect(Math.max(...reds)).toBeLessThanOrEqual(1.3 * 1.3)
+    expect(Math.max(...reds) - Math.min(...reds)).toBeGreaterThan(0.5)
+  })
+})
+
+describe('tintFactor', () => {
+  it('jitters a wall a little, by more than the palette states give, from the hash alone', () => {
+    const factors = Array.from({ length: 2000 }, (_, n) => tintFactor((n + 0.5) / 2000))
+    const greens = factors.map((factor) => factor[1])
+
+    expect(new Set(greens.map((g) => g.toFixed(3))).size).toBeGreaterThan(50)
+    expect(Math.min(...greens)).toBeGreaterThan(0.85)
+    expect(Math.max(...greens)).toBeLessThan(1.15)
+    expect(tintFactor(0.37)).toEqual(tintFactor(0.37))
   })
 })
 

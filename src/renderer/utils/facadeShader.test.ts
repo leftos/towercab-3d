@@ -23,10 +23,11 @@ import {
   type FacadeClassCode,
   PACK_HASH_STATES,
 } from '@/utils/buildingStyle'
-import { STOREY_MAX_M, STOREY_MIN_M } from '@/utils/facadeFit'
+import { BAND_MIN_M, STOREY_MAX_M, STOREY_MIN_M, WALL_MIN_M } from '@/utils/facadeFit'
 import {
   createFacadeShader,
   FACADE_GRAMMARS,
+  FACADE_LIGHTS,
   FACADE_PALETTES,
   grammarCoverage,
   meanGlassLinear,
@@ -114,6 +115,36 @@ describe('facade grammars', () => {
     expect(grammarCoverage(FacadeClass.PLAIN)).toBe(0)
   })
 
+  it('gives every class added to the grid a grammar and a palette of its own', () => {
+    const added = [
+      FacadeClass.CANOPY,
+      FacadeClass.RETAIL,
+      FacadeClass.WAREHOUSE,
+      FacadeClass.FIRE_STATION,
+      FacadeClass.HOTEL,
+      FacadeClass.TANK,
+      FacadeClass.CARPORT,
+      FacadeClass.CARAVAN,
+    ]
+
+    for (const code of added) {
+      expect(FACADE_GRAMMARS[code].bayM).toBeGreaterThan(0)
+      expect(FACADE_GRAMMARS[code].floorM).toBeGreaterThan(0)
+      expect(FACADE_PALETTES[code]).toHaveLength(PACK_HASH_STATES)
+    }
+    expect(grammarCoverage(FacadeClass.HOTEL)).toBeGreaterThan(0.2)
+    expect(FACADE_GRAMMARS[FacadeClass.CANOPY].opening).toBe('gap')
+    expect(FACADE_GRAMMARS[FacadeClass.WAREHOUSE].opening).toBe('none')
+  })
+
+  it('never reads a detail from outside the fitted grid: a look has no position of its own', () => {
+    const text = createFacadeShader().fragmentShaderText ?? ''
+    const looks = text.slice(text.indexOf('void facadePane('), text.indexOf('void fragmentMain('))
+
+    expect(looks.length).toBeGreaterThan(1000)
+    for (const name of ['positionMC', 'tangentMC', 'ground.', 'building.z']) expect(looks).not.toContain(name)
+  })
+
   it('draws slab lines on every grammar with openings', () => {
     for (const code of [FacadeClass.GENERIC, FacadeClass.GARAGE, FacadeClass.HOUSE, FacadeClass.OFFICE]) {
       expect(FACADE_GRAMMARS[code].relief).toBe('slabs')
@@ -142,6 +173,17 @@ describe('wall palette', () => {
           expect(channel).toBeLessThanOrEqual(1)
         }
       }
+    }
+  })
+
+  it('keeps every wall light: no entry under L* 59, brick included', () => {
+    const lightness = ([r, g, b]: readonly number[]) => {
+      const y = 0.2126 * iecSrgbToLinear(r) + 0.7152 * iecSrgbToLinear(g) + 0.0722 * iecSrgbToLinear(b)
+      return 116 * Math.cbrt(y) - 16
+    }
+
+    for (const code of Object.values(FacadeClass)) {
+      for (const entry of FACADE_PALETTES[code]) expect(lightness(entry), `class ${code}`).toBeGreaterThan(59)
     }
   })
 
@@ -191,6 +233,40 @@ describe('createFacadeShader', () => {
     expect(uniforms.u_cover).toBeUndefined()
     expect(uniforms.u_fade.type).toBe(Cesium.UniformType.FLOAT)
     expect(uniforms.u_glassMean.type).toBe(Cesium.UniformType.VEC3)
+  })
+
+  it('carries each class its own lit share, and the far tint glows by that share', () => {
+    const text = createFacadeShader().fragmentShaderText ?? ''
+
+    expect(FACADE_LIGHTS[FacadeClass.TERMINAL].share).toBe(0.85)
+    expect(FACADE_LIGHTS[FacadeClass.HOTEL].share).toBe(0.5)
+    expect(FACADE_LIGHTS[FacadeClass.OFFICE].share).toBe(0.15)
+    expect(text).toContain('float litShare = facadeLitShare(building.x) * glassy;')
+    expect(text).toContain('vec3 farEmissive = litEmissive * cover * litShare;')
+    expect(text).toContain('vec3 litEmissive = facadeLitMean(building.x) * night;')
+  })
+
+  it('folds no constant into the far wall', () => {
+    const text = createFacadeShader().fragmentShaderText ?? ''
+
+    expect(text).toMatch(/vec3 farWall = wall \* mix\(1\.0, [0-9.]+, panels\);/)
+  })
+
+  it('jitters the wall tint from the lookup hash alone, never the ground point', () => {
+    const text = createFacadeShader().fragmentShaderText ?? ''
+
+    expect(text).toContain('vec2 jitter = (fract(top.yy * vec2(251.0, 419.0)) * 2.0 - 1.0) * step(0.0, ground.w);')
+    expect(text.match(/ground\.[xyz]/g)).toEqual(['ground.x'])
+  })
+
+  it('adds nothing to the far path but the jitter and the class constants', () => {
+    const text = createFacadeShader().fragmentShaderText ?? ''
+    const body = text.slice(text.indexOf('void fragmentMain('))
+    const farReturn = body.indexOf('return;', body.indexOf('if (detail <= 0.001)'))
+
+    for (const near of ['facadeLook(', 'facadeLitGlow(', 'facadeWindowLit(', 'reflect(', 'facadeBands(']) {
+      expect(body.indexOf(near), near).toBeGreaterThan(farReturn)
+    }
   })
 
   it('takes screen-space derivatives before any branch in the fragment', () => {
@@ -311,6 +387,8 @@ describe('createFacadeShader', () => {
       ['FACADE_PARAPET', FACADE_PARAPET_M],
       ['FACADE_STOREY_MIN', STOREY_MIN_M],
       ['FACADE_STOREY_MAX', STOREY_MAX_M],
+      ['FACADE_BAND_MIN', BAND_MIN_M],
+      ['FACADE_WALL_MIN', WALL_MIN_M],
     ]
 
     for (const [name, value] of floats) {
@@ -354,9 +432,11 @@ describe('createFacadeShader', () => {
       '  float len = abs(run.y);',
       '  float pier = (1.0 - closed) * FACADE_PIER;',
       '  float span = len - 2.0 * pier;',
-      '  float bottom = heights.x + FACADE_BASE_BAND;',
-      '  float usable = heights.y - FACADE_PARAPET - bottom;',
-      '  if (matched < 0.5 || span <= 0.0 || usable <= 0.0) return 0.0;',
+      '  float wall = heights.y - heights.x;',
+      '  vec2 bands = facadeBands(wall);',
+      '  float bottom = heights.x + bands.x;',
+      '  float usable = heights.y - bands.y - bottom;',
+      '  if (matched < 0.5 || span <= 0.0 || wall < FACADE_WALL_MIN) return 0.0;',
       '  float bays = max(1.0, floor(span / grammar.x + 0.5));',
       '  float bay = span / bays;',
       '  float wanted = grammar.w > 0.5 && levels >= 1.0',
@@ -372,6 +452,14 @@ describe('createFacadeShader', () => {
       '}',
     ]
 
+    const bands = [
+      'vec2 facadeBands(float wall) {',
+      '  float scale = clamp((wall - FACADE_STOREY_MIN) / (FACADE_BASE_BAND + FACADE_PARAPET), 0.0, 1.0);',
+      '  return max(vec2(FACADE_BASE_BAND, FACADE_PARAPET) * scale, vec2(FACADE_BAND_MIN));',
+      '}',
+    ]
+
+    expect(body('vec2 facadeBands(float wall)', '\n}')).toBe(bands.join('\n'))
     expect(body('float facadeFace(int first', '\n}')).toBe(face.join('\n'))
     expect(body('float facadeFit(float matched', '\n}')).toBe(fit.join('\n'))
   })

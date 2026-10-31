@@ -33,6 +33,14 @@ export const FacadeClass = {
   OFFICE: 4,
   TERMINAL: 5,
   PLAIN: 6,
+  CANOPY: 7,
+  RETAIL: 8,
+  WAREHOUSE: 9,
+  FIRE_STATION: 10,
+  HOTEL: 11,
+  TANK: 12,
+  CARPORT: 13,
+  CARAVAN: 14,
 } as const
 
 export type FacadeClassCode = (typeof FacadeClass)[keyof typeof FacadeClass]
