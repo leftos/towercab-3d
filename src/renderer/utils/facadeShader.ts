@@ -6,8 +6,10 @@
  * per storey and bay. Offices and terminals get continuous window bands, houses small punched
  * windows, parking garages open slab bands with dark gaps, hangars door panels with corrugated
  * ribs, domestic garages and carports a plain wall, and every other building the generic window
- * grid. Storeys count up from each building's ground, read per feature from the tile's lookup
- * texture (see `buildingBaseLookup.ts`). Walls take a colour from a curated palette per
+ * grid. Each fragment finds the wall face it lies on in the tile's face table (see
+ * `buildingFaces.ts`), and the grid is fitted to that face: whole bays along its run, between a
+ * pier at each end of an open run, and whole rows between a base band and a parapet, so no opening
+ * is cut (`facadeFit.ts` holds the TypeScript twins). A fragment on no face draws plain wall. Walls take a colour from a curated palette per
  * class, picked by the building's position hash, so neighbours differ. Where a grid cell shrinks under a pixel, the grid
  * can fade to a flat tint, the area-weighted mean of wall and opening in linear light. At night a
  * share of the windows glow, and the flat tint glows by the same share. Roofs are left as the
@@ -16,16 +18,24 @@
 
 import * as Cesium from 'cesium'
 import {
+  FACADE_BASE_BAND_M,
   FACADE_BAY_WIDTH_M,
   FACADE_FADE_END,
   FACADE_FADE_START,
   FACADE_FLOOR_HEIGHT_M,
   FACADE_LIT_SHARE,
+  FACADE_PARAPET_M,
+  FACADE_PIER_M,
   FACADE_ROOF_COS,
   FACADE_WINDOW_HI,
   FACADE_WINDOW_LO,
+  FACE_GATE_COS,
+  FACE_PLANE_TOL_M,
+  FACE_S_TOL_M,
+  FACES_PER_FEATURE_MAX,
 } from '@/constants'
 import {
+  BUILDING_FACES_SAMPLER,
   BUILDING_LOOKUP_DEFINE,
   glslBuildingLookupRead,
   LOOKUP_ROW_GROUND,
@@ -38,6 +48,7 @@ import {
   PACK_HASH_STATES,
   PACK_HEIGHT_STEP_M,
 } from '@/utils/buildingStyle'
+import { STOREY_MAX_M, STOREY_MIN_M } from '@/utils/facadeFit'
 
 type Vec2 = readonly [number, number]
 type Vec3 = readonly [number, number, number]
@@ -122,10 +133,6 @@ function seamArea(t: number): number {
   const smoothed = SEAM_WIDTH * (u * u * u - 0.5 * u * u * u * u)
   return (1 - SEAM_SHADE) * ramp + SEAM_SHADE * smoothed + Math.max(t - SEAM_WIDTH, 0)
 }
-
-/** Bounds on a storey height derived from height and storeys, against bad OSM tags. */
-const STOREY_MIN_M = 2.4
-const STOREY_MAX_M = 6.0
 
 /** What fills the opening of a facade grammar's grid cell. */
 export type FacadeOpening = 'glass' | 'gap' | 'none'
@@ -398,6 +405,83 @@ const COVER_GLSL = glslPerClass('facadeCover', 'float', 'float facadeClass', (co
 /** Packed heights at or above this are saturated and say nothing about the storey height. */
 const SATURATED_HEIGHT_M = PACK_CODE_MAX * PACK_HEIGHT_STEP_M
 
+/**
+ * The face match and the window fit, mirroring `matchFace` and `fitOpening` in `facadeFit.ts` line
+ * for line. The match reads the face table (`buildingFaces.ts`, three texels per face) only where
+ * the patched stage binds it, and takes no derivative, so it can run after the far return.
+ */
+const FACE_FIT_GLSL = /* glsl */ `
+const int FACADE_FACES_MAX = ${FACES_PER_FEATURE_MAX};
+const float FACADE_FACE_GATE_COS = ${glslFloat(FACE_GATE_COS)};
+const float FACADE_FACE_PLANE_TOL = ${glslFloat(FACE_PLANE_TOL_M)};
+const float FACADE_FACE_S_TOL = ${glslFloat(FACE_S_TOL_M)};
+const float FACADE_PIER = ${glslFloat(FACADE_PIER_M)};
+const float FACADE_BASE_BAND = ${glslFloat(FACADE_BASE_BAND_M)};
+const float FACADE_PARAPET = ${glslFloat(FACADE_PARAPET_M)};
+const float FACADE_STOREY_MIN = ${glslFloat(STOREY_MIN_M)};
+const float FACADE_STOREY_MAX = ${glslFloat(STOREY_MAX_M)};
+#if defined(HAS_SELECTED_FEATURE_ID) && defined(${BUILDING_LOOKUP_DEFINE})
+ivec2 facadeFaceTexel(int k) {
+  ivec2 size = textureSize(${BUILDING_FACES_SAMPLER}, 0);
+  return ivec2(k % size.x, min(k / size.x, size.y - 1));
+}
+// The first face of the feature's range [first, first + count) that p (relative to the feature's
+// base) lies on: 1 when one matches, with run = (u along its run, the run's length, negative for a
+// closed loop, the index of the run's first face) and heights = the face's (bottom, top) along up.
+float facadeFace(int first, int count, vec3 p, vec3 n, vec3 up, out vec3 run, out vec2 heights) {
+  run = vec3(0.0);
+  heights = vec2(0.0);
+  for (int i = 0; i < FACADE_FACES_MAX; i++) {
+    if (i >= count) break;
+    int k = 3 * (first + i);
+    vec4 plane = texelFetch(${BUILDING_FACES_SAMPLER}, facadeFaceTexel(k), 0);
+    if (dot(n, plane.xyz) < FACADE_FACE_GATE_COS || abs(dot(p, plane.xyz) - plane.w) > FACADE_FACE_PLANE_TOL) continue;
+    vec4 ends = texelFetch(${BUILDING_FACES_SAMPLER}, facadeFaceTexel(k + 1), 0);
+    float s = dot(p, normalize(cross(up, plane.xyz)));
+    if (s < ends.x - FACADE_FACE_S_TOL || s > ends.y + FACADE_FACE_S_TOL) continue;
+    vec4 span = texelFetch(${BUILDING_FACES_SAMPLER}, facadeFaceTexel(k + 2), 0);
+    run = vec3(ends.z + clamp(s, ends.x, ends.y) - ends.x, ends.w, span.z);
+    heights = span.xy;
+    return 1.0;
+  }
+  return 0.0;
+}
+#else
+float facadeFace(int first, int count, vec3 p, vec3 n, vec3 up, out vec3 run, out vec2 heights) {
+  run = vec3(0.0);
+  heights = vec2(0.0);
+  return 0.0;
+}
+#endif
+// Fits whole bays along the matched face's run, between a pier at each end of an open run, and
+// whole rows between the face's base band and parapet: 1 where the point lies in a cell of that
+// grid, with cell = its place in bays from the first pier and rows from the base band and size =
+// (bay width, row pitch); 0, with both zero, where the face draws no openings.
+float facadeFit(float matched, vec3 run, vec2 heights, float h, vec4 grammar, float levels, out vec2 cell, out vec2 size) {
+  cell = vec2(0.0);
+  size = vec2(0.0);
+  float closed = run.y < 0.0 ? 1.0 : 0.0;
+  float len = abs(run.y);
+  float pier = (1.0 - closed) * FACADE_PIER;
+  float span = len - 2.0 * pier;
+  float bottom = heights.x + FACADE_BASE_BAND;
+  float usable = heights.y - FACADE_PARAPET - bottom;
+  if (matched < 0.5 || span <= 0.0 || usable <= 0.0) return 0.0;
+  float bays = max(1.0, floor(span / grammar.x + 0.5));
+  float bay = span / bays;
+  float wanted = grammar.w > 0.5 && levels >= 1.0
+    ? max(levels, ceil(usable / FACADE_STOREY_MAX))
+    : max(1.0, floor(usable / grammar.y + 0.5));
+  float rows = max(1.0, min(wanted, floor(usable / FACADE_STOREY_MIN)));
+  float pitch = usable / rows;
+  float along = closed > 0.5 ? mod(run.x, len) : run.x - pier;
+  cell = vec2(along / bay, (h - bottom) / pitch);
+  size = vec2(bay, pitch);
+  vec2 index = floor(cell);
+  return step(0.0, index.x) * step(index.x, bays - 1.0) * step(0.0, index.y) * step(index.y, rows - 1.0);
+}
+`
+
 const FACADE_FRAGMENT_SHADER = /* glsl */ `
 float facadeHash12(vec2 p) {
   vec3 p3 = fract(vec3(p.xyx) * 0.1031);
@@ -455,7 +539,7 @@ ${OPENING_RECT_GLSL}
 ${COVER_GLSL}
 ${RELIEF_GLSL}
 ${WALL_GLSL}
-
+${FACE_FIT_GLSL}
 void fragmentMain(FragmentInput fsInput, inout czm_modelMaterial material) {
   vec4 building = vec4(0.0);
   // (the building's lowest vertex in model coordinates, metres from its ground to that vertex);
@@ -489,13 +573,13 @@ void fragmentMain(FragmentInput fsInput, inout czm_modelMaterial material) {
   // tangent's length guard keeps roofs, where it vanishes, from feeding NaN into a wall's quad.
   vec3 across = cross(upMC, normalMC);
   vec3 tangentMC = across / max(length(across), 1e-4);
-  float s = dot(positionMC, tangentMC);
-  // Height above the building's ground, measured from its own base so the far model origin's
-  // tilt across the tile cannot shift it; a raised part adds its min_height, so rows continue
-  // through stacked parts.
-  float h = dot(positionMC - ground.xyz, upMC) + ground.w;
-  vec2 cell = vec2(s / grammar.x, h / storey);
-  vec2 aa = max(fwidth(cell), vec2(1e-4));
+  // Position along the wall and height above the building's base, measured from its own base so
+  // the far model origin's tilt across the tile cannot shift them: the face table's frame.
+  vec3 local = positionMC - ground.xyz;
+  float s = dot(local, tangentMC);
+  float h = dot(local, upMC);
+  vec2 metresAa = fwidth(vec2(s, h));
+  vec2 aa = max(metresAa / vec2(grammar.x, storey), vec2(1e-4));
   float ribCoord = s * ${glslFloat(RIBS_PER_M)};
   float ribAa = max(fwidth(ribCoord), 1e-4);
   float fadeDetail = 1.0 - smoothstep(u_fadeStart, u_fadeEnd, max(aa.x, aa.y));
@@ -533,17 +617,29 @@ void fragmentMain(FragmentInput fsInput, inout czm_modelMaterial material) {
     return;
   }
 
+  // Whole bays and rows fitted to the face the fragment lies on; with no face, a plain wall.
   vec4 rect = facadeOpeningRect(building.x);
+  vec3 run;
+  vec2 heights;
+  float matched = facadeFace(int(top.z + 0.5), int(top.w + 0.5), local, normalMC, upMC, run, heights);
+  vec2 cell;
+  vec2 size;
+  float inside = facadeFit(matched, run, heights, h, grammar, building.y, cell, size);
+  vec2 fitAa = max(metresAa / max(size, vec2(1e-4)), vec2(1e-4));
   vec2 id = floor(cell);
   vec2 f = fract(cell);
-  float slab = 1.0 - 0.12 * relief.x * detail * (1.0 - smoothstep(0.0, 0.06 + aa.y, f.y));
-  float seam = mix(1.0, facadeSeam(f.x, aa.x), panels * detail);
+  float slab = 1.0 - 0.12 * relief.x * detail * inside * (1.0 - smoothstep(0.0, 0.06 + fitAa.y, f.y));
+  float seam = mix(1.0, facadeSeam(f.x, fitAa.x), panels * detail * inside);
   float rib = mix(${glslFloat(RIB_SHADE_LOW)}, ${glslFloat(RIB_SHADE_HIGH)}, facadeRibCrest(ribCoord, ribAa));
   float ribShade = mix(${glslFloat(RIB_SHADE_MEAN)}, rib, ribDetail);
   float shade = slab * seam * mix(1.0, ribShade, panels);
-  float opening = facadeBox(f, rect.xy, rect.zw, aa) * hasOpening;
-  vec3 glass = mix(${glslVec3(srgbToLinear(GLASS_DARK_SRGB))}, ${glslVec3(srgbToLinear(GLASS_LIGHT_SRGB))}, facadeHash12(id));
-  float lit = step(1.0 - litShare, facadeHash12(id * 1.37)) * glassy;
+  float opening = facadeBox(f, rect.xy, rect.zw, fitAa) * hasOpening * inside;
+  // The run's identity is hashed in on its own term, so no run's pattern is a shifted copy of
+  // another's; mirrors windowHashes() in facadeFit.ts.
+  float glassPick = facadeHash12(vec2(facadeHash12(id), run.z));
+  float litPick = facadeHash12(vec2(facadeHash12(id * 1.37), run.z));
+  vec3 glass = mix(${glslVec3(srgbToLinear(GLASS_DARK_SRGB))}, ${glslVec3(srgbToLinear(GLASS_LIGHT_SRGB))}, glassPick);
+  float lit = step(1.0 - litShare, litPick) * glassy;
 
   vec3 nearColour = mix(wall * shade, mix(glass, gap, gappy), opening);
   float nearRoughness = mix(wallRoughness, openingRoughness, opening);

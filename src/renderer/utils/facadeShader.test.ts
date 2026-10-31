@@ -1,6 +1,15 @@
 import * as Cesium from 'cesium'
 import { describe, expect, it } from 'vitest'
 import {
+  FACADE_BASE_BAND_M,
+  FACADE_PARAPET_M,
+  FACADE_PIER_M,
+  FACE_GATE_COS,
+  FACE_PLANE_TOL_M,
+  FACE_S_TOL_M,
+  FACES_PER_FEATURE_MAX,
+} from '@/constants'
+import {
   BUILDING_FACES_SAMPLER,
   BUILDING_LOOKUP_DEFINE,
   BUILDING_LOOKUP_SAMPLER,
@@ -14,6 +23,7 @@ import {
   type FacadeClassCode,
   PACK_HASH_STATES,
 } from '@/utils/buildingStyle'
+import { STOREY_MAX_M, STOREY_MIN_M } from '@/utils/facadeFit'
 import {
   createFacadeShader,
   FACADE_GRAMMARS,
@@ -241,12 +251,129 @@ describe('createFacadeShader', () => {
 
   // The patched stage declares the sampler (installBuildingLookupStage), as it does the lookup's; a
   // second declaration in the shader text would not compile.
-  it('declares the face table sampler and reads nothing from it', () => {
+  it('reads the face table only on the near path, after the far return', () => {
     const text = createFacadeShader().fragmentShaderText ?? ''
+    const body = text.slice(text.indexOf('void fragmentMain('))
+    const farReturn = body.indexOf('return;', body.indexOf('if (detail <= 0.001)'))
+    const match = body.indexOf('facadeFace(')
 
     expect(BUILDING_FACES_SAMPLER).toBe('tc3d_buildingFaces')
-    expect(text).not.toContain(`texelFetch(${BUILDING_FACES_SAMPLER}`)
     expect(text).not.toContain(`uniform sampler2D ${BUILDING_FACES_SAMPLER}`)
+    expect(body).not.toContain(BUILDING_FACES_SAMPLER)
+    expect(farReturn).toBeGreaterThan(-1)
+    expect(match).toBeGreaterThan(farReturn)
+    expect(body.indexOf('facadeFace(')).toBe(body.lastIndexOf('facadeFace('))
+  })
+
+  it('bounds the face loop by the per-feature cap and clamps every face read into the table', () => {
+    const text = createFacadeShader().fragmentShaderText ?? ''
+    const reads = text.split(`texelFetch(${BUILDING_FACES_SAMPLER}, `).slice(1)
+
+    expect(text).toContain(`const int FACADE_FACES_MAX = ${FACES_PER_FEATURE_MAX};`)
+    expect(text).toContain('for (int i = 0; i < FACADE_FACES_MAX; i++) {\n    if (i >= count) break;')
+    expect(text).toContain('return ivec2(k % size.x, min(k / size.x, size.y - 1));')
+    expect(reads).toHaveLength(3)
+    for (const read of reads) expect(read.startsWith('facadeFaceTexel(')).toBe(true)
+  })
+
+  it('reads faces with texelFetch only and takes no derivative in the face match', () => {
+    const text = createFacadeShader().fragmentShaderText ?? ''
+    const start = text.indexOf('ivec2 facadeFaceTexel(')
+    const helpers = text.slice(start, text.indexOf('void fragmentMain('))
+    const body = text.slice(text.indexOf('void fragmentMain('))
+
+    expect(start).toBeGreaterThan(-1)
+    for (const derivative of ['fwidth', 'dFdx', 'dFdy', 'texture(']) expect(helpers).not.toContain(derivative)
+    expect(body).toContain('vec2 metresAa = fwidth(vec2(s, h));')
+    expect(body.indexOf('if (')).toBeGreaterThan(body.indexOf('vec2 metresAa = fwidth(vec2(s, h));'))
+    expect(body).toContain('vec2 fitAa = max(metresAa / max(size, vec2(1e-4)), vec2(1e-4));')
+  })
+
+  it("takes the matched face's coordinate along cross(upMC, the face's normal)", () => {
+    const text = createFacadeShader().fragmentShaderText ?? ''
+
+    expect(text).toContain('float s = dot(p, normalize(cross(up, plane.xyz)));')
+    expect(text).toContain('facadeFace(int(top.z + 0.5), int(top.w + 0.5), local, normalMC, upMC, run, heights)')
+    expect(text).toContain('vec2 id = floor(cell);')
+    expect(text).toContain('float glassPick = facadeHash12(vec2(facadeHash12(id), run.z));')
+    expect(text).toContain('float litPick = facadeHash12(vec2(facadeHash12(id * 1.37), run.z));')
+    expect(text).not.toContain('+ vec2(run.z')
+  })
+
+  it('writes the TypeScript constants of the match and the fit into the GLSL', () => {
+    const text = createFacadeShader().fragmentShaderText ?? ''
+    const floats: [string, number][] = [
+      ['FACADE_FACE_GATE_COS', FACE_GATE_COS],
+      ['FACADE_FACE_PLANE_TOL', FACE_PLANE_TOL_M],
+      ['FACADE_FACE_S_TOL', FACE_S_TOL_M],
+      ['FACADE_PIER', FACADE_PIER_M],
+      ['FACADE_BASE_BAND', FACADE_BASE_BAND_M],
+      ['FACADE_PARAPET', FACADE_PARAPET_M],
+      ['FACADE_STOREY_MIN', STOREY_MIN_M],
+      ['FACADE_STOREY_MAX', STOREY_MAX_M],
+    ]
+
+    for (const [name, value] of floats) {
+      expect(text).toContain(`const float ${name} = ${Number.isInteger(value) ? `${value}.0` : value};`)
+    }
+  })
+
+  // These bodies are the GLSL twins of matchFace and fitOpening in facadeFit.ts, whose tests check
+  // what the shader draws. Change the TypeScript twin with any change here, line for line.
+  it('keeps the GLSL face match and fit identical to their TypeScript twins', () => {
+    const text = createFacadeShader().fragmentShaderText ?? ''
+    const body = (signature: string, end: string) => {
+      const start = text.indexOf(signature)
+      return text.slice(start, text.indexOf(end, start) + 2)
+    }
+    const face = [
+      'float facadeFace(int first, int count, vec3 p, vec3 n, vec3 up, out vec3 run, out vec2 heights) {',
+      '  run = vec3(0.0);',
+      '  heights = vec2(0.0);',
+      '  for (int i = 0; i < FACADE_FACES_MAX; i++) {',
+      '    if (i >= count) break;',
+      '    int k = 3 * (first + i);',
+      '    vec4 plane = texelFetch(tc3d_buildingFaces, facadeFaceTexel(k), 0);',
+      '    if (dot(n, plane.xyz) < FACADE_FACE_GATE_COS || abs(dot(p, plane.xyz) - plane.w) > FACADE_FACE_PLANE_TOL) continue;',
+      '    vec4 ends = texelFetch(tc3d_buildingFaces, facadeFaceTexel(k + 1), 0);',
+      '    float s = dot(p, normalize(cross(up, plane.xyz)));',
+      '    if (s < ends.x - FACADE_FACE_S_TOL || s > ends.y + FACADE_FACE_S_TOL) continue;',
+      '    vec4 span = texelFetch(tc3d_buildingFaces, facadeFaceTexel(k + 2), 0);',
+      '    run = vec3(ends.z + clamp(s, ends.x, ends.y) - ends.x, ends.w, span.z);',
+      '    heights = span.xy;',
+      '    return 1.0;',
+      '  }',
+      '  return 0.0;',
+      '}',
+    ]
+    const fit = [
+      'float facadeFit(float matched, vec3 run, vec2 heights, float h, vec4 grammar, float levels, out vec2 cell, out vec2 size) {',
+      '  cell = vec2(0.0);',
+      '  size = vec2(0.0);',
+      '  float closed = run.y < 0.0 ? 1.0 : 0.0;',
+      '  float len = abs(run.y);',
+      '  float pier = (1.0 - closed) * FACADE_PIER;',
+      '  float span = len - 2.0 * pier;',
+      '  float bottom = heights.x + FACADE_BASE_BAND;',
+      '  float usable = heights.y - FACADE_PARAPET - bottom;',
+      '  if (matched < 0.5 || span <= 0.0 || usable <= 0.0) return 0.0;',
+      '  float bays = max(1.0, floor(span / grammar.x + 0.5));',
+      '  float bay = span / bays;',
+      '  float wanted = grammar.w > 0.5 && levels >= 1.0',
+      '    ? max(levels, ceil(usable / FACADE_STOREY_MAX))',
+      '    : max(1.0, floor(usable / grammar.y + 0.5));',
+      '  float rows = max(1.0, min(wanted, floor(usable / FACADE_STOREY_MIN)));',
+      '  float pitch = usable / rows;',
+      '  float along = closed > 0.5 ? mod(run.x, len) : run.x - pier;',
+      '  cell = vec2(along / bay, (h - bottom) / pitch);',
+      '  size = vec2(bay, pitch);',
+      '  vec2 index = floor(cell);',
+      '  return step(0.0, index.x) * step(index.x, bays - 1.0) * step(0.0, index.y) * step(index.y, rows - 1.0);',
+      '}',
+    ]
+
+    expect(body('float facadeFace(int first', '\n}')).toBe(face.join('\n'))
+    expect(body('float facadeFit(float matched', '\n}')).toBe(fit.join('\n'))
   })
 
   it('clamps the feature id into the lookup on both sides', () => {
@@ -264,20 +391,14 @@ describe('createFacadeShader', () => {
     expect(body.indexOf('if (')).toBeGreaterThan(gate)
   })
 
-  it("counts storeys from the building's base, in model coordinates relative to it", () => {
+  it("measures heights from the building's base, in the face table's frame", () => {
     const text = createFacadeShader().fragmentShaderText ?? ''
 
     expect(text).not.toContain('float h = dot(positionMC, upMC);')
-    expect(text).toContain('float h = dot(positionMC - ground.xyz, upMC) + ground.w;')
-    expect(text).toContain('h / storey')
-  })
-
-  it("counts a raised part's storeys from the building's ground, its base less its min_height", () => {
-    const text = createFacadeShader().fragmentShaderText ?? ''
-    const read = text.indexOf(`ground = texelFetch(${BUILDING_LOOKUP_SAMPLER}`)
-
-    expect(read).toBeGreaterThan(-1)
-    expect(text.indexOf('+ ground.w;')).toBeGreaterThan(read)
+    expect(text).toContain('vec3 local = positionMC - ground.xyz;')
+    expect(text).toContain('float h = dot(local, upMC);')
+    expect(text).toContain('float s = dot(local, tangentMC);')
+    expect(text).toContain('facadeFit(matched, run, heights, h, grammar, building.y, cell, size)')
   })
 
   // applyBuildingStyle sets the MIX blend at amount 0, so Cesium's CPU styling multiplies the lit
@@ -309,7 +430,7 @@ describe('createFacadeShader', () => {
   it('box-filters the hangar panel seam over the pixel footprint, with no one-sided wrap', () => {
     const text = createFacadeShader().fragmentShaderText ?? ''
     const definition = text.indexOf('float facadeSeam(float x, float footprint)')
-    const call = text.indexOf('facadeSeam(f.x, aa.x)')
+    const call = text.indexOf('facadeSeam(f.x, fitAa.x)')
 
     expect(definition).toBeGreaterThan(-1)
     expect(call).toBeGreaterThan(definition)

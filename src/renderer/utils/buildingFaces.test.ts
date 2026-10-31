@@ -523,6 +523,7 @@ describe('faceTexels', () => {
     expect([...two.texels.subarray(0, 12)]).toEqual([1, 0, 0, 1, 0, 2, 0, 4, 0, 5, 0, 0])
     expect([...two.texels.subarray(12, 16)]).toEqual([1, 0, 0, 1])
     expect(two.texels[12 + 6]).toBe(2)
+    expect([...two.texels.subarray(20, 24)]).toEqual([0, 5, 0, 0])
     for (const table of [small, large]) {
       expect(table.width % 3).toBe(0)
       expect(table.texels).toHaveLength(table.width * table.height * 4)
@@ -546,5 +547,42 @@ describe('faceTexels', () => {
     const k = 3 * closedFace + 1
     const row = Math.floor(k / table.width)
     expect(table.texels[(row * table.width + (k % table.width)) * 4 + 3]).toBe(-6)
+  })
+
+  it("stores on every face of a run the run's highest bottom and lowest top, and a lone face its own", () => {
+    const face = (h0: number, h1: number): Face => ({ normal: [1, 0, 0], d: 1, s0: 0, s1: 2, h0, h1, vertical: true })
+    const run = (faces: Face[]): Run => ({
+      faces,
+      u0: faces.map((_, i) => 2 * i),
+      length: 2 * faces.length,
+      closed: false,
+      end: [0, 0],
+    })
+    const table = faceTexels([[run([face(0, 10), face(1, 9), face(0.5, 12)]), run([face(0.3, 7)])]], 64)
+    const heights = (i: number) => {
+      const o = (3 * i + 2) * 4
+      return [table.texels[o], table.texels[o + 1]]
+    }
+
+    expect([0, 1, 2].map(heights)).toEqual([
+      [1, 9],
+      [1, 9],
+      [1, 9],
+    ])
+    expect(heights(3)[0]).toBeCloseTo(0.3, 6)
+    expect(heights(3)[1]).toBe(7)
+  })
+
+  it("stores on every face of a run the index of the run's first face", () => {
+    const loop = { ...syntheticRun(3), closed: true }
+    const features = [[syntheticRun(4)], [], [syntheticRun(5), loop]]
+
+    const table = faceTexels(features, 64)
+    const runFirst = (face: number) => {
+      const k = 3 * face + 2
+      return table.texels[(Math.floor(k / table.width) * table.width + (k % table.width)) * 4 + 2]
+    }
+
+    expect(Array.from({ length: 12 }, (_, face) => runFirst(face))).toEqual([0, 0, 0, 0, 4, 4, 4, 4, 4, 9, 9, 9])
   })
 })

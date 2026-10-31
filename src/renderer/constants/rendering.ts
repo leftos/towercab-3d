@@ -56,6 +56,15 @@ export const FACADE_FADE_END = 0.6
 /** Share of windows lit at night. */
 export const FACADE_LIT_SHARE = 0.28
 
+/** Metres of solid wall at each end of an open run of wall faces, where no window reaches. */
+export const FACADE_PIER_M = 0.6
+
+/** Metres of solid wall above a face's bottom, below its lowest row of windows. */
+export const FACADE_BASE_BAND_M = 0.4
+
+/** Metres of solid wall (the parapet) below a face's top, above its highest row of windows. */
+export const FACADE_PARAPET_M = 0.8
+
 /**
  * Milliseconds per frame, after the render, in which building tiles may take steps of their
  * floor-line lookup and face table build; the rest wait for the next frame. The step in flight

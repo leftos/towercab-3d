@@ -11,7 +11,8 @@
  * lowest vertex (`baseMC`), along the feature's up, in the tile's model coordinates.
  *
  * The table lays three RGBA float texels per face (`faceTexels`): (normal, plane offset),
- * (start, end, position along the run, run length, negative for a closed loop), (bottom, top, 0, 0).
+ * (start, end, position along the run, run length, negative for a closed loop), (its run's highest
+ * bottom, its run's lowest top, the tile-wide index of its run's first face, 0).
  */
 import {
   FACADE_ROOF_COS,
@@ -504,7 +505,9 @@ function tableWidth(faces: number, maxTextureSize: number): number {
 /**
  * Lays each feature's faces, run by run in the given order, three texels per face, in rows of a
  * width divisible by three so a face's texels share a row: face i's texels are k = 3i, 3i+1, 3i+2
- * at (k mod width, k div width).
+ * at (k mod width, k div width). Every face of a run carries the index of the run's first face,
+ * the run's identity, and the run's band: the highest of its faces' bottoms and the lowest of
+ * their tops, so rows fit whole across every joint of the run.
  *
  * @param runs - Each feature's runs, in feature order (capped)
  * @param maxTextureSize - The context's texture limit
@@ -521,9 +524,13 @@ export function faceTexels(runs: readonly (readonly Run[])[], maxTextureSize: nu
     first[f] = face
     for (const run of featureRuns) {
       const signedLength = run.closed ? -run.length : run.length
+      const runFirst = face
+      const bottom = Math.max(...run.faces.map((entry) => entry.h0))
+      const top = Math.min(...run.faces.map((entry) => entry.h1))
       run.faces.forEach((entry, i) => {
         const o = face * FACE_TEXELS * 4
-        texels.set([...entry.normal, entry.d, entry.s0, entry.s1, run.u0[i], signedLength, entry.h0, entry.h1, 0, 0], o)
+        const plane = [...entry.normal, entry.d]
+        texels.set([...plane, entry.s0, entry.s1, run.u0[i], signedLength, bottom, top, runFirst, 0], o)
         face++
       })
     }
