@@ -48,6 +48,10 @@
       "declined": "no server of its own; tool results come from the third-party Playwright MCP",
       "user": "779511c62a903798"
     },
+    "evaluate-returns-plain-values": {
+      "repo": "090197630f336029",
+      "user": "86f56e3be3b1aa32"
+    },
     "fenced-hook-for-third-party-app": {
       "repo": "dd62c966283e7ee4",
       "user": "b80e08d4e363fb72"
@@ -249,5 +253,5 @@
       "user": "e8eee86351ab5f92"
     }
   },
-  "user_revision": 15
+  "user_revision": 16
 }
