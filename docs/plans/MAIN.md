@@ -4,7 +4,7 @@
 
 ## Do first
 
-- [ ] TC3D-393 model-matching and spawn test setup hooks time out at 120 s · release vNext — Urgent · Tooling and CI
+- [ ] TC3D-407 vnasSilence test cold-imports in beforeEach and fails the hook budget · release vNext — Urgent · Aircraft motion model
 
 ## Babylon to Cesium migration
 
@@ -64,12 +64,11 @@
 
 ## OSM buildings
 
-### B1 Shader on the ion tiles (10/20 done)
+### B1 Shader on the ion tiles (11/20 done)
 - [ ] TC3D-211 OSM facades on feat/osm-facades · release vNext
   - [/] TC3D-218 Type OSM building parts from their outline, then by shape near the field · release vNext
     - [ ] TC3D-381 A fire station at KVNY is drawn as a parking garage by the building shape fallback · release vNext+1
   - [ ] TC3D-226 Merge feat/osm-facades to main (#263) · release vNext
-  - [/] TC3D-385 Fit facade window rows to each building so no window is cut at the roof or ground · release vNext
   - [/] TC3D-386 Raise the facade looks' detail, shown in a new mock before TC3D-218 builds them · release vNext
 - [ ] TC3D-165 Draw curtain-wall glass on terminals through Cesium's reflections · release vNext+1
 - [ ] TC3D-166 Light windows at night by building use and local time · release vNext+1
@@ -96,6 +95,8 @@
 - [ ] TC3D-368 Measure and cut the building restyle cost while the shape fallback is on · release vNext+1
 - [ ] TC3D-392 Test the building lookup texture's width with a multi-feature tile · release vNext+1
 - [ ] TC3D-399 Check the building read-back's index count against its buffer · release vNext+1
+- [ ] TC3D-404 Link a building's facade faces in bounded steps (grid index on face ends) · release vNext+1
+- [ ] TC3D-406 Remove the building ground offset the facade shader no longer reads · release vNext+1
 
 ## vNAS
 
@@ -160,7 +161,7 @@
 
 ## Aircraft motion model
 
-### feat/aircraft-motion merge (#264) (6/33 done)
+### feat/aircraft-motion merge (#264) (8/33 done)
 - [ ] TC3D-241 Aircraft motion on feat/aircraft-motion · release vNext
   - [ ] TC3D-52 Aircraft orientation model: bank, rotation and flare
   - [ ] TC3D-53 Curved VATSIM paths: splines with heading from the path
@@ -180,13 +181,11 @@
   - [ ] TC3D-298 Split stabilizePhase and detectRawFlightPhase and drop their dead state · release vNext+1
   - [ ] TC3D-299 Bound when the departure Rolling label ends in the motion suite · release vNext+1
   - [ ] TC3D-304 Test the phase-state drop on a scrub back and size the RealTraffic regression tolerance · release vNext+1
-  - [ ] TC3D-382 A vNAS aircraft first seen while parked keeps VATSIM's 17 s display delay · release vNext+1
+  - [ ] TC3D-382 A vNAS aircraft first seen while parked keeps VATSIM's 17 s display delay · release vNext
   - [ ] TC3D-383 Keep drawn time from stepping back when the oldest sample is pruned · release vNext+1
   - [ ] TC3D-387 Pin the two untested branches of TC3D-369's drawn-offset ease · release vNext+1
   - [ ] TC3D-390 Hold a parked vNAS aircraft through the silence when its next sample arrives · release vNext
-  - [ ] TC3D-395 Let a very tall type rest above 16 ft and enter ground contact · release vNext
-  - [ ] TC3D-396 Never move a vNAS aircraft's display time back on a late VATSIM report · release vNext
-  - [ ] TC3D-397 Stop a type's learned resting height pulling an aircraft into contact early · release vNext
+  - [/] TC3D-396 Never move a vNAS aircraft's display time back on a late VATSIM report · release vNext
   - [ ] TC3D-398 Keep a parked vNAS aircraft's display delay near 1.15 s through silences · release vNext
 
 ### Follow-ups on main (0/11 done)
@@ -213,6 +212,9 @@
 - [ ] TC3D-379 Keep a hovering helicopter from learning its hover height as its resting height · release vNext+1
 - [ ] TC3D-380 Let a type's resting height allow contact but never forbid it, and learn it above 16 ft · release vNext+1
 - [ ] TC3D-391 Align lane B's seek check and the contact hold's stillness limits after TC3D-371 · release vNext+1
+- [ ] TC3D-403 Harden the type resting-height confirmation: level floats, anchor seeks, type keys · release vNext+1
+- [ ] TC3D-405 Carry vNAS drops to insets and remote browsers, and keep live-only state out of exports · release vNext+1
+- [ ] TC3D-408 Draw a moving aircraft left with one sample after a vNAS drop · release vNext+1
 
 ## Remote server hardening
 
@@ -317,6 +319,8 @@
 - [ ] TC3D-312 Run independent prek hooks in parallel with priority groups (both repos)
 - [ ] TC3D-317 Expose the interpolated aircraft on window.__tc3d · release vNext+1
 - [ ] TC3D-366 Count module re-evaluation after vi.resetModules in the test CPU budget · release vNext+1
+- [ ] TC3D-400 Keep the vNAS repo token out of the runner's global git config in CI
+- [ ] TC3D-402 Make the dev API proxy test prove its 403 came from the dev server
 
 ## Dependency updates
 
