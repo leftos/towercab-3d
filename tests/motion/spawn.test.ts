@@ -4,7 +4,7 @@
  * display delay settles, it is never drawn ahead and then pulled back, and the delay ramp does not play it
  * at a fraction of real speed.
  */
-import { beforeAll, expect, it, vi } from 'vitest'
+import { expect, it, vi } from 'vitest'
 import type { AircraftObservation } from '@/types/aircraft-timeline'
 import { type Flight, type FrameRecord, LAT0, LON0, runScenario, type ScenarioResult, T0, toLatLon } from './harness'
 import { type TruthSample, truthAt } from './sim'
@@ -30,8 +30,9 @@ const MAX_PLAYBACK_RATE = 1.11
 const TAXI_GS_KT = 15
 const TAXI_RUN_S = 25
 
-let res: ScenarioResult
-let arr1: FrameRecord[]
+// The scenario runs at the top level, where collection has no timeout (tests/setup/hookBudget.ts).
+const res: ScenarioResult = await runScenario({ fps: 60, useVnas: false, vnasFirst: false, durationS: SPAWN_DURATION_S })
+const arr1: FrameRecord[] = res.frames.get('ARR1') ?? []
 
 /** One VATSIM ground report, received at T0, with no on-ground flag (VATSIM sends none). */
 function taxiObservation(): AircraftObservation {
@@ -54,11 +55,6 @@ function taxiObservation(): AircraftObservation {
     displayDelay: 17000,
   }
 }
-
-beforeAll(async () => {
-  res = await runScenario({ fps: 60, useVnas: false, vnasFirst: false, durationS: SPAWN_DURATION_S })
-  arr1 = res.frames.get('ARR1') ?? []
-}, 120_000)
 
 /** Local time of a flight's first VATSIM report: the harness feed reports at scenario seconds 3 + 15 n. */
 function firstReportLocal(flight: Flight): number {

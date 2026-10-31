@@ -12,7 +12,7 @@
  */
 import { appendFileSync, mkdirSync, writeFileSync } from 'node:fs'
 import { dirname, resolve } from 'node:path'
-import { beforeAll, describe, expect, it, vi } from 'vitest'
+import { describe, expect, it, vi } from 'vitest'
 import { angleDiff, type FrameRecord, runScenario, type ScenarioResult } from './harness'
 
 vi.mock('react', () => {
@@ -186,22 +186,17 @@ function report(res: ScenarioResult, label: string): void {
   appendFileSync(REPORT_PATH, `${out.join('\n')}\n`, 'utf8')
 }
 
-let vatsim: ScenarioResult
-let vnas: ScenarioResult
-let vnasFirst: ScenarioResult
-
-beforeAll(async () => {
-  vatsim = await runScenario({ fps: 60, useVnas: false, vnasFirst: false, durationS: DURATION })
-  vnas = await runScenario({ fps: 60, useVnas: true, vnasFirst: false, durationS: DURATION })
-  vnasFirst = await runScenario({ fps: 60, useVnas: true, vnasFirst: true, durationS: DURATION })
-  if (REPORT) {
-    mkdirSync(dirname(REPORT_PATH), { recursive: true })
-    writeFileSync(REPORT_PATH, '', 'utf8')
-    report(vatsim, 'VATSIM only (15 s), 60 fps')
-    report(vnas, 'vNAS 1 Hz + VATSIM, VATSIM first, 60 fps')
-    report(vnasFirst, 'vNAS 1 Hz + VATSIM, vNAS first, 60 fps')
-  }
-}, 300_000)
+// The scenarios run at the top level, where collection has no timeout (tests/setup/hookBudget.ts).
+const vatsim: ScenarioResult = await runScenario({ fps: 60, useVnas: false, vnasFirst: false, durationS: DURATION })
+const vnas: ScenarioResult = await runScenario({ fps: 60, useVnas: true, vnasFirst: false, durationS: DURATION })
+const vnasFirst: ScenarioResult = await runScenario({ fps: 60, useVnas: true, vnasFirst: true, durationS: DURATION })
+if (REPORT) {
+  mkdirSync(dirname(REPORT_PATH), { recursive: true })
+  writeFileSync(REPORT_PATH, '', 'utf8')
+  report(vatsim, 'VATSIM only (15 s), 60 fps')
+  report(vnas, 'vNAS 1 Hz + VATSIM, VATSIM first, 60 fps')
+  report(vnasFirst, 'vNAS 1 Hz + VATSIM, vNAS first, 60 fps')
+}
 
 describe('ground taxi motion under vNAS', () => {
   it(`straight taxi position error stays within ${TAXI_POS_ERR_MAX_M} m (measured 0.3 m)`, () => {
